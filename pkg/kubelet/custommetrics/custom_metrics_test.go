@@ -17,6 +17,7 @@ limitations under the License.
 package custommetrics
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -39,10 +40,12 @@ func TestGetCAdvisorCustomMetricsDefinitionPath(t *testing.T) {
 		},
 	}
 	path, err := GetCAdvisorCustomMetricsDefinitionPath(regularContainer)
+	fmt.Printf("===>path:%v\n", path)
 	assert.Nil(t, path)
 	assert.NoError(t, err)
 
 	path, err = GetCAdvisorCustomMetricsDefinitionPath(cmContainer)
+	fmt.Printf("===>path:%v\n", path)
 	assert.NotEmpty(t, *path)
 	assert.NoError(t, err)
 }
