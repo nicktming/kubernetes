@@ -17,6 +17,7 @@ limitations under the License.
 package container
 
 import (
+	"fmt"
 	"testing"
 
 	"k8s.io/api/core/v1"
@@ -46,6 +47,7 @@ func TestFieldPath(t *testing.T) {
 
 	for name, item := range table {
 		res, err := fieldPath(item.pod, item.container)
+		fmt.Printf("======>res:%v\n", res)
 		if item.success == false {
 			if err == nil {
 				t.Errorf("%v: unexpected non-error", name)
