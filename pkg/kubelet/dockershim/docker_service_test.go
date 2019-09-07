@@ -102,6 +102,7 @@ func newTestDockerServiceWithVersionCache() (*dockerService, *libdocker.FakeDock
 	return ds, c, fakeClock
 }
 
+// go test -v -test.run TestStatus
 // TestStatus tests the runtime status logic.
 func TestStatus(t *testing.T) {
 	ds, fDocker, _ := newTestDockerService()

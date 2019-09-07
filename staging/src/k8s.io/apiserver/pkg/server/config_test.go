@@ -82,6 +82,7 @@ func TestNewWithDelegate(t *testing.T) {
 	}
 	wrappingServer.Handler.NonGoRestfulMux.HandleFunc("/bar", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("tming"))
 	})
 
 	wrappingServer.AddPostStartHook("wrapping-post-start-hook", func(context PostStartHookContext) error {

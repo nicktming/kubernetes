@@ -42,6 +42,7 @@ func TestConvertDockerStatusToRuntimeAPIState(t *testing.T) {
 	}
 }
 
+// go test -v -test.run TestConvertToPullableImageID
 func TestConvertToPullableImageID(t *testing.T) {
 	testCases := []struct {
 		id       string
