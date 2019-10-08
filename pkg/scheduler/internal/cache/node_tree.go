@@ -21,17 +21,21 @@ import (
 	"sync"
 
 	"k8s.io/api/core/v1"
-	utilnode "k8s.io/kubernetes/pkg/util/node"
-
 	"k8s.io/klog"
+	utilnode "k8s.io/kubernetes/pkg/util/node"
 )
 
 // NodeTree is a tree-like data structure that holds node names in each zone. Zone names are
 // keys to "NodeTree.tree" and values of "NodeTree.tree" are arrays of node names.
+
 type NodeTree struct {
+	// key 是一个zone value是一个nodeArray(一个存有该zones下所有的array)
 	tree      map[string]*nodeArray // a map from zone (region-zone) to an array of nodes in the zone.
+	// 所有的zones
 	zones     []string              // a list of all the zones in the tree (keys)
+	// 遍历zones的时候的下标所在位置
 	zoneIndex int
+	// 节点的个数
 	NumNodes  int
 	mu        sync.RWMutex
 }
@@ -40,10 +44,13 @@ type NodeTree struct {
 // We use a slice (as opposed to a set/map) to store the nodes because iterating over the nodes is
 // a lot more frequent than searching them by name.
 type nodeArray struct {
+	// 所有的节点
 	nodes     []string
+	// 遍历nodes时的下标位置 在next()中体现
 	lastIndex int
 }
 
+// 取nodeArray中节点的下一个 如果遍历到最后一个则返回空 并且返回该数组已经遍历结束
 func (na *nodeArray) next() (nodeName string, exhausted bool) {
 	if len(na.nodes) == 0 {
 		klog.Error("The nodeArray is empty. It should have been deleted from NodeTree.")
@@ -70,11 +77,20 @@ func newNodeTree(nodes []*v1.Node) *NodeTree {
 
 // AddNode adds a node and its corresponding zone to the tree. If the zone already exists, the node
 // is added to the array of nodes in that zone.
+
 func (nt *NodeTree) AddNode(n *v1.Node) {
 	nt.mu.Lock()
 	defer nt.mu.Unlock()
 	nt.addNode(n)
 }
+
+/**
+	1. 获得该节点所在的zone
+	2. 如果该zone不存在 添加到zones 和 tree中
+    3. 如果该zone存在
+      3.1 检查该node是不是已经在tree中nodearray中
+      3.2 如存在则直接返回 不存在则添加
+ */
 
 func (nt *NodeTree) addNode(n *v1.Node) {
 	zone := utilnode.GetZoneKey(n)
@@ -149,6 +165,7 @@ func (nt *NodeTree) UpdateNode(old, new *v1.Node) {
 	nt.addNode(new)
 }
 
+// 从头开始 (因为已经整个Map遍历完了)
 func (nt *NodeTree) resetExhausted() {
 	for _, na := range nt.tree {
 		na.lastIndex = 0
@@ -158,6 +175,10 @@ func (nt *NodeTree) resetExhausted() {
 
 // Next returns the name of the next node. NodeTree iterates over zones and in each zone iterates
 // over nodes in a round robin fashion.
+
+// Next() 返回下一个节点
+// 遍历整个zones中的每个node
+// 说白了就是把整个Map结构想像成一个List 然后遍历它
 func (nt *NodeTree) Next() string {
 	nt.mu.Lock()
 	defer nt.mu.Unlock()
