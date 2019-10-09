@@ -49,34 +49,44 @@ func New(ttl time.Duration, stop <-chan struct{}) Cache {
 
 type schedulerCache struct {
 	stop   <-chan struct{}
+	// ttl是assume pod 过期的时间
 	ttl    time.Duration
+	// period是每隔period调用清理过期的assumed pod
 	period time.Duration
 
 	// This mutex guards all fields within this cache struct.
 	mu sync.RWMutex
 	// a set of assumed pod keys.
 	// The key could further be used to get an entry in podStates.
+	// 已经assumed pod
 	assumedPods map[string]bool
 	// a map from pod key to podState.
+	// 存着一些pod的状态
 	podStates map[string]*podState
+	// 每个节点的信息
 	nodes     map[string]*schedulercache.NodeInfo
 	nodeTree  *NodeTree
 	// A map from image name to its imageState.
+	// 每个image的信息
 	imageStates map[string]*imageState
 }
 
 type podState struct {
 	pod *v1.Pod
 	// Used by assumedPod to determinate expiration.
+	// assumedPod过期时间
 	deadline *time.Time
 	// Used to block cache from expiring assumedPod if binding still runs
+	// bindingFinished为true的时候 过期才会起作用
 	bindingFinished bool
 }
 
 type imageState struct {
 	// Size of the image
+	// iamge 大小
 	size int64
 	// A set of node names for nodes having this image present
+	// 拥有该image的所有节点
 	nodes sets.String
 }
 
@@ -171,6 +181,12 @@ func (cache *schedulerCache) FilteredList(podFilter algorithm.PodFilter, selecto
 	return pods, nil
 }
 
+
+// 1. 获得key
+// 2. 根据podStates来检查该pod是否已经存在 如果存在则返回错误, 因为一个pod不能assume两次
+// 3. 调用addPod添加该pod
+// 4. 存到podState中 此时(deadline和bindingFinished没有被赋值)
+// 5. 存到assumedPods中 表明该pod处于assume状态
 func (cache *schedulerCache) AssumePod(pod *v1.Pod) error {
 	key, err := schedulercache.GetPodKey(pod)
 	if err != nil {
@@ -216,6 +232,7 @@ func (cache *schedulerCache) finishBinding(pod *v1.Pod, now time.Time) error {
 	return nil
 }
 
+// 从schedulerCache中完全删除该Pod
 func (cache *schedulerCache) ForgetPod(pod *v1.Pod) error {
 	key, err := schedulercache.GetPodKey(pod)
 	if err != nil {
@@ -246,6 +263,8 @@ func (cache *schedulerCache) ForgetPod(pod *v1.Pod) error {
 }
 
 // Assumes that lock is already acquired.
+// 1. 从nodes中得到NodeInfo
+// 2. 然后将该Pod加入到NodeInfo中
 func (cache *schedulerCache) addPod(pod *v1.Pod) {
 	n, ok := cache.nodes[pod.Spec.NodeName]
 	if !ok {
@@ -287,18 +306,23 @@ func (cache *schedulerCache) AddPod(pod *v1.Pod) error {
 
 	currState, ok := cache.podStates[key]
 	switch {
+	// assumed pod -> 过来
 	case ok && cache.assumedPods[key]:
 		if currState.pod.Spec.NodeName != pod.Spec.NodeName {
 			// The pod was added to a different node than it was assumed to.
 			klog.Warningf("Pod %v was assumed to be on %v but got added to %v", key, pod.Spec.NodeName, currState.pod.Spec.NodeName)
 			// Clean this up.
+			// 更换nodes的信息
 			cache.removePod(currState.pod)
 			cache.addPod(pod)
 		}
+		// 删除assumed 状态 变为added状态
 		delete(cache.assumedPods, key)
+		// deadline为nil bindingFinished=false
 		cache.podStates[key].deadline = nil
 		cache.podStates[key].pod = pod
 	case !ok:
+		// 可以从expired状态/也可以是initial状态 -> 过来
 		// Pod was expired. We should add it back.
 		cache.addPod(pod)
 		ps := &podState{
@@ -413,7 +437,9 @@ func (cache *schedulerCache) AddNode(node *v1.Node) error {
 		cache.removeNodeImageStates(n.Node())
 	}
 
+	// 添加到nodetree中
 	cache.nodeTree.AddNode(node)
+	// 设置imagestates 和 nodeinfo
 	cache.addNodeImageStates(node, n)
 	return n.SetNode(node)
 }
@@ -461,6 +487,7 @@ func (cache *schedulerCache) RemoveNode(node *v1.Node) error {
 func (cache *schedulerCache) addNodeImageStates(node *v1.Node, nodeInfo *schedulercache.NodeInfo) {
 	newSum := make(map[string]*schedulercache.ImageStateSummary)
 
+	// 遍历该节点下所有的image
 	for _, image := range node.Status.Images {
 		for _, name := range image.Names {
 			// update the entry in imageStates
@@ -472,6 +499,7 @@ func (cache *schedulerCache) addNodeImageStates(node *v1.Node, nodeInfo *schedul
 				}
 				cache.imageStates[name] = state
 			} else {
+				// 把该节点添加到此image的imageStates中
 				state.nodes.Insert(node.Name)
 			}
 			// create the imageStateSummary for this image
@@ -480,6 +508,7 @@ func (cache *schedulerCache) addNodeImageStates(node *v1.Node, nodeInfo *schedul
 			}
 		}
 	}
+	// 把该node下的ImageStateSummary放到该node下
 	nodeInfo.SetImageStates(newSum)
 }
 
@@ -520,17 +549,19 @@ func (cache *schedulerCache) cleanupAssumedPods(now time.Time) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
-	// The size of assumedPods should be small
+	// 从assumed状态的pods中遍历
 	for key := range cache.assumedPods {
 		ps, ok := cache.podStates[key]
 		if !ok {
 			panic("Key found in assumed set but not in podStates. Potentially a logical error.")
 		}
+		// 如果没有完成binding 跳过
 		if !ps.bindingFinished {
 			klog.V(3).Infof("Couldn't expire cache for pod %v/%v. Binding is still in progress.",
 				ps.pod.Namespace, ps.pod.Name)
 			continue
 		}
+		// 如果过期时间已经到了 则调用expirePod方法
 		if now.After(*ps.deadline) {
 			klog.Warningf("Pod %s/%s expired", ps.pod.Namespace, ps.pod.Name)
 			if err := cache.expirePod(key, ps); err != nil {
@@ -540,6 +571,10 @@ func (cache *schedulerCache) cleanupAssumedPods(now time.Time) {
 	}
 }
 
+// 1. 调用removePod删除该节点
+// 2. 从assumedPods中删除
+// 3. 从podStates中删除
+// 整个已经从schedulerCache中完全删除
 func (cache *schedulerCache) expirePod(key string, ps *podState) error {
 	if err := cache.removePod(ps.pod); err != nil {
 		return err

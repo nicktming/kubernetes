@@ -61,12 +61,16 @@ type Cache interface {
 	// AssumePod assumes a pod scheduled and aggregates the pod's information into its node.
 	// The implementation also decides the policy to expire pod before being confirmed (receiving Add event).
 	// After expiration, its information would be subtracted.
+
+	// 将该pod设置为assumed 状态
 	AssumePod(pod *v1.Pod) error
 
 	// FinishBinding signals that cache for assumed pod can be expired
+	// 设置该Pod bindingFinished=true
 	FinishBinding(pod *v1.Pod) error
 
 	// ForgetPod removes an assumed pod from cache.
+	// 从cache中删除该Pod(该pod必须为assumed状态)
 	ForgetPod(pod *v1.Pod) error
 
 	// AddPod either confirms a pod if it's assumed, or adds it back if it's expired.
@@ -74,25 +78,32 @@ type Cache interface {
 	AddPod(pod *v1.Pod) error
 
 	// UpdatePod removes oldPod's information and adds newPod's information.
+	// 只能从Added 状态调用
 	UpdatePod(oldPod, newPod *v1.Pod) error
 
 	// RemovePod removes a pod. The pod's information would be subtracted from assigned node.
+	// 只能从Added 状态调用
 	RemovePod(pod *v1.Pod) error
 
 	// GetPod returns the pod from the cache with the same namespace and the
 	// same name of the specified pod.
+	// 从podState中获得一个pod
 	GetPod(pod *v1.Pod) (*v1.Pod, error)
 
 	// IsAssumedPod returns true if the pod is assumed and not expired.
+	// 判断该pod是否为assumed 状态
 	IsAssumedPod(pod *v1.Pod) (bool, error)
 
 	// AddNode adds overall information about node.
+	// 添加一个节点 该节点所有信息会保存起来
 	AddNode(node *v1.Node) error
 
 	// UpdateNode updates overall information about node.
+	// 更新节点
 	UpdateNode(oldNode, newNode *v1.Node) error
 
 	// RemoveNode removes overall information about node.
+	// 删除节点
 	RemoveNode(node *v1.Node) error
 
 	// UpdateNodeNameToInfoMap updates the passed infoMap to the current contents of Cache.
@@ -101,15 +112,19 @@ type Cache interface {
 	UpdateNodeNameToInfoMap(infoMap map[string]*schedulercache.NodeInfo) error
 
 	// List lists all cached pods (including assumed ones).
+	// 从nodes中返回所有pod
 	List(labels.Selector) ([]*v1.Pod, error)
 
 	// FilteredList returns all cached pods that pass the filter.
+	// 从nodes中返回所有符合条件的pod
 	FilteredList(filter algorithm.PodFilter, selector labels.Selector) ([]*v1.Pod, error)
 
 	// Snapshot takes a snapshot on current cache
+	// 备份assumed pods 和 节点
 	Snapshot() *Snapshot
 
 	// NodeTree returns a node tree structure
+	// 返回nodetree
 	NodeTree() *NodeTree
 }
 
