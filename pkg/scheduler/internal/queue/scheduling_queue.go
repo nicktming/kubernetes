@@ -57,6 +57,11 @@ const unschedulableQTimeInterval = 60 * time.Second
 // SchedulingQueue is an interface for a queue to store pods waiting to be scheduled.
 // The interface follows a pattern similar to cache.FIFO and cache.Heap and
 // makes it easy to use those data structures as a SchedulingQueue.
+
+// SchedulingQueue 是一个存着等待被调度的所有pods的数据结构
+// 其中包括两个子queue
+// 一个是activeQ, 存着即将要被调度的pods
+// 一个是unschedulableQ, 存着已经试着调度但是没有成功的
 type SchedulingQueue interface {
 	Add(pod *v1.Pod) error
 	AddIfNotPresent(pod *v1.Pod) error
@@ -288,6 +293,15 @@ func (p *PriorityQueue) run() {
 
 // Add adds a pod to the active queue. It should be called only when a new pod
 // is added so there is no chance the pod is already in either queue.
+
+// 1. 添加到activeQ中 如果存在就更新
+// 2. 如果unschedulableQ中有就删除 (因为一个pod只能存在于activeQ或unschedulableQ中)
+// 3. 存到nominatedPods中
+
+// p.nominatedPods.add(pod, "")中已经分析了,
+// 如果该pod是抢占成功的pod, 那该pod就会存到该nominatedName节点中(因为在这里nodeName为空)
+// 如果该pod不是抢占成功的pod, 那该pod的nominatedName也是空 加上这里nodeName也是空, 所以此方法什么也不做
+// 说白了就是这个(p.nominatedPods.add(pod, ""))调用就是 抢占就存 没有抢占就不存
 func (p *PriorityQueue) Add(pod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -425,6 +439,13 @@ func isPodUpdated(oldPod, newPod *v1.Pod) bool {
 // Update updates a pod in the active queue if present. Otherwise, it removes
 // the item from the unschedulable queue and adds the updated one to the active
 // queue.
+
+// 1. 如果在actvieQ中存在, 所以直接更新activeQ和nominatedPods
+// 2. 如果在unschedulableQ中存在, 更新nominatedPods
+//    2.1 如果spec中发生了改变, 有可能成为schedulable, 因此加入到activeQ中并从unscheduableQ中删除
+//    2.2 如果没有任何改变 直接更新unscheduableQ
+// 3. 在activeQ和unschedulableQ中都不存在, 添加到activeQ和p.nominatedPods.add(newPod, "")
+
 func (p *PriorityQueue) Update(oldPod, newPod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -437,6 +458,7 @@ func (p *PriorityQueue) Update(oldPod, newPod *v1.Pod) error {
 	// If the pod is in the unschedulable queue, updating it may make it schedulable.
 	if usPod := p.unschedulableQ.get(newPod); usPod != nil {
 		p.nominatedPods.update(oldPod, newPod)
+		// 如果发生了改变, 所以就有可能变成schedulable, 因此加入到activeQ中并从unscheduableQ中删除
 		if isPodUpdated(oldPod, newPod) {
 			p.unschedulableQ.delete(usPod)
 			err := p.activeQ.Add(newPod)
@@ -445,6 +467,7 @@ func (p *PriorityQueue) Update(oldPod, newPod *v1.Pod) error {
 			}
 			return err
 		}
+		// 如果没有改变 直接在unschedulabeQ中更新
 		p.unschedulableQ.addOrUpdate(newPod)
 		return nil
 	}
@@ -603,18 +626,23 @@ func (p *PriorityQueue) NumUnschedulablePods() int {
 
 // UnschedulablePodsMap holds pods that cannot be scheduled. This data structure
 // is used to implement unschedulableQ.
+
+// UnschedulablePodsMap 就是一个Map结构
+// key为keyFunc计算出来的key
+// value就是对应的pod
 type UnschedulablePodsMap struct {
 	// pods is a map key by a pod's full-name and the value is a pointer to the pod.
 	pods    map[string]*v1.Pod
 	keyFunc func(*v1.Pod) string
 }
 
-// Add adds a pod to the unschedulable pods.
+// 添加或者更新
 func (u *UnschedulablePodsMap) addOrUpdate(pod *v1.Pod) {
 	u.pods[u.keyFunc(pod)] = pod
 }
 
 // Delete deletes a pod from the unschedulable pods.
+// 删除
 func (u *UnschedulablePodsMap) delete(pod *v1.Pod) {
 	delete(u.pods, u.keyFunc(pod))
 }
@@ -630,6 +658,7 @@ func (u *UnschedulablePodsMap) get(pod *v1.Pod) *v1.Pod {
 }
 
 // Clear removes all the entries from the unschedulable maps.
+// 删除所有的pods
 func (u *UnschedulablePodsMap) clear() {
 	u.pods = make(map[string]*v1.Pod)
 }
@@ -745,6 +774,11 @@ type Heap struct {
 
 // Add inserts an item, and puts it in the queue. The item is updated if it
 // already exists.
+
+// 1. 计算key
+// 2. 根据item的map结构检查该obj是否存在
+// 3. 如果存在 则更新该obj 并重新调整堆结构
+// 4. 如果不存在 则添加该obj
 func (h *Heap) Add(obj interface{}) error {
 	key, err := h.data.keyFunc(obj)
 	if err != nil {
@@ -847,15 +881,16 @@ type nominatedPodMap struct {
 	// nominatedPods is a map keyed by a node name and the value is a list of
 	// pods which are nominated to run on the node. These are pods which can be in
 	// the activeQ or unschedulableQ.
+
+	// 这些pods可能在activeQ或者unschedulableQ中
+	// nodeName -> pods
 	nominatedPods map[string][]*v1.Pod
-	// nominatedPodToNode is map keyed by a Pod UID to the node name where it is
-	// nominated.
+	// pod_UID -> nodeName
 	nominatedPodToNode map[ktypes.UID]string
 }
 
 func (npm *nominatedPodMap) add(p *v1.Pod, nodeName string) {
-	// always delete the pod if it already exist, to ensure we never store more than
-	// one instance of the pod.
+	// 无论是否存在 先删除
 	npm.delete(p)
 
 	nnn := nodeName
@@ -865,6 +900,9 @@ func (npm *nominatedPodMap) add(p *v1.Pod, nodeName string) {
 			return
 		}
 	}
+	// 1. 如果nodeName和pod.Status.NominatedNodeName都为空 直接返回
+	// 2. 如果nodeName不为空 nnn = nodeName 否则 nnn = pod.Status.NominatedNodeName
+
 	npm.nominatedPodToNode[p.UID] = nnn
 	for _, np := range npm.nominatedPods[nnn] {
 		if np.UID == p.UID {
@@ -875,6 +913,8 @@ func (npm *nominatedPodMap) add(p *v1.Pod, nodeName string) {
 	npm.nominatedPods[nnn] = append(npm.nominatedPods[nnn], p)
 }
 
+// 如果该pod存在nominatedPodMap中 就删除
+// 不存在 就直接返回
 func (npm *nominatedPodMap) delete(p *v1.Pod) {
 	nnn, ok := npm.nominatedPodToNode[p.UID]
 	if !ok {
@@ -899,6 +939,7 @@ func (npm *nominatedPodMap) update(oldPod, newPod *v1.Pod) {
 	npm.add(newPod, "")
 }
 
+// 取该节点下所有nominated Pods
 func (npm *nominatedPodMap) podsForNode(nodeName string) []*v1.Pod {
 	if list, ok := npm.nominatedPods[nodeName]; ok {
 		return list
