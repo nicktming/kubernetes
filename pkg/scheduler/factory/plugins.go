@@ -57,16 +57,19 @@ type PriorityMetadataProducerFactory func(PluginFactoryArgs) algorithm.PriorityM
 type PredicateMetadataProducerFactory func(PluginFactoryArgs) algorithm.PredicateMetadataProducer
 
 // FitPredicateFactory produces a FitPredicate from the given args.
+// 根据PluginFactoryArgs返回预选方法
 type FitPredicateFactory func(PluginFactoryArgs) algorithm.FitPredicate
 
 // PriorityFunctionFactory produces a PriorityConfig from the given args.
 // DEPRECATED
 // Use Map-Reduce pattern for priority functions.
+// 根据PluginFactoryArgs返回优选方法 老版本
 type PriorityFunctionFactory func(PluginFactoryArgs) algorithm.PriorityFunction
 
 // PriorityFunctionFactory2 produces map & reduce priority functions
 // from a given args.
 // FIXME: Rename to PriorityFunctionFactory.
+// 根据PluginFactoryArgs返回优选方法  新版本
 type PriorityFunctionFactory2 func(PluginFactoryArgs) (algorithm.PriorityMapFunction, algorithm.PriorityReduceFunction)
 
 // PriorityConfigFactory produces a PriorityConfig from the given function and weight
@@ -103,6 +106,9 @@ type AlgorithmProviderConfig struct {
 
 // RegisterFitPredicate registers a fit predicate with the algorithm
 // registry. Returns the name with which the predicate was registered.
+
+// 注册一个预选方法 name就是预选名字, predicate就是预选方法
+// 可以看到注册的FitPredicateFactory生成预选方法的时候就是返回传入进来的预选方法predicate
 func RegisterFitPredicate(name string, predicate algorithm.FitPredicate) string {
 	return RegisterFitPredicateFactory(name, func(PluginFactoryArgs) algorithm.FitPredicate { return predicate })
 }
@@ -496,6 +502,7 @@ func validateSelectedConfigs(configs []algorithm.PriorityConfig) error {
 	return nil
 }
 
+// 通过正则表达式检查一下预选的名字是否合法
 var validName = regexp.MustCompile("^[a-zA-Z0-9]([-a-zA-Z0-9]*[a-zA-Z0-9])$")
 
 func validateAlgorithmNameOrDie(name string) {
