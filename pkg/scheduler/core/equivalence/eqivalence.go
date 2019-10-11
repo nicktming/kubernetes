@@ -36,6 +36,8 @@ import (
 )
 
 // nodeMap stores a *NodeCache for each node.
+// key为nodeName
+// value为NodeCache
 type nodeMap map[string]*NodeCache
 
 // Cache is a thread safe map saves and reuses the output of predicate functions,
@@ -75,15 +77,19 @@ func NewCache(predicates []string) *Cache {
 // NodeCache objects are thread safe within the context of NodeCache,
 type NodeCache struct {
 	mu    sync.RWMutex
+	// 每个predicate方法关于pod的情况
 	cache predicateMap
 	// generation is current generation of node cache, incremented on node
 	// invalidation.
+	// 代表当前的一个flag 如果节点无效会改变generation的值 也就是加1
 	generation uint64
 	// snapshotGeneration saves snapshot of generation of node cache.
+	// 与generation类似 只不过是代表快照的
 	snapshotGeneration uint64
 	// predicateGenerations stores generation numbers for predicates, incremented on
 	// predicate invalidation. Created on first update. Use 0 if does not
 	// exist.
+	// 代表每个一个predicate方法的generation
 	predicateGenerations []uint64
 	// snapshotPredicateGenerations saves snapshot of generation numbers for predicates.
 	snapshotPredicateGenerations []uint64
@@ -137,6 +143,7 @@ func (c *Cache) LoadNodeCache(node string) *NodeCache {
 	return c.nodeToCache[node]
 }
 
+// 根据predicate名字找到对应的predicate ID
 func (c *Cache) predicateKeysToIDs(predicateKeys sets.String) []int {
 	predicateIDs := make([]int, 0, len(predicateKeys))
 	for predicateKey := range predicateKeys {
@@ -157,6 +164,7 @@ func (c *Cache) InvalidatePredicates(predicateKeys sets.String) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	predicateIDs := c.predicateKeysToIDs(predicateKeys)
+	// 每个节点下面的predicateIDs全部invalidate  比如:PodFitsHostPorts等等
 	for _, n := range c.nodeToCache {
 		n.invalidatePreds(predicateIDs)
 	}
@@ -165,6 +173,7 @@ func (c *Cache) InvalidatePredicates(predicateKeys sets.String) {
 }
 
 // InvalidatePredicatesOnNode clears cached results for the given predicates on one node.
+// invalidate某个节点的predicateKeys
 func (c *Cache) InvalidatePredicatesOnNode(nodeName string, predicateKeys sets.String) {
 	if len(predicateKeys) == 0 {
 		return
@@ -179,6 +188,7 @@ func (c *Cache) InvalidatePredicatesOnNode(nodeName string, predicateKeys sets.S
 }
 
 // InvalidateAllPredicatesOnNode clears all cached results for one node.
+// invalidate 所有节点
 func (c *Cache) InvalidateAllPredicatesOnNode(nodeName string) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -262,12 +272,15 @@ func NewClass(pod *v1.Pod) *Class {
 }
 
 // predicateMap stores resultMaps with predicate ID as the key.
+// predicateID为key
 type predicateMap []resultMap
 
 // resultMap stores PredicateResult with pod equivalence hash as the key.
+// pod equivalence 的hash值
 type resultMap map[uint64]predicateResult
 
 // predicateResult stores the output of a FitPredicate.
+// 代表该pod在该predicate方法中是否通过 以及原因
 type predicateResult struct {
 	Fit         bool
 	FailReasons []algorithm.PredicateFailureReason
@@ -290,11 +303,12 @@ func (n *NodeCache) RunPredicate(
 		// This may happen during tests.
 		return false, []algorithm.PredicateFailureReason{}, fmt.Errorf("nodeInfo is nil or node is invalid")
 	}
-
+	// 如果存在 就直接返回
 	result, ok := n.lookupResult(pod.GetName(), nodeInfo.Node().GetName(), predicateKey, predicateID, equivClass.hash)
 	if ok {
 		return result.Fit, result.FailReasons, nil
 	}
+	// 如果不存在 就运行一次 然后就更新其结果
 	fit, reasons, err := pred(pod, meta, nodeInfo)
 	if err != nil {
 		return fit, reasons, err
@@ -325,6 +339,7 @@ func (n *NodeCache) updateResult(
 
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	// 表明自上次snapshot之后有接受到invalidation请求 所以直接跳过 因为这次的结果是基于node信息有改变过的
 	if (n.snapshotGeneration != n.generation) || (n.snapshotPredicateGenerations[predicateID] != n.predicateGenerations[predicateID]) {
 		// Generation of node or predicate has been updated since we last took
 		// a snapshot, this indicates that we received a invalidation request
@@ -332,6 +347,7 @@ func (n *NodeCache) updateResult(
 		metrics.EquivalenceCacheWrites.WithLabelValues("discarded_stale").Inc()
 		return
 	}
+	// 更新
 	// If cached predicate map already exists, just update the predicate by key
 	if predicates := n.cache[predicateID]; predicates != nil {
 		// maps in golang are references, no need to add them back
@@ -350,6 +366,10 @@ func (n *NodeCache) updateResult(
 
 // lookupResult returns cached predicate results and a bool saying whether a
 // cache entry was found.
+
+// 返回该pod(equivalenceHash)在该节点下运行predicateID对应的predicate方法的结果
+// 如果没有运行过 ok=false
+// 运行过返回predicateResult ok=true
 func (n *NodeCache) lookupResult(
 	podName, nodeName, predicateKey string,
 	predicateID int,
@@ -367,6 +387,7 @@ func (n *NodeCache) lookupResult(
 }
 
 // invalidatePreds deletes cached predicates by given IDs.
+// invalidate 那些predicateIDs
 func (n *NodeCache) invalidatePreds(predicateIDs []int) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -377,6 +398,7 @@ func (n *NodeCache) invalidatePreds(predicateIDs []int) {
 }
 
 // invalidate invalidates node cache.
+// 将整个节点的cache信息清空 并改变generation
 func (n *NodeCache) invalidate() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
