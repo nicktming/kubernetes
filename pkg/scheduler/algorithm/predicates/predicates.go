@@ -733,6 +733,7 @@ func PodFitsResources(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *s
 
 	var predicateFails []algorithm.PredicateFailureReason
 	allowedPodNumber := nodeInfo.AllowedPodNumber()
+	// 如果该节点所可以容纳的pod数量达到上限时
 	if len(nodeInfo.Pods())+1 > allowedPodNumber {
 		predicateFails = append(predicateFails, NewInsufficientResourceError(v1.ResourcePods, 1, int64(len(nodeInfo.Pods())), int64(allowedPodNumber)))
 	}
@@ -758,9 +759,11 @@ func PodFitsResources(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *s
 	}
 
 	allocatable := nodeInfo.AllocatableResource()
+	// 判断cpu部分  都是按request计算的
 	if allocatable.MilliCPU < podRequest.MilliCPU+nodeInfo.RequestedResource().MilliCPU {
 		predicateFails = append(predicateFails, NewInsufficientResourceError(v1.ResourceCPU, podRequest.MilliCPU, nodeInfo.RequestedResource().MilliCPU, allocatable.MilliCPU))
 	}
+	// 判断memory部分  都是按request计算的
 	if allocatable.Memory < podRequest.Memory+nodeInfo.RequestedResource().Memory {
 		predicateFails = append(predicateFails, NewInsufficientResourceError(v1.ResourceMemory, podRequest.Memory, nodeInfo.RequestedResource().Memory, allocatable.Memory))
 	}
@@ -768,6 +771,7 @@ func PodFitsResources(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *s
 		predicateFails = append(predicateFails, NewInsufficientResourceError(v1.ResourceEphemeralStorage, podRequest.EphemeralStorage, nodeInfo.RequestedResource().EphemeralStorage, allocatable.EphemeralStorage))
 	}
 
+	// 判断扩展的资源 比如利用device_plugin注册的资源
 	for rName, rQuant := range podRequest.ScalarResources {
 		if v1helper.IsExtendedResourceName(rName) {
 			// If this resource is one of the extended resources that should be
@@ -1028,8 +1032,12 @@ func (s *ServiceAffinity) checkServiceAffinity(pod *v1.Pod, meta algorithm.Predi
 }
 
 // PodFitsHostPorts checks if a node has free ports for the requested pod ports.
+
+// 判断该节点中使用了的port是否与requested pod ports有冲突
 func PodFitsHostPorts(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
 	var wantPorts []*v1.ContainerPort
+	// 如果meta可以转成predicateMetadata 就从meta中取
+	// 这里不用太在意meta, 因为该meta如果不为nil的话 其实就是从该pod中做了一些操作而已
 	if predicateMeta, ok := meta.(*predicateMetadata); ok {
 		wantPorts = predicateMeta.podPorts
 	} else {
@@ -1040,9 +1048,11 @@ func PodFitsHostPorts(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *s
 		return true, nil, nil
 	}
 
+	// 从该节点信息中拿到该节点已经使用过的端口
 	existingPorts := nodeInfo.UsedPorts()
 
 	// try to see whether existingPorts and  wantPorts will conflict or not
+	//判断是否有冲突
 	if portsConflict(existingPorts, wantPorts) {
 		return false, []algorithm.PredicateFailureReason{ErrPodNotFitsHostPorts}, nil
 	}
