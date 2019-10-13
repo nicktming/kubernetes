@@ -96,24 +96,32 @@ type PodConditionUpdater interface {
 type Config struct {
 	// It is expected that changes made via SchedulerCache will be observed
 	// by NodeLister and Algorithm.
+	// 一个schedulerCache 就是configFactory的schedulerCache
 	SchedulerCache schedulerinternalcache.Cache
 	// Ecache is used for optimistically invalid affected cache items after
 	// successfully binding a pod
+	// 就是configFactory的equivalencePodCache
 	Ecache     *equivalence.Cache
+	// 获得所有Node的Lister
 	NodeLister algorithm.NodeLister
+	// 用于调度的算法
 	Algorithm  algorithm.ScheduleAlgorithm
+	// Bind方法
 	GetBinder  func(pod *v1.Pod) Binder
 	// PodConditionUpdater is used only in case of scheduling errors. If we succeed
 	// with scheduling, PodScheduled condition will be updated in apiserver in /bind
 	// handler so that binding and setting PodCondition it is atomic.
 	PodConditionUpdater PodConditionUpdater
 	// PodPreemptor is used to evict pods and update pod annotations.
+	// 抢占器
 	PodPreemptor PodPreemptor
 
 	// NextPod should be a function that blocks until the next pod
 	// is available. We don't use a channel for this, because scheduling
 	// a pod may take some amount of time and we don't want pods to get
 	// stale while they sit in a channel.
+	// 取下一个需要调度的pod
+	// 如果没有了, 则block一直等到有
 	NextPod func() *v1.Pod
 
 	// WaitForCacheSync waits for scheduler cache to populate.
@@ -137,6 +145,7 @@ type Config struct {
 	DisablePreemption bool
 
 	// SchedulingQueue holds pods to be scheduled
+	// cache需要被调度的pod
 	SchedulingQueue internalqueue.SchedulingQueue
 }
 
@@ -177,12 +186,16 @@ type Configurator interface {
 
 // configFactory is the default implementation of the scheduler.Configurator interface.
 type configFactory struct {
+	// 与api-server通信的客户端
 	client clientset.Interface
 	// queue for pods that need scheduling
+	// 存着那些需要调度的pod
 	podQueue internalqueue.SchedulingQueue
 	// a means to list all known scheduled pods.
+	// 可以获得所有已经调度的pod
 	scheduledPodLister corelisters.PodLister
 	// a means to list all known scheduled pods and pods assumed to have been scheduled.
+	// 可以获得所有已经调度的pod和那些assumed pod
 	podLister algorithm.PodLister
 	// a means to list all nodes
 	nodeLister corelisters.NodeLister
@@ -212,6 +225,7 @@ type configFactory struct {
 
 	// SchedulerName of a scheduler is used to select which pods will be
 	// processed by this scheduler, based on pods's "spec.schedulerName".
+	// 调度器的名字 默认为default-scheduler
 	schedulerName string
 
 	// RequiredDuringScheduling affinity is not symmetric, but there is an implicit PreferredDuringScheduling affinity rule
@@ -220,6 +234,7 @@ type configFactory struct {
 	hardPodAffinitySymmetricWeight int32
 
 	// Equivalence class cache
+	// 加速predicate阶段的equivalence class cache
 	equivalencePodCache *equivalence.Cache
 
 	// Enable equivalence class cache
@@ -232,6 +247,7 @@ type configFactory struct {
 	alwaysCheckAllPredicates bool
 
 	// Disable pod preemption or not.
+	// 是否禁止抢占
 	disablePreemption bool
 
 	// percentageOfNodesToScore specifies percentage of all nodes to score in each scheduling cycle.
@@ -1259,32 +1275,37 @@ func (c *configFactory) CreateFromKeys(predicateKeys, priorityKeys sets.String, 
 		return nil, fmt.Errorf("invalid hardPodAffinitySymmetricWeight: %d, must be in the range 1-100", c.GetHardPodAffinitySymmetricWeight())
 	}
 
+	// 根据当前的预选key得到所有的预选方法
 	predicateFuncs, err := c.GetPredicates(predicateKeys)
 	if err != nil {
 		return nil, err
 	}
 
+	// 根据当前的优选key得到所有的优选方法
 	priorityConfigs, err := c.GetPriorityFunctionConfigs(priorityKeys)
 	if err != nil {
 		return nil, err
 	}
 
+	// priorityMetaProducer 在算分的时候会用到
 	priorityMetaProducer, err := c.GetPriorityMetadataProducer()
 	if err != nil {
 		return nil, err
 	}
-
+	// predicateMetaProducer 在真正预选的时候会用到
 	predicateMetaProducer, err := c.GetPredicateMetadataProducer()
 	if err != nil {
 		return nil, err
 	}
 
+	// 是否打开了加速predicate的equivalence class cache
 	// Init equivalence class cache
 	if c.enableEquivalenceClassCache {
 		c.equivalencePodCache = equivalence.NewCache(predicates.Ordering())
 		klog.Info("Created equivalence class cache")
 	}
 
+	// 生成真正进行调度计算的Algorithm algorithm.ScheduleAlgorithm
 	algo := core.NewGenericScheduler(
 		c.schedulerCache,
 		c.equivalencePodCache,
@@ -1420,6 +1441,7 @@ func (l assignedPodLister) List(selector labels.Selector) ([]*v1.Pod, error) {
 	}
 	filtered := make([]*v1.Pod, 0, len(list))
 	for _, pod := range list {
+		// 选择那些已经被调度过的
 		if len(pod.Spec.NodeName) > 0 {
 			filtered = append(filtered, pod)
 		}

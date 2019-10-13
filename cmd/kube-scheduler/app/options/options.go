@@ -160,6 +160,7 @@ func (o *Options) Flags() (nfs apiserverflag.NamedFlagSets) {
 
 // ApplyTo applies the scheduler options to the given scheduler app configuration.
 func (o *Options) ApplyTo(c *schedulerappconfig.Config) error {
+	// 如果kube-scheduler 没有指定--config 就是从默认配置(o.ComponentConfig)拿
 	if len(o.ConfigFile) == 0 {
 		c.ComponentConfig = o.ComponentConfig
 
@@ -171,6 +172,7 @@ func (o *Options) ApplyTo(c *schedulerappconfig.Config) error {
 			return err
 		}
 	} else {
+		// 如果kube-scheduler 指定了--config 那就会从配置文件中取
 		cfg, err := loadConfigFromFile(o.ConfigFile)
 		if err != nil {
 			return err
@@ -231,6 +233,7 @@ func (o *Options) Config() (*schedulerappconfig.Config, error) {
 	}
 
 	// Prepare kube clients.
+	// 生成client 可以调用api-server
 	client, leaderElectionClient, eventClient, err := createClients(c.ComponentConfig.ClientConnection, o.Master, c.ComponentConfig.LeaderElection.RenewDeadline.Duration)
 	if err != nil {
 		return nil, err
@@ -242,6 +245,8 @@ func (o *Options) Config() (*schedulerappconfig.Config, error) {
 
 	// Set up leader election if enabled.
 	var leaderElectionConfig *leaderelection.LeaderElectionConfig
+	// 默认值就是true 只要用户不设置为false 这一步就会执行
+	// 也就是说kube-scheduler 默认就是支持高可用
 	if c.ComponentConfig.LeaderElection.LeaderElect {
 		leaderElectionConfig, err = makeLeaderElectionConfig(c.ComponentConfig.LeaderElection, leaderElectionClient, recorder)
 		if err != nil {

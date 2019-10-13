@@ -144,12 +144,21 @@ func New(client clientset.Interface,
 	stopCh <-chan struct{},
 	opts ...func(o *schedulerOptions)) (*Scheduler, error) {
 
+	/**
+		scheduler.WithName(cc.ComponentConfig.SchedulerName),
+		scheduler.WithHardPodAffinitySymmetricWeight(cc.ComponentConfig.HardPodAffinitySymmetricWeight),
+		scheduler.WithEquivalenceClassCacheEnabled(cc.ComponentConfig.EnableContentionProfiling),
+		scheduler.WithPreemptionDisabled(cc.ComponentConfig.DisablePreemption),
+		scheduler.WithPercentageOfNodesToScore(cc.ComponentConfig.PercentageOfNodesToScore),
+		scheduler.WithBindTimeoutSeconds(*cc.ComponentConfig.BindTimeoutSeconds))
+	 */
 	options := defaultSchedulerOptions
 	for _, opt := range opts {
 		opt(&options)
 	}
 
 	// Set up the configurator which can create schedulers from configs.
+	// 生成factory的config-factory
 	configurator := factory.NewConfigFactory(&factory.ConfigFactoryArgs{
 		SchedulerName:                  options.schedulerName,
 		Client:                         client,
@@ -173,6 +182,7 @@ func New(client clientset.Interface,
 	source := schedulerAlgorithmSource
 	switch {
 	case source.Provider != nil:
+		// 默认调度器会进入到这里 *source.Provider = DefaultProvider
 		// Create the config from a named algorithm provider.
 		sc, err := configurator.CreateFromProvider(*source.Provider)
 		if err != nil {
@@ -180,6 +190,7 @@ func New(client clientset.Interface,
 		}
 		config = sc
 	case source.Policy != nil:
+		// 自定义调度器会进入到这里
 		// Create the config from a user specified policy source.
 		policy := &schedulerapi.Policy{}
 		switch {

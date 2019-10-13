@@ -29,6 +29,9 @@ import (
 )
 
 // ResourceAllocationPriority contains information to calculate resource allocation priority.
+
+// 与cpu和memory相关的算分方法
+// name为其名字 scorer为算分方法 会在PriorityMap中调用
 type ResourceAllocationPriority struct {
 	Name   string
 	scorer func(requested, allocable *schedulercache.Resource, includeVolumes bool, requestedVolumes int, allocatableVolumes int) int64
@@ -36,6 +39,9 @@ type ResourceAllocationPriority struct {
 
 // PriorityMap priorities nodes according to the resource allocations on the node.
 // It will use `scorer` function to calculate the score.
+
+// PriorityMap会根据节点上的cpu和memory分配情况进行优选
+// 具体打分策略调用scorer进行计算
 func (r *ResourceAllocationPriority) PriorityMap(
 	pod *v1.Pod,
 	meta interface{},

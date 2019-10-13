@@ -122,11 +122,12 @@ func runCommand(cmd *cobra.Command, args []string, opts *options.Options) error 
 		fmt.Fprint(os.Stderr, "arguments are not supported\n")
 	}
 
+	// 对opts的属性进行验证
 	if errs := opts.Validate(); len(errs) > 0 {
 		fmt.Fprintf(os.Stderr, "%v\n", utilerrors.NewAggregate(errs))
 		os.Exit(1)
 	}
-
+	// 如果需要 就把opts的ComponentConfig文件保存起来
 	if len(opts.WriteConfigTo) > 0 {
 		if err := options.WriteConfigFile(opts.WriteConfigTo, &opts.ComponentConfig); err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -135,6 +136,7 @@ func runCommand(cmd *cobra.Command, args []string, opts *options.Options) error 
 		klog.Infof("Wrote configuration to: %s\n", opts.WriteConfigTo)
 	}
 
+	// 根据opts生成一个scheduler config 对象
 	c, err := opts.Config()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -144,6 +146,7 @@ func runCommand(cmd *cobra.Command, args []string, opts *options.Options) error 
 	stopCh := make(chan struct{})
 
 	// Get the completed config
+	// 根据scheduler config 生成一个completed config
 	cc := c.Complete()
 
 	// To help debugging, immediately log version
@@ -151,15 +154,18 @@ func runCommand(cmd *cobra.Command, args []string, opts *options.Options) error 
 
 	// Apply algorithms based on feature gates.
 	// TODO: make configurable?
+	// 看看打开哪些feature
 	algorithmprovider.ApplyFeatureGates()
 
 	// Configz registration.
+	// 向componentconfig中注册配置文件
 	if cz, err := configz.New("componentconfig"); err == nil {
 		cz.Set(cc.ComponentConfig)
 	} else {
 		return fmt.Errorf("unable to register configz: %s", err)
 	}
 
+	// 上面的一系列操作 就是为了获得一个completed config
 	return Run(cc, stopCh)
 }
 
@@ -171,6 +177,7 @@ func Run(cc schedulerserverconfig.CompletedConfig, stopCh <-chan struct{}) error
 	}
 
 	// Create the scheduler.
+	// 生成pkg/scheduler/scheduler.go 的Scheduler对象
 	sched, err := scheduler.New(cc.Client,
 		cc.InformerFactory.Core().V1().Nodes(),
 		cc.PodInformer,
@@ -254,8 +261,10 @@ func Run(cc schedulerserverconfig.CompletedConfig, stopCh <-chan struct{}) error
 	}()
 
 	// If leader election is enabled, runCommand via LeaderElector until done and exit.
+	// 启动高可用
 	if cc.LeaderElection != nil {
 		cc.LeaderElection.Callbacks = leaderelection.LeaderCallbacks{
+			// 调用run方法
 			OnStartedLeading: run,
 			OnStoppedLeading: func() {
 				utilruntime.HandleError(fmt.Errorf("lost master"))
