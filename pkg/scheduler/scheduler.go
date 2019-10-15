@@ -320,17 +320,22 @@ func (sched *Scheduler) schedule(pod *v1.Pod) (string, error) {
 // If it succeeds, it adds the name of the node where preemption has happened to the pod annotations.
 // It returns the node name and an error if any.
 func (sched *Scheduler) preempt(preemptor *v1.Pod, scheduleErr error) (string, error) {
+	// 如果pod优先级没有打开 或者 该调度器禁止操作
 	if !util.PodPriorityEnabled() || sched.config.DisablePreemption {
 		klog.V(3).Infof("Pod priority feature is not enabled or preemption is disabled by scheduler configuration." +
 			" No preemption is performed.")
 		return "", nil
 	}
+	// 获得抢占者
 	preemptor, err := sched.config.PodPreemptor.GetUpdatedPod(preemptor)
 	if err != nil {
 		klog.Errorf("Error getting the updated preemptor pod object: %v", err)
 		return "", err
 	}
 
+	// node 抢占者要运行的节点
+	// victims 该节点中要杀死的pods
+	// nominatedPodsToClear 需要杀死的nominated pods
 	node, victims, nominatedPodsToClear, err := sched.config.Algorithm.Preempt(preemptor, sched.config.NodeLister, scheduleErr)
 	metrics.PreemptionVictims.Set(float64(len(victims)))
 	if err != nil {
@@ -343,17 +348,23 @@ func (sched *Scheduler) preempt(preemptor *v1.Pod, scheduleErr error) (string, e
 		// Update the scheduling queue with the nominated pod information. Without
 		// this, there would be a race condition between the next scheduling cycle
 		// and the time the scheduler receives a Pod Update for the nominated pod.
+
+		// 将该pod加入scheduling_queue中的nominatedPods中
 		sched.config.SchedulingQueue.UpdateNominatedPodForNode(preemptor, nodeName)
 
 		// Make a call to update nominated node name of the pod on the API server.
+		// 将pod.Status.NominatedNodeName设置为该nodeName
+		// 向api-server发请求更新该pod的pod.Status.NominatedNodeName字段
 		err = sched.config.PodPreemptor.SetNominatedNodeName(preemptor, nodeName)
 		if err != nil {
 			klog.Errorf("Error in preemption process. Cannot update pod %v/%v annotations: %v", preemptor.Namespace, preemptor.Name, err)
+			// 如果更新失败 就从schedulingQueue中的nominatedPodMap删除
 			sched.config.SchedulingQueue.DeleteNominatedPodIfExists(preemptor)
 			return "", err
 		}
 
 		for _, victim := range victims {
+			// 向api-server发请求将那些牺牲者删除
 			if err := sched.config.PodPreemptor.DeletePod(victim); err != nil {
 				klog.Errorf("Error preempting pod %v/%v: %v", victim.Namespace, victim.Name, err)
 				return "", err
@@ -365,6 +376,9 @@ func (sched *Scheduler) preempt(preemptor *v1.Pod, scheduleErr error) (string, e
 	// be nil when a pod with nominated node name is eligible to preempt again,
 	// but preemption logic does not find any node for it. In that case Preempt()
 	// function of generic_scheduler.go returns the pod itself for removal of the annotation.
+	// 将那些需要删除的nominatedPods删除
+	// 这里为什么需要放到node != nil外面 我理解是因为当一个已经设置过nominated node name的pod(也就是一起发生抢占过)可以再次进行抢占时,
+	// 但是该pod没有抢占成功, 在这种情况下需要删除该pod的pod.Status.NominatedNodeName
 	for _, p := range nominatedPodsToClear {
 		rErr := sched.config.PodPreemptor.RemoveNominatedNodeName(p)
 		if rErr != nil {
@@ -449,6 +463,9 @@ func (sched *Scheduler) assume(assumed *v1.Pod, host string) error {
 	// in the background.
 	// If the binding fails, scheduler will release resources allocated to assumed pod
 	// immediately.
+
+	// 乐观认为在后台以goroutine运行的binding(向api-server发请求)会成功
+	// 即使不成功 也没有问题 bind会立马从schedcache立马删除该pod
 	assumed.Spec.NodeName = host
 	// NOTE: Updates must be written to scheduler cache before invalidating
 	// equivalence cache, because we could snapshot equivalence cache after the
@@ -475,6 +492,7 @@ func (sched *Scheduler) assume(assumed *v1.Pod, host string) error {
 		return err
 	}
 	// if "assumed" is a nominated pod, we should remove it from internal cache
+	// 如果是一个nominated pod则从shceduling queue 中删除
 	if sched.config.SchedulingQueue != nil {
 		sched.config.SchedulingQueue.DeleteNominatedPodIfExists(assumed)
 	}
@@ -495,9 +513,15 @@ func (sched *Scheduler) bind(assumed *v1.Pod, b *v1.Binding) error {
 	// If binding succeeded then PodScheduled condition will be updated in apiserver so that
 	// it's atomic with setting host.
 	err := sched.config.GetBinder(assumed).Bind(b)
+	// 无论bind成功还是失败 都是要进行FinishBinding的
+	// 如果成功 podInformer(scheduled pod cache)会得到一个scheduled pod, 所以会出发AddFunc 调用shedulerCache.Add方法
+	// 如果失败 后面会因为超时会被SchedulerCache删除
 	if finErr := sched.config.SchedulerCache.FinishBinding(assumed); finErr != nil {
 		klog.Errorf("scheduler cache FinishBinding failed: %v", finErr)
 	}
+	//如果向api-server绑定失败的话
+	// 1. 把在assume方法中加入的assumed pod删除(ForgetPod)
+	// 2. 报告错误的同时会尝试加入到unschedulerQ中
 	if err != nil {
 		klog.V(1).Infof("Failed to bind pod: %v/%v", assumed.Namespace, assumed.Name)
 		if err := sched.config.SchedulerCache.ForgetPod(assumed); err != nil {
@@ -524,9 +548,12 @@ func (sched *Scheduler) bind(assumed *v1.Pod, b *v1.Binding) error {
 func (sched *Scheduler) scheduleOne() {
 	pod := sched.config.NextPod()
 	// pod could be nil when schedulerQueue is closed
+	// 代表schedulerQueue已经关闭了 所以pod为nil
+	// 如果schedulerQueue现在没有pod 那么NextPod会一直block在这里
 	if pod == nil {
 		return
 	}
+	// 如果该pod要被删除
 	if pod.DeletionTimestamp != nil {
 		sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
 		klog.V(3).Infof("Skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
@@ -536,7 +563,11 @@ func (sched *Scheduler) scheduleOne() {
 	klog.V(3).Infof("Attempting to schedule pod: %v/%v", pod.Namespace, pod.Name)
 
 	// Synchronously attempt to find a fit for the pod.
+	// 当前时间
 	start := time.Now()
+	// 调度该pod
+	// 如果成功 会返回一个节点名称 err为nil
+	// 如果失败 会返回错误err
 	suggestedHost, err := sched.schedule(pod)
 	if err != nil {
 		// schedule() may have failed because the pod would not fit on any host, so we try to
@@ -545,6 +576,7 @@ func (sched *Scheduler) scheduleOne() {
 		// into the resources that were preempted, but this is harmless.
 		if fitError, ok := err.(*core.FitError); ok {
 			preemptionStartTime := time.Now()
+			// 抢占
 			sched.preempt(pod, fitError)
 			metrics.PreemptionAttempts.Inc()
 			metrics.SchedulingAlgorithmPremptionEvaluationDuration.Observe(metrics.SinceInMicroseconds(preemptionStartTime))
@@ -579,6 +611,7 @@ func (sched *Scheduler) scheduleOne() {
 	}
 
 	// assume modifies `assumedPod` by setting NodeName=suggestedHost
+	// assume该pod
 	err = sched.assume(assumedPod, suggestedHost)
 	if err != nil {
 		klog.Errorf("error assuming pod: %v", err)
@@ -586,6 +619,7 @@ func (sched *Scheduler) scheduleOne() {
 		return
 	}
 	// bind the pod to its host asynchronously (we can do this b/c of the assumption step above).
+	// 异步bind操作
 	go func() {
 		// Bind volumes first before Pod
 		if !allBound {

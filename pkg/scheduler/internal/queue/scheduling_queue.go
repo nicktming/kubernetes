@@ -611,6 +611,8 @@ func (p *PriorityQueue) DeleteNominatedPodIfExists(pod *v1.Pod) {
 // This is called during the preemption process after a node is nominated to run
 // the pod. We update the structure before sending a request to update the pod
 // object to avoid races with the following scheduling cycles.
+
+// 将该pod加到nominatedMaps中
 func (p *PriorityQueue) UpdateNominatedPodForNode(pod *v1.Pod, nodeName string) {
 	p.lock.Lock()
 	p.nominatedPods.add(pod, nodeName)

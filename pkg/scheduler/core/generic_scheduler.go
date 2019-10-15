@@ -255,6 +255,7 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if !ok || fitError == nil {
 		return nil, nil, nil, nil
 	}
+	// 判断该pod能不能够进行抢占
 	if !podEligibleToPreemptOthers(pod, g.cachedNodeInfoMap) {
 		klog.V(5).Infof("Pod %v/%v is not eligible for more preemption.", pod.Namespace, pod.Name)
 		return nil, nil, nil, nil
@@ -266,6 +267,7 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if len(allNodes) == 0 {
 		return nil, nil, nil, ErrNoNodesAvailable
 	}
+	// 选一些潜在的节点
 	potentialNodes := nodesWherePreemptionMightHelp(allNodes, fitError.FailedPredicates)
 	if len(potentialNodes) == 0 {
 		klog.V(3).Infof("Preemption will not help schedule pod %v/%v on any node.", pod.Namespace, pod.Name)
@@ -276,6 +278,8 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	// 发生抢占
+	// nodeToVictims返回值为 所有可以发生抢占行为而能够让该pod运行的节点 以及每个节点对应的需要删除的pods
 	nodeToVictims, err := selectNodesForPreemption(pod, g.cachedNodeInfoMap, potentialNodes, g.predicates,
 		g.predicateMetaProducer, g.schedulingQueue, pdbs)
 	if err != nil {
@@ -285,11 +289,14 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	// We will only check nodeToVictims with extenders that support preemption.
 	// Extenders which do not support preemption may later prevent preemptor from being scheduled on the nominated
 	// node. In that case, scheduler will find a different host for the preemptor in subsequent scheduling cycles.
+
+	// 如果有扩展项 则调用扩展项进行计算
 	nodeToVictims, err = g.processPreemptionWithExtenders(pod, nodeToVictims)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
+	// 从这些nodeToVictims中选出一个最终发生抢占的节点candidateNode
 	candidateNode := pickOneNodeForPreemption(nodeToVictims)
 	if candidateNode == nil {
 		return nil, nil, nil, err
@@ -299,6 +306,9 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	// this node. So, we should remove their nomination. Removing their
 	// nomination updates these pods and moves them to the active queue. It
 	// lets scheduler find another place for them.
+
+	// 那些优先级比当前pod优先级低的nomiated pods有可能应该不适合再运行在candidateNode节点上了
+	// 所以需要把这些nominatedPods找到
 	nominatedPods := g.getLowerPriorityNominatedPods(pod, candidateNode.Name)
 	if nodeInfo, ok := g.cachedNodeInfoMap[candidateNode.Name]; ok {
 		return nodeInfo.Node(), nodeToVictims[candidateNode].Pods, nominatedPods, err
@@ -390,10 +400,13 @@ func (g *genericScheduler) findNodesThatFit(pod *v1.Pod, nodes []*v1.Node) ([]*v
 	var filtered []*v1.Node
 	failedPredicateMap := FailedPredicateMap{}
 
+	// 如果没有任何预选方法 直接返回
 	if len(g.predicates) == 0 {
 		filtered = nodes
 	} else {
+		// 所有的节点的个数
 		allNodes := int32(g.cache.NodeTree().NumNodes)
+		// 最多选numNodesToFind个节点
 		numNodesToFind := g.numFeasibleNodesToFind(allNodes)
 
 		// Create filtered list with enough space to avoid growing it
@@ -432,21 +445,26 @@ func (g *genericScheduler) findNodesThatFit(pod *v1.Pod, nodes []*v1.Node) ([]*v
 				g.alwaysCheckAllPredicates,
 				equivClass,
 			)
+			// 如果出现错误 直接返回
 			if err != nil {
 				predicateResultLock.Lock()
 				errs[err.Error()]++
 				predicateResultLock.Unlock()
 				return
 			}
+			// 如果该节点适合
 			if fits {
 				length := atomic.AddInt32(&filteredLen, 1)
 				if length > numNodesToFind {
+					// 退出了
 					cancel()
 					atomic.AddInt32(&filteredLen, -1)
 				} else {
+					// 加入到filtered中
 					filtered[length-1] = g.cachedNodeInfoMap[nodeName].Node()
 				}
 			} else {
+				// 不适合 就把该节点以及原因加入到failedPredicateMap中
 				predicateResultLock.Lock()
 				failedPredicateMap[nodeName] = failedPredicates
 				predicateResultLock.Unlock()
@@ -455,6 +473,7 @@ func (g *genericScheduler) findNodesThatFit(pod *v1.Pod, nodes []*v1.Node) ([]*v
 
 		// Stops searching for more nodes once the configured number of feasible nodes
 		// are found.
+		// 启动16个goroutine同时计算
 		workqueue.ParallelizeUntil(ctx, 16, int(allNodes), checkNode)
 
 		filtered = filtered[:filteredLen]
@@ -463,12 +482,14 @@ func (g *genericScheduler) findNodesThatFit(pod *v1.Pod, nodes []*v1.Node) ([]*v
 		}
 	}
 
+	// 对预选方法过滤出来的所有节点 再重新从extenders中一个个过滤
 	if len(filtered) > 0 && len(g.extenders) != 0 {
 		for _, extender := range g.extenders {
 			if !extender.IsInterested(pod) {
 				continue
 			}
 			filteredList, failedMap, err := extender.Filter(pod, filtered, g.cachedNodeInfoMap)
+			// 如果出现失败 返回
 			if err != nil {
 				if extender.IsIgnorable() {
 					klog.Warningf("Skipping extender %v as it returned error %v and has ignorable flag set",
@@ -480,6 +501,7 @@ func (g *genericScheduler) findNodesThatFit(pod *v1.Pod, nodes []*v1.Node) ([]*v
 			}
 
 			for failedNodeName, failedMsg := range failedMap {
+				// 如果failedPredicateMap中不存在 加入到failedPredicateMap中
 				if _, found := failedPredicateMap[failedNodeName]; !found {
 					failedPredicateMap[failedNodeName] = []algorithm.PredicateFailureReason{}
 				}
@@ -491,6 +513,8 @@ func (g *genericScheduler) findNodesThatFit(pod *v1.Pod, nodes []*v1.Node) ([]*v
 			}
 		}
 	}
+	// 返回最终的filtered 适合的节点
+	// failedPredicateMap 失败的节点以及原因
 	return filtered, failedPredicateMap, nil
 }
 
@@ -505,6 +529,7 @@ func addNominatedPods(pod *v1.Pod, meta algorithm.PredicateMetadata,
 		return false, meta, nodeInfo
 	}
 	nominatedPods := queue.NominatedPodsForNode(nodeInfo.Node().Name)
+	// 如果该节点上没有任何nominated pods
 	if nominatedPods == nil || len(nominatedPods) == 0 {
 		return false, meta, nodeInfo
 	}
@@ -514,6 +539,7 @@ func addNominatedPods(pod *v1.Pod, meta algorithm.PredicateMetadata,
 	}
 	nodeInfoOut := nodeInfo.Clone()
 	for _, p := range nominatedPods {
+		// 如果nominated pods中有别的pod优先级大于等于该pod
 		if util.GetPodPriority(p) >= util.GetPodPriority(pod) && p.UID != pod.UID {
 			nodeInfoOut.AddPod(p)
 			if metaOut != nil {
@@ -588,6 +614,7 @@ func podFitsOnNode(
 			)
 			//TODO (yastij) : compute average predicate restrictiveness to export it as Prometheus metric
 			if predicate, exist := predicateFuncs[predicateKey]; exist {
+				// 如果quivlance class cache 存在的话就可以用RunPredicate来运行
 				if eCacheAvailable {
 					fit, reasons, err = nodeCache.RunPredicate(predicate, predicateKey, predicateID, pod, metaToUse, nodeInfoToUse, equivClass)
 				} else {
@@ -597,6 +624,7 @@ func podFitsOnNode(
 					return false, []algorithm.PredicateFailureReason{}, err
 				}
 
+				// 如果不适合 并且不需要运行完全部预选方法的话 就直接退出了
 				if !fit {
 					// eCache is available and valid, and predicates result is unfit, record the fail reasons
 					failedPredicates = append(failedPredicates, reasons...)
@@ -631,6 +659,7 @@ func PrioritizeNodes(
 ) (schedulerapi.HostPriorityList, error) {
 	// If no priority configs are provided, then the EqualPriority function is applied
 	// This is required to generate the priority list in the required format
+	// 如果没有优选方法并且也没有扩展方法 则所有节点都是得分为1分
 	if len(priorityConfigs) == 0 && len(extenders) == 0 {
 		result := make(schedulerapi.HostPriorityList, 0, len(nodes))
 		for i := range nodes {
@@ -658,6 +687,7 @@ func PrioritizeNodes(
 
 	// DEPRECATED: we can remove this when all priorityConfigs implement the
 	// Map-Reduce pattern.
+	// 旧版本的算分
 	for i := range priorityConfigs {
 		if priorityConfigs[i].Function != nil {
 			wg.Add(1)
@@ -682,6 +712,7 @@ func PrioritizeNodes(
 			}
 
 			var err error
+			// 进行map方法算分
 			results[i][index], err = priorityConfigs[i].Map(pod, meta, nodeInfo)
 			if err != nil {
 				appendError(err)
@@ -697,6 +728,7 @@ func PrioritizeNodes(
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
+			// 进行map方法算分
 			if err := priorityConfigs[index].Reduce(pod, meta, nodeNameToInfo, results[index]); err != nil {
 				appendError(err)
 			}
@@ -723,6 +755,7 @@ func PrioritizeNodes(
 		}
 	}
 
+	// 如果有扩展器, 就将控制器中的方法计算一次, 把分数加起来
 	if len(extenders) != 0 && nodes != nil {
 		combinedScores := make(map[string]int, len(nodeNameToInfo))
 		for i := range extenders {
@@ -798,6 +831,7 @@ func pickOneNodeForPreemption(nodesToVictims map[*v1.Node]*schedulerapi.Victims)
 			// This should happen rarely when one or more pods are terminated between
 			// the time that scheduler tries to schedule the pod and the time that
 			// preemption logic tries to find nodes for preemption.
+			// 如果不需要删除任何pod 就直接返回
 			return node
 		}
 		numPDBViolatingPods := victims.NumPDBViolations
@@ -923,6 +957,7 @@ func selectNodesForPreemption(pod *v1.Pod,
 		}
 	}
 	workqueue.ParallelizeUntil(context.TODO(), 16, len(potentialNodes), checkNode)
+	// nodeToVictims 记录着这些可以运行该pod的节点以及其需要删除的pods
 	return nodeToVictims, nil
 }
 
@@ -1008,6 +1043,9 @@ func selectVictimsOnNode(
 	}
 	// As the first step, remove all the lower priority pods from the node and
 	// check if the given pod can be scheduled.
+
+	// 准备潜在要删除的pods
+	// 潜在要删除的pods: 当然是那些优先级比当前pod优先级低的pods
 	podPriority := util.GetPodPriority(pod)
 	for _, p := range nodeInfoCopy.Pods() {
 		if util.GetPodPriority(p) < podPriority {
@@ -1015,12 +1053,15 @@ func selectVictimsOnNode(
 			removePod(p)
 		}
 	}
+	// 将这些潜在要删除的pods按照优先级要高从低排序
 	potentialVictims.Sort()
 	// If the new pod does not fit after removing all the lower priority pods,
 	// we are almost done and this node is not suitable for preemption. The only condition
 	// that we should check is if the "pod" is failing to schedule due to pod affinity
 	// failure.
 	// TODO(bsalamat): Consider checking affinity to lower priority pods if feasible with reasonable performance.
+
+	// 将这些潜在的pods全部删除如果还不能让该pod运行到该节点上的话 就可以直接返回了
 	if fits, _, err := podFitsOnNode(pod, meta, nodeInfoCopy, fitPredicates, nil, queue, false, nil); !fits {
 		if err != nil {
 			klog.Warningf("Encountered error while selecting victims on node %v: %v", nodeInfo.Node().Name, err)
@@ -1032,17 +1073,25 @@ func selectVictimsOnNode(
 	// Try to reprieve as many pods as possible. We first try to reprieve the PDB
 	// violating victims and then other non-violating ones. In both cases, we start
 	// from the highest priority victims.
+
+	// 按照pdbs把潜在要删除的pods分成两类 violatingVictims和nonViolatingVictims
 	violatingVictims, nonViolatingVictims := filterPodsWithPDBViolation(potentialVictims.Items, pdbs)
 	reprievePod := func(p *v1.Pod) bool {
+		// 尝试把该p(pod)加回到节点中 其实说不删除p
 		addPod(p)
 		fits, _, _ := podFitsOnNode(pod, meta, nodeInfoCopy, fitPredicates, nil, queue, false, nil)
 		if !fits {
+			// p需要删除
 			removePod(p)
 			victims = append(victims, p)
 			klog.V(5).Infof("Pod %v is a potential preemption victim on node %v.", p.Name, nodeInfo.Node().Name)
 		}
 		return fits
 	}
+	// 无论violatingVictims还是nonViolatingVictims 但是按优先级从高到低依次尝试reprievePod
+	// reprievePod的意思就是说 把p加回去(就是不删除) 如果不满足运行的话 那p就会真正加到victims中 也就是要删除
+	// 如果满足运行的话 那p就不用删除了
+
 	for _, p := range violatingVictims {
 		if !reprievePod(p) {
 			numViolatingVictim++
@@ -1107,6 +1156,17 @@ func nodesWherePreemptionMightHelp(nodes []*v1.Node, failedPredicatesMap FailedP
 // considered for preemption.
 // We look at the node that is nominated for this pod and as long as there are
 // terminating pods on the node, we don't consider this for preempting more pods.
+
+// 返回true, 表明该pod可以去尝试抢占
+// 返回false, 表明该pod shouldn't be considered for preemption.
+
+// 如果该pod没有抢占过, 则直接返回true
+
+// 如果该pod以前发生抢占过(pod.Status.NominatedNodeName有值),
+// 只要该nominated node中有任何优先级比当前pod低的pod正在做删除操作, 那就返回false
+// (因为说明该nominated node正在为这个nominated pod进行删除那些被确定为牺牲者的pods)
+
+// 不然还是返回true
 func podEligibleToPreemptOthers(pod *v1.Pod, nodeNameToInfo map[string]*schedulercache.NodeInfo) bool {
 	nomNodeName := pod.Status.NominatedNodeName
 	if len(nomNodeName) > 0 {
