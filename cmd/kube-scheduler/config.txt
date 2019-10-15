@@ -1,0 +1,1 @@
+./kube-scheduler --master=http://localhost:8080

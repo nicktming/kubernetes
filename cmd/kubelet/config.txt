@@ -1,0 +1,1 @@
+./kubelet --kubeconfig=kubeconfig --hostname-override=172.21.0.16 --pod-infra-container-image=mirrorgooglecontainers/pause:3.1
