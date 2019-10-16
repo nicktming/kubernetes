@@ -1,1 +1,1 @@
-./kube-controller-manager --master=http://127.0.0.1:8080
+./kube-controller-manager --master=http://127.0.0.1:8080 --service-account-private-key-file=/root/k8s/serviceaccount.key
