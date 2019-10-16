@@ -1,0 +1,11 @@
+apiVersion: componentconfig/v1alpha1
+kind: KubeSchedulerConfiguration
+schedulerName: my-scheduler
+algorithmSource:
+  policy:
+    file:
+      policy.yaml
+leaderElection:
+  leaderElect: true
+  lockObjectName: my-scheduler
+  lockObjectNamespace: kube-system
