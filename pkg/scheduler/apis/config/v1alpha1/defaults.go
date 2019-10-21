@@ -75,9 +75,11 @@ func SetDefaults_KubeSchedulerConfiguration(obj *kubescedulerconfigv1alpha1.Kube
 	}
 
 	if len(obj.LeaderElection.LockObjectNamespace) == 0 {
+		// obj.LeaderElection.LockObjectNamespace = kube-system
 		obj.LeaderElection.LockObjectNamespace = kubescedulerconfigv1alpha1.SchedulerDefaultLockObjectNamespace
 	}
 	if len(obj.LeaderElection.LockObjectName) == 0 {
+		// obj.LeaderElection.LockObjectName = kube-scheduler
 		obj.LeaderElection.LockObjectName = kubescedulerconfigv1alpha1.SchedulerDefaultLockObjectName
 	}
 

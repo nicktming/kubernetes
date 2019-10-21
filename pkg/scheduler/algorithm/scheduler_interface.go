@@ -27,11 +27,14 @@ import (
 // managed by Kubernetes.
 type SchedulerExtender interface {
 	// Name returns a unique name that identifies the extender.
+	// 该extender的名字 onfig.URLPrefix
 	Name() string
 
 	// Filter based on extender-implemented predicate functions. The filtered list is
 	// expected to be a subset of the supplied list. failedNodesMap optionally contains
 	// the list of failed nodes and failure reasons.
+
+	// 过滤方法 也就是相当于预选方法
 	Filter(pod *v1.Pod,
 		nodes []*v1.Node, nodeNameToInfo map[string]*schedulercache.NodeInfo,
 	) (filteredNodes []*v1.Node, failedNodesMap schedulerapi.FailedNodesMap, err error)
@@ -39,6 +42,7 @@ type SchedulerExtender interface {
 	// Prioritize based on extender-implemented priority functions. The returned scores & weight
 	// are used to compute the weighted score for an extender. The weighted scores are added to
 	// the scores computed  by Kubernetes scheduler. The total scores are used to do the host selection.
+	// 打分
 	Prioritize(pod *v1.Pod, nodes []*v1.Node) (hostPriorities *schedulerapi.HostPriorityList, weight int, err error)
 
 	// Bind delegates the action of binding a pod to a node to the extender.
@@ -66,10 +70,15 @@ type SchedulerExtender interface {
 	) (map[*v1.Node]*schedulerapi.Victims, error)
 
 	// SupportsPreemption returns if the scheduler extender support preemption or not.
+	// 是否支持抢占
 	SupportsPreemption() bool
 
 	// IsIgnorable returns true indicates scheduling should not fail when this extender
 	// is unavailable. This gives scheduler ability to fail fast and tolerate non-critical extenders as well.
+
+	// 是否可以容忍错误
+	// 设置为true时 如果该extender执行过程中发生了错误 可以容忍 就是直接跳过
+	// 设置为false时 如果该extender执行过程中发生了错误 那scheduler就会返回了
 	IsIgnorable() bool
 }
 

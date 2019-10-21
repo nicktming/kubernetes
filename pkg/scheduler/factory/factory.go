@@ -1187,6 +1187,8 @@ func (c *configFactory) CreateFromConfig(policy schedulerapi.Policy) (*Config, e
 		return nil, err
 	}
 
+	// 生成预选方法的key
+	// 如果没有 就那默认的那些预选方法的key
 	predicateKeys := sets.NewString()
 	if policy.Predicates == nil {
 		klog.V(2).Infof("Using predicates from algorithm provider '%v'", DefaultProvider)
@@ -1202,6 +1204,8 @@ func (c *configFactory) CreateFromConfig(policy schedulerapi.Policy) (*Config, e
 		}
 	}
 
+	// 生成优选方法的key
+	// 如果没有 就那默认的那些优选方法的key
 	priorityKeys := sets.NewString()
 	if policy.Priorities == nil {
 		klog.V(2).Infof("Using priorities from algorithm provider '%v'", DefaultProvider)
@@ -1217,6 +1221,7 @@ func (c *configFactory) CreateFromConfig(policy schedulerapi.Policy) (*Config, e
 		}
 	}
 
+	// 生成扩展
 	var extenders []algorithm.SchedulerExtender
 	if len(policy.ExtenderConfigs) != 0 {
 		ignoredExtendedResources := sets.NewString()
@@ -1246,6 +1251,7 @@ func (c *configFactory) CreateFromConfig(policy schedulerapi.Policy) (*Config, e
 		c.alwaysCheckAllPredicates = policy.AlwaysCheckAllPredicates
 	}
 
+	// 根据预选, 优选, 扩展方法进行生成config
 	return c.CreateFromKeys(predicateKeys, priorityKeys, extenders)
 }
 

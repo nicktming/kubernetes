@@ -264,6 +264,8 @@ func (h *HTTPExtender) Filter(
 		return nodes, schedulerapi.FailedNodesMap{}, nil
 	}
 
+	// 如果nodeCacheCapable等于true 则使用nodeNames
+	// 否则使用nodeList
 	if h.nodeCacheCapable {
 		nodeNameSlice := make([]string, 0, len(nodes))
 		for _, node := range nodes {
@@ -277,12 +279,14 @@ func (h *HTTPExtender) Filter(
 		}
 	}
 
+	// 组装发送给extender服务的ExtenderArgs
 	args = &schedulerapi.ExtenderArgs{
 		Pod:       pod,
 		Nodes:     nodeList,
 		NodeNames: nodeNames,
 	}
 
+	// 给其对应的api发POST请求
 	if err := h.send(h.filterVerb, args, &result); err != nil {
 		return nil, nil, err
 	}
@@ -290,6 +294,7 @@ func (h *HTTPExtender) Filter(
 		return nil, nil, fmt.Errorf(result.Error)
 	}
 
+	// 取结果
 	if h.nodeCacheCapable && result.NodeNames != nil {
 		nodeResult = make([]*v1.Node, 0, len(*result.NodeNames))
 		for i := range *result.NodeNames {
