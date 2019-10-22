@@ -31,6 +31,7 @@ import (
 )
 
 type BaseControllerRefManager struct {
+	// 当前这个controller
 	Controller metav1.Object
 	Selector   labels.Selector
 
@@ -38,7 +39,7 @@ type BaseControllerRefManager struct {
 	canAdoptOnce sync.Once
 	CanAdoptFunc func() error
 }
-
+// 判断是否可以接收
 func (m *BaseControllerRefManager) CanAdopt() error {
 	m.canAdoptOnce.Do(func() {
 		if m.CanAdoptFunc != nil {
@@ -63,27 +64,49 @@ func (m *BaseControllerRefManager) CanAdopt() error {
 // own the object.
 //
 // No reconciliation will be attempted if the controller is being deleted.
+
+// ClaimObject是为m.Controller寻找属于它的obj
+// 1. 如果孤儿obj与m.Controller匹配 则接收并返回true
+// 2. 如果该obj以前属于m.Controller, 但是现在不匹配了(有可能是obj发生改变也有可能是m.Controller某些属性比如label发生改变),
+//    则需要为该obj与m.Controller解绑
+// 只有两种情况下会返回true:
+// 1. 孤儿obj与m.Controller匹配 则接收并返回true
+// 2. 该obj以前属于m.Controller并且现在也匹配 返回true
 func (m *BaseControllerRefManager) ClaimObject(obj metav1.Object, match func(metav1.Object) bool, adopt, release func(metav1.Object) error) (bool, error) {
+	// 获得该obj所属的controller
 	controllerRef := metav1.GetControllerOf(obj)
 	if controllerRef != nil {
+		// 说明该obj已经属于另外一个controller
 		if controllerRef.UID != m.Controller.GetUID() {
 			// Owned by someone else. Ignore.
 			return false, nil
 		}
+		// 说明该obj属于当前这个controller
 		if match(obj) {
+			// 如果匹配得上
+
 			// We already own it and the selector matches.
 			// Return true (successfully claimed) before checking deletion timestamp.
 			// We're still allowed to claim things we already own while being deleted
 			// because doing so requires taking no actions.
 			return true, nil
 		}
+		// 说明该obj属于当前这个controller 但是没有匹配上
+		// (因为如果修改了controller的Match Labels然后apply到集群中, 那就有可能不匹配)
+		// 此时需要让该obj与当前controller解绑
+
+
 		// Owned by us but selector doesn't match.
 		// Try to release, unless we're being deleted.
+
+		// 如果当前controller正处于删除 就不用解绑了
 		if m.Controller.GetDeletionTimestamp() != nil {
 			return false, nil
 		}
+		// 让该obj与当前controller解绑
 		if err := release(obj); err != nil {
 			// If the pod no longer exists, ignore the error.
+			// 如果该obj已经不存在了
 			if errors.IsNotFound(err) {
 				return false, nil
 			}
@@ -92,10 +115,14 @@ func (m *BaseControllerRefManager) ClaimObject(obj metav1.Object, match func(met
 			return false, err
 		}
 		// Successfully released.
+		// 成功解绑
 		return false, nil
 	}
 
+	// 说明当前这个obj是个孤儿obj, 不属于任何controller
 	// It's an orphan.
+
+	// 1. 如果该controller或者当前obj正在删除或者与该obj与当前controller不匹配 直接返回
 	if m.Controller.GetDeletionTimestamp() != nil || !match(obj) {
 		// Ignore if we're being deleted or selector doesn't match.
 		return false, nil
@@ -104,9 +131,11 @@ func (m *BaseControllerRefManager) ClaimObject(obj metav1.Object, match func(met
 		// Ignore if the object is being deleted
 		return false, nil
 	}
+	// 2. 尝试将该obj与当前controller绑定在一起
 	// Selector matches. Try to adopt.
 	if err := adopt(obj); err != nil {
 		// If the pod no longer exists, ignore the error.
+		// 如果该obj已经不存在了 返回
 		if errors.IsNotFound(err) {
 			return false, nil
 		}
@@ -114,6 +143,7 @@ func (m *BaseControllerRefManager) ClaimObject(obj metav1.Object, match func(met
 		// The controller should requeue and try again if it's still orphaned.
 		return false, err
 	}
+	// 3. 成功绑定
 	// Successfully adopted.
 	return true, nil
 }
@@ -171,7 +201,7 @@ func NewPodControllerRefManager(
 func (m *PodControllerRefManager) ClaimPods(pods []*v1.Pod, filters ...func(*v1.Pod) bool) ([]*v1.Pod, error) {
 	var claimed []*v1.Pod
 	var errlist []error
-
+	// 分别定义match, adopt, release方法
 	match := func(obj metav1.Object) bool {
 		pod := obj.(*v1.Pod)
 		// Check selector first so filters only run on potentially matching Pods.
@@ -191,7 +221,7 @@ func (m *PodControllerRefManager) ClaimPods(pods []*v1.Pod, filters ...func(*v1.
 	release := func(obj metav1.Object) error {
 		return m.ReleasePod(obj.(*v1.Pod))
 	}
-
+	// 分别尝试每个pod
 	for _, pod := range pods {
 		ok, err := m.ClaimObject(pod, match, adopt, release)
 		if err != nil {
@@ -199,6 +229,7 @@ func (m *PodControllerRefManager) ClaimPods(pods []*v1.Pod, filters ...func(*v1.
 			continue
 		}
 		if ok {
+			// 如果成功
 			claimed = append(claimed, pod)
 		}
 	}
@@ -208,6 +239,7 @@ func (m *PodControllerRefManager) ClaimPods(pods []*v1.Pod, filters ...func(*v1.
 // AdoptPod sends a patch to take control of the pod. It returns the error if
 // the patching fails.
 func (m *PodControllerRefManager) AdoptPod(pod *v1.Pod) error {
+	// 在接收前最后一次再判断一下是否可以接收
 	if err := m.CanAdopt(); err != nil {
 		return fmt.Errorf("can't adopt Pod %v/%v (%v): %v", pod.Namespace, pod.Name, pod.UID, err)
 	}
@@ -217,6 +249,7 @@ func (m *PodControllerRefManager) AdoptPod(pod *v1.Pod) error {
 		`{"metadata":{"ownerReferences":[{"apiVersion":"%s","kind":"%s","name":"%s","uid":"%s","controller":true,"blockOwnerDeletion":true}],"uid":"%s"}}`,
 		m.controllerKind.GroupVersion(), m.controllerKind.Kind,
 		m.Controller.GetName(), m.Controller.GetUID(), pod.UID)
+	// 发的Patch请求 局部更新 比如用ReplicaSet中的Template创建的pod在metadata都有一个ownerReferences表示它属于哪一个replicaset实例
 	return m.podControl.PatchPod(pod.Namespace, pod.Name, []byte(addControllerPatch))
 }
 
@@ -226,6 +259,7 @@ func (m *PodControllerRefManager) ReleasePod(pod *v1.Pod) error {
 	klog.V(2).Infof("patching pod %s_%s to remove its controllerRef to %s/%s:%s",
 		pod.Namespace, pod.Name, m.controllerKind.GroupVersion(), m.controllerKind.Kind, m.Controller.GetName())
 	deleteOwnerRefPatch := fmt.Sprintf(`{"metadata":{"ownerReferences":[{"$patch":"delete","uid":"%s"}],"uid":"%s"}}`, m.Controller.GetUID(), pod.UID)
+	// 发Patch请求局部更新metadata.ownerReferences字段中的内容
 	err := m.podControl.PatchPod(pod.Namespace, pod.Name, []byte(deleteOwnerRefPatch))
 	if err != nil {
 		if errors.IsNotFound(err) {
