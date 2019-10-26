@@ -43,11 +43,13 @@ const (
 
 type PodGCController struct {
 	kubeClient clientset.Interface
-
+	// 获得本地缓存的Lister
 	podLister       corelisters.PodLister
+	// 同步函数
 	podListerSynced cache.InformerSynced
-
+	// 删除pod的方法
 	deletePod              func(namespace, name string) error
+	// 一个阈值
 	terminatedPodThreshold int
 }
 
@@ -64,7 +66,9 @@ func NewPodGC(kubeClient clientset.Interface, podInformer coreinformers.PodInfor
 		},
 	}
 
+	// 获得本地缓存
 	gcc.podLister = podInformer.Lister()
+	// 等待同步函数
 	gcc.podListerSynced = podInformer.Informer().HasSynced
 
 	return gcc
@@ -75,26 +79,30 @@ func (gcc *PodGCController) Run(stop <-chan struct{}) {
 
 	klog.Infof("Starting GC controller")
 	defer klog.Infof("Shutting down GC controller")
-
+	// 等待同步
 	if !controller.WaitForCacheSync("GC", stop, gcc.podListerSynced) {
 		return
 	}
-
+	// 执行gc方法
 	go wait.Until(gcc.gc, gcCheckPeriod, stop)
 
 	<-stop
 }
 
 func (gcc *PodGCController) gc() {
+	// 获得本地缓存的所有的pods
 	pods, err := gcc.podLister.List(labels.Everything())
 	if err != nil {
 		klog.Errorf("Error while listing all Pods: %v", err)
 		return
 	}
+	// 代表集群中最多留terminatedPodThreshold个terminating的pod
 	if gcc.terminatedPodThreshold > 0 {
 		gcc.gcTerminated(pods)
 	}
+	// 删除那些在失联的节点上的pods (某些节点被删除了或者失联了需要删除在这些节点上的pods)
 	gcc.gcOrphaned(pods)
+	// 删除那些还没有被分配到任何节点但是已经在terminating的pods
 	gcc.gcUnscheduledTerminating(pods)
 }
 
@@ -107,6 +115,7 @@ func isPodTerminated(pod *v1.Pod) bool {
 
 func (gcc *PodGCController) gcTerminated(pods []*v1.Pod) {
 	terminatedPods := []*v1.Pod{}
+	// 过滤出所有的terminating的pods
 	for _, pod := range pods {
 		if isPodTerminated(pod) {
 			terminatedPods = append(terminatedPods, pod)
@@ -117,14 +126,14 @@ func (gcc *PodGCController) gcTerminated(pods []*v1.Pod) {
 	sort.Sort(byCreationTimestamp(terminatedPods))
 
 	deleteCount := terminatedPodCount - gcc.terminatedPodThreshold
-
+	// 就是最多留terminatedPodThreshold个terminated的pods 其余的都要删除
 	if deleteCount > terminatedPodCount {
 		deleteCount = terminatedPodCount
 	}
 	if deleteCount > 0 {
 		klog.Infof("garbage collecting %v pods", deleteCount)
 	}
-
+	// 删除pods
 	var wait sync.WaitGroup
 	for i := 0; i < deleteCount; i++ {
 		wait.Add(1)
@@ -143,6 +152,7 @@ func (gcc *PodGCController) gcTerminated(pods []*v1.Pod) {
 func (gcc *PodGCController) gcOrphaned(pods []*v1.Pod) {
 	klog.V(4).Infof("GC'ing orphaned")
 	// We want to get list of Nodes from the etcd, to make sure that it's as fresh as possible.
+	// 取出本地缓存的节点
 	nodes, err := gcc.kubeClient.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		return
@@ -159,6 +169,7 @@ func (gcc *PodGCController) gcOrphaned(pods []*v1.Pod) {
 		if nodeNames.Has(pod.Spec.NodeName) {
 			continue
 		}
+		// 删除那些在失联的节点上的pods (某些节点被删除了或者失联了需要删除在这些节点上的pods)
 		klog.V(2).Infof("Found orphaned Pod %v/%v assigned to the Node %v. Deleting.", pod.Namespace, pod.Name, pod.Spec.NodeName)
 		if err := gcc.deletePod(pod.Namespace, pod.Name); err != nil {
 			utilruntime.HandleError(err)
@@ -177,6 +188,8 @@ func (gcc *PodGCController) gcUnscheduledTerminating(pods []*v1.Pod) {
 			continue
 		}
 
+		// 表明 pod.DeletionTimestamp != nil && len(pod.Spec.NodeName) <= 0
+		// 删除那些还没有被分配到任何节点但是已经在terminating的pods
 		klog.V(2).Infof("Found unscheduled terminating Pod %v/%v not assigned to any Node. Deleting.", pod.Namespace, pod.Name)
 		if err := gcc.deletePod(pod.Namespace, pod.Name); err != nil {
 			utilruntime.HandleError(err)

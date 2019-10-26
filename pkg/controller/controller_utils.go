@@ -178,15 +178,20 @@ func (r *ControllerExpectations) DeleteExpectations(controllerKey string) {
 // SatisfiedExpectations returns true if the required adds/dels for the given controller have been observed.
 // Add/del counts are established by the controller at sync time, and updated as controllees are observed by the controller
 // manager.
+
+// 返回true时 代表需要去同步
 func (r *ControllerExpectations) SatisfiedExpectations(controllerKey string) bool {
 	if exp, exists, err := r.GetExpectations(controllerKey); exists {
+		// 是否满足
 		if exp.Fulfilled() {
 			klog.V(4).Infof("Controller expectations fulfilled %#v", exp)
 			return true
 		} else if exp.isExpired() {
+			// 已经过期了 等待了太长时间
 			klog.V(4).Infof("Controller expectations expired %#v", exp)
 			return true
 		} else {
+			// 此时并不是所有的pod都已经进入到了podInformer的AddPod方法中
 			klog.V(4).Infof("Controller still waiting on expectations %#v", exp)
 			return false
 		}
@@ -200,6 +205,7 @@ func (r *ControllerExpectations) SatisfiedExpectations(controllerKey string) boo
 		//	- In this case it continues without setting expectations till it needs to create/delete controllees.
 		klog.V(4).Infof("Controller %v either never recorded expectations, or the ttl expired.", controllerKey)
 	}
+	// 不存在当然去同步 或者出现错误
 	// Trigger a sync if we either encountered and error (which shouldn't happen since we're
 	// getting from local store) or this controller hasn't established expectations.
 	return true
@@ -338,7 +344,7 @@ func (u *UIDTrackingControllerExpectations) GetUIDs(controllerKey string) sets.S
 func (u *UIDTrackingControllerExpectations) ExpectDeletions(rcKey string, deletedKeys []string) error {
 	u.uidStoreLock.Lock()
 	defer u.uidStoreLock.Unlock()
-
+	// 如果以前存在
 	if existing := u.GetUIDs(rcKey); existing != nil && existing.Len() != 0 {
 		klog.Errorf("Clobbering existing delete keys: %+v", existing)
 	}
@@ -347,9 +353,11 @@ func (u *UIDTrackingControllerExpectations) ExpectDeletions(rcKey string, delete
 		expectedUIDs.Insert(k)
 	}
 	klog.V(4).Infof("Controller %v waiting on deletions for: %+v", rcKey, deletedKeys)
+	// 维护一个UIDSet
 	if err := u.uidStore.Add(&UIDSet{expectedUIDs, rcKey}); err != nil {
 		return err
 	}
+	// 维护ControlleeExpectations
 	return u.ControllerExpectationsInterface.ExpectDeletions(rcKey, expectedUIDs.Len())
 }
 
@@ -361,7 +369,9 @@ func (u *UIDTrackingControllerExpectations) DeletionObserved(rcKey, deleteKey st
 	uids := u.GetUIDs(rcKey)
 	if uids != nil && uids.Has(deleteKey) {
 		klog.V(4).Infof("Controller %v received delete for pod %v", rcKey, deleteKey)
+		//维护ControlleeExpectations
 		u.ControllerExpectationsInterface.DeletionObserved(rcKey)
+		// 维护UIDSet
 		uids.Delete(deleteKey)
 	}
 }

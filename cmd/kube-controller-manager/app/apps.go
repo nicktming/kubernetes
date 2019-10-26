@@ -67,6 +67,7 @@ func startStatefulSetController(ctx ControllerContext) (http.Handler, bool, erro
 }
 
 func startReplicaSetController(ctx ControllerContext) (http.Handler, bool, error) {
+	// 如果该资源不可用 则直接返回
 	if !ctx.AvailableResources[schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "replicasets"}] {
 		return nil, false, nil
 	}
