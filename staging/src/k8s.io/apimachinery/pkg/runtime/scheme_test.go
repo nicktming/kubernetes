@@ -495,6 +495,7 @@ func TestKnownTypes(t *testing.T) {
 	}
 
 	types := s.KnownTypes(schema.GroupVersion{Version: "v1"})
+	fmt.Printf("types:%v\n", types)
 	for _, s := range []string{"TestType1", "TestType2", "TestType3", "ExternalInternalSame"} {
 		if _, ok := types[s]; !ok {
 			t.Errorf("missing type %q", s)
