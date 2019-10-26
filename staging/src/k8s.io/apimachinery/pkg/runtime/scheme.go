@@ -177,6 +177,7 @@ func (s *Scheme) AddKnownTypes(gv schema.GroupVersion, types ...Object) {
 			panic("All types must be pointers to structs.")
 		}
 		t = t.Elem()
+		fmt.Printf("========>t.Name:%v\n", t.Name())
 		s.AddKnownTypeWithName(gv.WithKind(t.Name()), obj)
 	}
 }
