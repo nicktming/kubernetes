@@ -73,6 +73,10 @@ func Packages(context *generator.Context, arguments *args.GeneratorArgs) generat
 	for _, inputDir := range arguments.InputDirs {
 		p := context.Universe.Package(inputDir)
 
+		fmt.Printf("=====inputDir:%v=====\n", inputDir)
+		fmt.Printf("Path:%v, SourcePath:%v, Name:%v, DocComments:%v, Comments:%v\n", p.Path, p.SourcePath, p.Name, p.DocComments, p.Comments)
+		fmt.Printf("Types:%v, Functions:%v, Variables:%v, Imports:%v\n", p.Types, p.Functions, p.Variables, p.Imports)
+
 		objectMeta, internal, err := objectMetaForPackage(p)
 		if err != nil {
 			klog.Fatal(err)
@@ -81,6 +85,8 @@ func Packages(context *generator.Context, arguments *args.GeneratorArgs) generat
 			// no types in this package had genclient
 			continue
 		}
+
+		fmt.Printf("objectMeta:%v, internal:%v\n", objectMeta.Name, internal)
 
 		var gv clientgentypes.GroupVersion
 		var internalGVPkg string
@@ -93,6 +99,7 @@ func Packages(context *generator.Context, arguments *args.GeneratorArgs) generat
 			gv.Group = clientgentypes.Group(p.Path[lastSlash+1:])
 			internalGVPkg = p.Path
 		} else {
+			// 根据Path来区别group verion
 			parts := strings.Split(p.Path, "/")
 			gv.Group = clientgentypes.Group(parts[len(parts)-2])
 			gv.Version = clientgentypes.Version(parts[len(parts)-1])
@@ -108,6 +115,8 @@ func Packages(context *generator.Context, arguments *args.GeneratorArgs) generat
 			gv.Group = clientgentypes.Group(strings.SplitN(override[0], ".", 2)[0])
 		}
 
+		fmt.Printf("Group:%v, verion:%v\n", gv.Group, gv.Version)
+
 		var typesToGenerate []*types.Type
 		for _, t := range p.Types {
 			tags := util.MustParseClientGenTags(append(t.SecondClosestCommentLines, t.CommentLines...))
@@ -119,10 +128,13 @@ func Packages(context *generator.Context, arguments *args.GeneratorArgs) generat
 		if len(typesToGenerate) == 0 {
 			continue
 		}
+
 		orderer := namer.Orderer{Namer: namer.NewPrivateNamer(0)}
 		typesToGenerate = orderer.OrderTypes(typesToGenerate)
 
 		packagePath := filepath.Join(arguments.OutputPackagePath, groupPackageName, strings.ToLower(gv.Version.NonEmpty()))
+
+		fmt.Printf("typesToGenerate:%v, packagePath:%v\n", typesToGenerate, packagePath)
 		packageList = append(packageList, &generator.DefaultPackage{
 			PackageName: strings.ToLower(gv.Version.NonEmpty()),
 			PackagePath: packagePath,
@@ -166,11 +178,13 @@ func objectMetaForPackage(p *types.Package) (*types.Type, bool, error) {
 	generatingForPackage := false
 	for _, t := range p.Types {
 		// filter out types which dont have genclient.
+		// 如果该Type上面没有genclient注释 直接跳过
 		if !util.MustParseClientGenTags(append(t.SecondClosestCommentLines, t.CommentLines...)).GenerateClient {
 			continue
 		}
 		generatingForPackage = true
 		for _, member := range t.Members {
+			// 返回拥有ObjectMeta属性的Type 在例子是Database
 			if member.Name == "ObjectMeta" {
 				return member.Type, isInternal(member), nil
 			}
@@ -182,6 +196,7 @@ func objectMetaForPackage(p *types.Package) (*types.Type, bool, error) {
 	return nil, false, nil
 }
 
+// tag中不拥有json 表明是internal
 // isInternal returns true if the tags for a member do not contain a json tag
 func isInternal(m types.Member) bool {
 	return !strings.Contains(m.Tags, "json")
