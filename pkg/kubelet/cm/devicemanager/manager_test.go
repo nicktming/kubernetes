@@ -87,7 +87,8 @@ func TestNewManagerImplStartProbeMode(t *testing.T) {
 func TestDevicePluginReRegistration(t *testing.T) {
 	socketDir, socketName, pluginSocketName, err := tmpSocketDir()
 	require.NoError(t, err)
-	defer os.RemoveAll(socketDir)
+	fmt.Printf("===>socketDir:%v\n", socketDir)
+	//defer os.RemoveAll(socketDir)
 	devs := []*pluginapi.Device{
 		{ID: "Dev1", Health: pluginapi.Healthy},
 		{ID: "Dev2", Health: pluginapi.Healthy},
