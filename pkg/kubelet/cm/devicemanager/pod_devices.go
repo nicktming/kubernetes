@@ -37,6 +37,7 @@ type resourceAllocateInfo map[string]deviceAllocateInfo // Keyed by resourceName
 type containerDevices map[string]resourceAllocateInfo   // Keyed by containerName.
 type podDevices map[string]containerDevices             // Keyed by podUID.
 
+// 返回所有的pods
 func (pdev podDevices) pods() sets.String {
 	ret := sets.NewString()
 	for k := range pdev {
@@ -45,6 +46,7 @@ func (pdev podDevices) pods() sets.String {
 	return ret
 }
 
+// 存入 重复的的会覆盖
 func (pdev podDevices) insert(podUID, contName, resource string, devices sets.String, resp *pluginapi.ContainerAllocateResponse) {
 	if _, podExists := pdev[podUID]; !podExists {
 		pdev[podUID] = make(containerDevices)
@@ -58,6 +60,7 @@ func (pdev podDevices) insert(podUID, contName, resource string, devices sets.St
 	}
 }
 
+// 删除
 func (pdev podDevices) delete(pods []string) {
 	for _, uid := range pods {
 		delete(pdev, uid)
@@ -66,6 +69,7 @@ func (pdev podDevices) delete(pods []string) {
 
 // Returns list of device Ids allocated to the given container for the given resource.
 // Returns nil if we don't have cached state for the given <podUID, contName, resource>.
+// 返回podUID-containerName-resoureName使用的设备
 func (pdev podDevices) containerDevices(podUID, contName, resource string) sets.String {
 	if _, podExists := pdev[podUID]; !podExists {
 		return nil
@@ -111,6 +115,7 @@ func (pdev podDevices) removeContainerAllocatedResources(podUID, contName string
 }
 
 // Returns all of devices allocated to the pods being tracked, keyed by resourceName.
+//返回所有使用的设备 根据resourceName来区分(不区分pod,container)
 func (pdev podDevices) devices() map[string]sets.String {
 	ret := make(map[string]sets.String)
 	for _, containerDevices := range pdev {
@@ -129,6 +134,7 @@ func (pdev podDevices) devices() map[string]sets.String {
 }
 
 // Turns podDevices to checkpointData.
+// 将podDevices 转变成PodDevicesEntry
 func (pdev podDevices) toCheckpointData() []checkpoint.PodDevicesEntry {
 	var data []checkpoint.PodDevicesEntry
 	for podUID, containerDevices := range pdev {
@@ -139,7 +145,7 @@ func (pdev podDevices) toCheckpointData() []checkpoint.PodDevicesEntry {
 					klog.Errorf("Can't marshal allocResp for %v %v %v: allocation response is missing", podUID, conName, resource)
 					continue
 				}
-
+				// 将allocResp marshal
 				allocResp, err := devices.allocResp.Marshal()
 				if err != nil {
 					klog.Errorf("Can't marshal allocResp for %v %v %v: %v", podUID, conName, resource, err)
@@ -172,11 +178,16 @@ func (pdev podDevices) fromCheckpointData(data []checkpoint.PodDevicesEntry) {
 			klog.Errorf("Can't unmarshal allocResp for %v %v %v: %v", entry.PodUID, entry.ContainerName, entry.ResourceName, err)
 			continue
 		}
+		// 相当于每个数据再重新插入一次
 		pdev.insert(entry.PodUID, entry.ContainerName, entry.ResourceName, devIDs, allocResp)
 	}
 }
 
 // Returns combined container runtime settings to consume the container's allocated devices.
+// 将某个pod中的某个容器的所有资源信息组合到一起
+// 因为某个pod中的某个容器很可能使用了很多资源, 每个资源的allocResp中包含了env, mount等等信息
+// 该方法就是将这个容器的每个资源的 env全部放一起 mount全部放一起 Annotations全部放一起等等
+// 组成一个新的结构DeviceRunContainerOptions
 func (pdev podDevices) deviceRunContainerOptions(podUID, contName string) *DeviceRunContainerOptions {
 	containers, exists := pdev[podUID]
 	if !exists {
@@ -274,6 +285,7 @@ func (pdev podDevices) deviceRunContainerOptions(podUID, contName string) *Devic
 }
 
 // getContainerDevices returns the devices assigned to the provided container for all ResourceNames
+// 获得
 func (pdev podDevices) getContainerDevices(podUID, contName string) []*podresourcesapi.ContainerDevices {
 	if _, podExists := pdev[podUID]; !podExists {
 		return nil
