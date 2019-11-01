@@ -32,7 +32,6 @@ import (
 type Manager interface {
 	// Start starts device plugin registration service.
 	Start(activePods ActivePodsFunc, sourcesReady config.SourcesReady) error
-
 	// Allocate configures and assigns devices to pods. The pods are provided
 	// through the pod admission attributes in the attrs argument. From the
 	// requested device resources, Allocate will communicate with the owning
@@ -42,20 +41,16 @@ type Manager interface {
 	// for the device manager to update the node capacity to reflect the
 	// currently available devices.
 	Allocate(node *schedulercache.NodeInfo, attrs *lifecycle.PodAdmitAttributes) error
-
 	// Stop stops the manager.
 	Stop() error
-
 	// GetDeviceRunContainerOptions checks whether we have cached containerDevices
 	// for the passed-in <pod, container> and returns its DeviceRunContainerOptions
 	// for the found one. An empty struct is returned in case no cached state is found.
 	GetDeviceRunContainerOptions(pod *v1.Pod, container *v1.Container) (*DeviceRunContainerOptions, error)
-
 	// GetCapacity returns the amount of available device plugin resource capacity, resource allocatable
 	// and inactive device plugin resources previously registered on the node.
 	GetCapacity() (v1.ResourceList, v1.ResourceList, []string)
 	GetWatcherHandler() watcher.PluginHandler
-
 	// GetDevices returns information about the devices assigned to pods and containers
 	GetDevices(podUID, containerName string) []*podresourcesapi.ContainerDevices
 }

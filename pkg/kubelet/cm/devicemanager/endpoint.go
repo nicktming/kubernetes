@@ -43,20 +43,25 @@ type endpoint interface {
 }
 
 type endpointImpl struct {
+	// 访问device plugin的客户端
 	client     pluginapi.DevicePluginClient
 	clientConn *grpc.ClientConn
-
+	// device-plugin的地址
 	socketPath   string
+	// device-plugin的资源名
 	resourceName string
+	// 停止的时间
 	stopTime     time.Time
 
 	mutex sync.Mutex
+	// 回调函数
 	cb    monitorCallback
 }
 
 // newEndpoint creates a new endpoint for the given resourceName.
 // This is to be used during normal device plugin registration.
 func newEndpointImpl(socketPath, resourceName string, callback monitorCallback) (*endpointImpl, error) {
+	// 生成一个客户端 可以访问地址为socketPat(/var/lib/kubelet/device-plugins/nvidia.sock)h的device plugin
 	client, c, err := dial(socketPath)
 	if err != nil {
 		klog.Errorf("Can't create new endpoint with path %s err %v", socketPath, err)
@@ -93,6 +98,7 @@ func (e *endpointImpl) callback(resourceName string, devices []pluginapi.Device)
 // It then issues a callback to pass this information to the device manager which
 // will adjust the resource available information accordingly.
 func (e *endpointImpl) run() {
+	// 调用device plugin的ListAndWatch
 	stream, err := e.client.ListAndWatch(context.Background(), &pluginapi.Empty{})
 	if err != nil {
 		klog.Errorf(errListAndWatch, e.resourceName, err)
@@ -101,6 +107,7 @@ func (e *endpointImpl) run() {
 	}
 
 	for {
+		// 有变化的时候就会接受到信息
 		response, err := stream.Recv()
 		if err != nil {
 			klog.Errorf(errListAndWatch, e.resourceName, err)
@@ -114,7 +121,7 @@ func (e *endpointImpl) run() {
 		for _, d := range devs {
 			newDevs = append(newDevs, *d)
 		}
-
+		// 然后调用endpoint的回调函数
 		e.callback(e.resourceName, newDevs)
 	}
 }
