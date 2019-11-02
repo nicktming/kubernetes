@@ -496,6 +496,7 @@ func (m *ManagerImpl) GetCapacity() (v1.ResourceList, v1.ResourceList, []string)
 			if !ok {
 				klog.Errorf("unexpected: healthyDevices and endpoints are out of sync")
 			}
+			// 删除device manager中关于ResourceName的所有关系
 			delete(m.endpoints, resourceName)
 			delete(m.healthyDevices, resourceName)
 			deletedResources.Insert(resourceName)
@@ -524,6 +525,7 @@ func (m *ManagerImpl) GetCapacity() (v1.ResourceList, v1.ResourceList, []string)
 	}
 	m.mutex.Unlock()
 	if needsUpdateCheckpoint {
+		// 如果某个resourceName不存在endpoint 或者endpoint有stop时间
 		m.writeCheckpoint()
 	}
 	return capacity, allocatable, deletedResources.UnsortedList()
@@ -533,9 +535,11 @@ func (m *ManagerImpl) GetCapacity() (v1.ResourceList, v1.ResourceList, []string)
 func (m *ManagerImpl) writeCheckpoint() error {
 	m.mutex.Lock()
 	registeredDevs := make(map[string][]string)
+	// 只将healthy的devices持久化
 	for resource, devices := range m.healthyDevices {
 		registeredDevs[resource] = devices.UnsortedList()
 	}
+	// 将podDevices的内容持久化
 	data := checkpoint.New(m.podDevices.toCheckpointData(),
 		registeredDevs)
 	m.mutex.Unlock()
@@ -563,6 +567,7 @@ func (m *ManagerImpl) readCheckpoint() error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	podDevices, registeredDevs := cp.GetData()
+	// 只恢复了podDevices中的内容 并没有恢复healthyDevices里面的内容
 	m.podDevices.fromCheckpointData(podDevices)
 	m.allocatedDevices = m.podDevices.devices()
 	for resource := range registeredDevs {
