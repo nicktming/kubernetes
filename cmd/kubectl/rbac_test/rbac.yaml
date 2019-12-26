@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rbac-test
+spec:
+  containers:
+  - name: rbactest
+    image: k8s/rbac-test:v0.1
+

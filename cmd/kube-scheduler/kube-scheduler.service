@@ -1,0 +1,11 @@
+[Unit]
+Description=kubenetes api Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/root/go/src/k8s.io/kubernetes/cmd/kube-scheduler/scheduler.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
