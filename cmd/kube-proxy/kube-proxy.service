@@ -1,10 +1,10 @@
 [Unit]
-Description=kubenetes api Server
+Description=kubenetes proxy Server
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/root/go/src/k8s.io/kubernetes/cmd/kubelet/kubelet.sh
+ExecStart=/root/go/src/k8s.io/kubernetes/cmd/kube-proxy/kube-proxy.sh
 Restart=on-failure
 
 [Install]
