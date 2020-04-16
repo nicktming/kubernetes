@@ -12,6 +12,8 @@ etcdctl get /coreos.com/network/config
 
 /usr/local/bin/flanneld --etcd-endpoints="http://172.21.0.16:2379" --ip-masq=true
 
+coredns
+https://blog.csdn.net/weixin_36888575/article/details/98640873
 
 cni
 git clone https://github.com/containernetworking/cni.git

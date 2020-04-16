@@ -10,3 +10,17 @@ spec:
     image: nginx:now
     ports:
     - containerPort: 80
+
+---
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: my-service
+spec:
+  selector:
+    env: prod
+  ports:
+  - protocol: TCP
+    targetPort: 80
+
