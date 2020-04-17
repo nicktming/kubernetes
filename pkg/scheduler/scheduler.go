@@ -636,8 +636,8 @@ func (sched *Scheduler) scheduleOne() {
 	//
 	// This function modifies 'assumedPod' if volume binding is required.
 
-	spanBind, _ := opentracing.StartSpanFromContext(ctx, "bind")
-	spanBind.SetTag("podId", pod.UID)
+	spanAssume, _ := opentracing.StartSpanFromContext(ctx, "assume")
+	spanAssume.SetTag("podId", pod.UID)
 
 
 	allBound, err := sched.assumeVolumes(assumedPod, suggestedHost)
@@ -647,6 +647,7 @@ func (sched *Scheduler) scheduleOne() {
 		return
 	}
 
+
 	// assume modifies `assumedPod` by setting NodeName=suggestedHost
 	// assume该pod
 	err = sched.assume(assumedPod, suggestedHost)
@@ -655,6 +656,11 @@ func (sched *Scheduler) scheduleOne() {
 		metrics.PodScheduleErrors.Inc()
 		return
 	}
+	spanAssume.Finish()
+
+	spanBind, _ := opentracing.StartSpanFromContext(ctx, "bind")
+	spanBind.SetTag("podId", pod.UID)
+
 	// bind the pod to its host asynchronously (we can do this b/c of the assumption step above).
 	// 异步bind操作
 	go func() {
@@ -681,8 +687,8 @@ func (sched *Scheduler) scheduleOne() {
 			metrics.PodScheduleErrors.Inc()
 		} else {
 			metrics.PodScheduleSuccesses.Inc()
-			spanBind.Finish()
-			spanTotal.Finish()
 		}
 	}()
+	spanBind.Finish()
+	spanTotal.Finish()
 }
