@@ -18,6 +18,8 @@ package scheduler
 
 import (
 	"fmt"
+	"github.com/opentracing/opentracing-go"
+	"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
 	"io/ioutil"
 	"os"
 	"time"
@@ -46,12 +48,24 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/util"
 
 	"k8s.io/klog"
+
+	"context"
 )
 
 const (
 	// BindTimeoutSeconds defines the default bind timeout
 	BindTimeoutSeconds = 100
 )
+
+//var (
+//	tracer opentracing.Tracer
+//)
+//
+//func init() {
+//	tracer, closer := tracing.Init("k8s")
+//	defer closer.Close()
+//	opentracing.SetGlobalTracer(tracer)
+//}
 
 // Scheduler watches for new unscheduled pods. It attempts to find
 // nodes that they fit on and writes bindings back to the api server.
@@ -217,6 +231,9 @@ func New(client clientset.Interface,
 	config.StopEverything = stopCh
 	// Create the scheduler.
 	sched := NewFromConfig(config)
+
+
+
 	return sched, nil
 }
 
@@ -547,6 +564,15 @@ func (sched *Scheduler) bind(assumed *v1.Pod, b *v1.Binding) error {
 // scheduleOne does the entire scheduling workflow for a single pod.  It is serialized on the scheduling algorithm's host fitting.
 func (sched *Scheduler) scheduleOne() {
 	pod := sched.config.NextPod()
+
+	tracer, closer := tracing.Init("k8s")
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+
+	spanTotal := tracer.StartSpan("kube-scheduler")
+	spanTotal.SetTag("podId", pod.UID)
+	ctx := opentracing.ContextWithSpan(context.Background(), spanTotal)
+
 	// pod could be nil when schedulerQueue is closed
 	// 代表schedulerQueue已经关闭了 所以pod为nil
 	// 如果schedulerQueue现在没有pod 那么NextPod会一直block在这里
@@ -568,7 +594,13 @@ func (sched *Scheduler) scheduleOne() {
 	// 调度该pod
 	// 如果成功 会返回一个节点名称 err为nil
 	// 如果失败 会返回错误err
+
+	spanScheduler, _ := opentracing.StartSpanFromContext(ctx, "scheduler")
+	spanScheduler.SetTag("podId", pod.UID)
+
 	suggestedHost, err := sched.schedule(pod)
+
+	spanScheduler.Finish()
 	if err != nil {
 		// schedule() may have failed because the pod would not fit on any host, so we try to
 		// preempt, with the expectation that the next time the pod is tried for scheduling it
@@ -603,6 +635,11 @@ func (sched *Scheduler) scheduleOne() {
 	// Otherwise, binding of volumes is started after the pod is assumed, but before pod binding.
 	//
 	// This function modifies 'assumedPod' if volume binding is required.
+
+	spanBind, _ := opentracing.StartSpanFromContext(ctx, "bind")
+	spanBind.SetTag("podId", pod.UID)
+
+
 	allBound, err := sched.assumeVolumes(assumedPod, suggestedHost)
 	if err != nil {
 		klog.Errorf("error assuming volumes: %v", err)
@@ -644,6 +681,8 @@ func (sched *Scheduler) scheduleOne() {
 			metrics.PodScheduleErrors.Inc()
 		} else {
 			metrics.PodScheduleSuccesses.Inc()
+			spanBind.Finish()
+			spanTotal.Finish()
 		}
 	}()
 }

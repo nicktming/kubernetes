@@ -16,7 +16,10 @@ coredns
 https://blog.csdn.net/weixin_36888575/article/details/98640873
 
 cni
-git clone https://github.com/containernetworking/cni.git
+git clone https://github.com/containernetworking/plugins.git
+
+cd plugins && ./build_linux.sh
+#git clone https://github.com/containernetworking/cni.git
 
 mkdir -p /opt/cni/bin
 cp -r bin/* /opt/cni/bin
