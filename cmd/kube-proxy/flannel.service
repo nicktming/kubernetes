@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/flanneld --etcd-endpoints="http://172.31.71.181:2379" --ip-masq=true
+ExecStart=/usr/local/bin/flanneld --ip-masq=true
 Restart=on-failure
 
 [Install]
