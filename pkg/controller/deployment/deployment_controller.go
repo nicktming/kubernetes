@@ -376,6 +376,7 @@ func (dc *DeploymentController) deletePod(obj interface{}) {
 
 func (dc *DeploymentController) enqueue(deployment *apps.Deployment) {
 	key, err := controller.KeyFunc(deployment)
+	fmt.Printf("-------------->enqueue deployment key:%v\n", key)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("Couldn't get key for object %#v: %v", deployment, err))
 		return
