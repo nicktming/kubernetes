@@ -718,6 +718,8 @@ func (s *ServiceController) syncService(key string) error {
 		klog.V(4).Infof("Finished syncing service %q (%v)", key, time.Since(startTime))
 	}()
 
+	klog.Infof("-------------->syncService service key:%v", key)
+
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		return err
