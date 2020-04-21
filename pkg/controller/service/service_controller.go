@@ -19,6 +19,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"github.com/opentracing/opentracing-go"
+	"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
 	"sync"
 	"time"
 
@@ -723,6 +725,16 @@ func (s *ServiceController) syncService(key string) error {
 
 	// service holds the latest service info from apiserver
 	service, err := s.serviceLister.Services(namespace).Get(name)
+
+	tracer, closer := tracing.Init("k8s")
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+
+	spanSyncService := tracer.StartSpan("kube-service-controller-syncService")
+	spanSyncService.SetTag("service", key)
+	kcCtx := opentracing.ContextWithSpan(context.Background(), spanSyncService)
+
+
 	switch {
 	case errors.IsNotFound(err):
 		// service absence in store means watcher caught the deletion, ensure LB info is cleaned
@@ -732,9 +744,13 @@ func (s *ServiceController) syncService(key string) error {
 		klog.Infof("Unable to retrieve service %v from store: %v", key, err)
 	default:
 		cachedService = s.cache.getOrCreate(key)
-		err = s.processServiceUpdate(cachedService, service, key)
-	}
 
+		spanCri, _ := opentracing.StartSpanFromContext(kcCtx, "call cri")
+		spanCri.SetTag("service", key)
+		err = s.processServiceUpdate(cachedService, service, key)
+		spanCri.Finish()
+	}
+	spanSyncService.Finish()
 	return err
 }
 
