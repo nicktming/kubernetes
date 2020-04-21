@@ -21,7 +21,10 @@ limitations under the License.
 package deployment
 
 import (
+	"context"
 	"fmt"
+	"github.com/opentracing/opentracing-go"
+	"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
 	"reflect"
 	"time"
 
@@ -376,7 +379,7 @@ func (dc *DeploymentController) deletePod(obj interface{}) {
 
 func (dc *DeploymentController) enqueue(deployment *apps.Deployment) {
 	key, err := controller.KeyFunc(deployment)
-	fmt.Printf("-------------->enqueue deployment key:%v\n", key)
+	//fmt.Printf("-------------->enqueue deployment key:%v\n", key)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("Couldn't get key for object %#v: %v", deployment, err))
 		return
@@ -469,9 +472,26 @@ func (dc *DeploymentController) processNextWorkItem() bool {
 	}
 	defer dc.queue.Done(key)
 
-	err := dc.syncHandler(key.(string))
-	dc.handleErr(err, key)
+	tracer, closer := tracing.Init("k8s")
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
 
+	spanSyncDeployment := tracer.StartSpan("kube-controller-deployment")
+	spanSyncDeployment.SetTag("deployment", key)
+	kcCtx := opentracing.ContextWithSpan(context.Background(), spanSyncDeployment)
+
+	spanSD, _ := opentracing.StartSpanFromContext(kcCtx, "syncHandler")
+	spanSD.SetTag("deployment", key)
+
+	err := dc.syncHandler(key.(string))
+	spanSD.Finish()
+
+	spanErr, _ := opentracing.StartSpanFromContext(kcCtx, "handlerErr")
+	spanErr.SetTag("deployment", key)
+	dc.handleErr(err, key)
+	spanErr.Finish()
+
+	spanSyncDeployment.Finish()
 	return true
 }
 
@@ -560,7 +580,7 @@ func (dc *DeploymentController) getPodMapForDeployment(d *apps.Deployment, rsLis
 // This function is not meant to be invoked concurrently with the same key.
 func (dc *DeploymentController) syncDeployment(key string) error {
 
-	fmt.Printf("-------------->sync deployment key:%v\n", key)
+	//fmt.Printf("-------------->sync deployment key:%v\n", key)
 
 	startTime := time.Now()
 	klog.V(4).Infof("Started syncing deployment %q (%v)", key, startTime)
