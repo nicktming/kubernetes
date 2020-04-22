@@ -1491,6 +1491,9 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 // the most accurate information possible about an error situation to aid debugging.
 // Callers should not throw an event if this operation returns an error.
 func (kl *Kubelet) syncPod(o syncPodOptions) error {
+
+	test_start := time.Now()
+
 	// pull out the required options
 	pod := o.pod
 	mirrorPod := o.mirrorPod
@@ -1735,6 +1738,12 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 		return nil
 	}
 	spanSyncPod.Finish()
+
+	test_end := time.Now()
+
+	test_used := test_end.Sub(test_start)
+
+	fmt.Printf("==========>Sync Pod (%v) time used: %v", pod.UID, test_used)
 
 	return nil
 }

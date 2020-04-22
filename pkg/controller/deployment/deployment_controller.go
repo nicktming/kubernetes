@@ -482,7 +482,6 @@ func (dc *DeploymentController) processNextWorkItem() bool {
 
 	spanSD, _ := opentracing.StartSpanFromContext(kcCtx, "syncHandler")
 	spanSD.SetTag("deployment", key)
-
 	err := dc.syncHandler(key.(string))
 	spanSD.Finish()
 
