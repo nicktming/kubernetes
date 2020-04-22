@@ -1743,7 +1743,7 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
 	test_used := test_end.Sub(test_start)
 
-	fmt.Printf("==========>Sync Pod (%v) time used: %v", pod.UID, test_used)
+	fmt.Printf("===============>Sync Pod (%v) time used: %v", pod.UID, test_used)
 
 	return nil
 }
