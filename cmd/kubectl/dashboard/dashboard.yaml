@@ -39,11 +39,14 @@ metadata:
 spec:
   type: NodePort
   ports:
-#    - port: 443
-#      targetPort: 8443
+    - port: 443
+      targetPort: 8443
+      nodePort: 29998
+      name: https
     - port: 9090
       targetPort: 9090
       nodePort: 29999
+      name: http
   selector:
     k8s-app: kubernetes-dashboard
 
