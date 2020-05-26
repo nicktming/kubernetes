@@ -35,6 +35,7 @@ const (
 	NodeNameKey                          = "node_name"
 	NodeLabelKey                         = "node"
 	PodWorkerDurationKey                 = "pod_worker_duration_seconds"
+	PodStartDurationCounterKey           = "pod_start_duration_counter_seconds"
 	PodStartDurationKey                  = "pod_start_duration_seconds"
 	CgroupManagerOperationsKey           = "cgroup_manager_duration_seconds"
 	PodWorkerStartDurationKey            = "pod_worker_start_duration_seconds"
@@ -110,12 +111,19 @@ var (
 		},
 		[]string{"operation_type"},
 	)
-	PodStartDuration = prometheus.NewHistogramVec(
+	PodStartDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Subsystem: KubeletSubsystem,
 			Name:      PodStartDurationKey,
 			Help:      "Duration in seconds for a single pod to go from pending to running.",
 			Buckets:   prometheus.DefBuckets,
+		},
+	)
+	PodStartCounterDuration = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: KubeletSubsystem,
+			Name:      PodStartDurationCounterKey,
+			Help:      "Duration in seconds for a single pod to go from pending to running.",
 		},
 		[]string{"pod_id"},
 	)
@@ -370,6 +378,7 @@ func Register(containerCache kubecontainer.RuntimeCache, collectors ...prometheu
 		prometheus.MustRegister(PodStartDuration)
 		prometheus.MustRegister(CgroupManagerDuration)
 		prometheus.MustRegister(PodWorkerStartDuration)
+		prometheus.MustRegister(PodStartCounterDuration)
 		prometheus.MustRegister(ContainersPerPodCount)
 		prometheus.MustRegister(newPodAndContainerCollector(containerCache))
 		prometheus.MustRegister(PLEGRelistDuration)
