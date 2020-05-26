@@ -119,8 +119,8 @@ var (
 			Buckets:   prometheus.DefBuckets,
 		},
 	)
-	PodStartCounterDuration = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
+	PodStartCounterDuration = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Subsystem: KubeletSubsystem,
 			Name:      PodStartDurationCounterKey,
 			Help:      "Duration in seconds for a single pod to go from pending to running.",
