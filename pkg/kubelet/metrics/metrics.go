@@ -110,13 +110,14 @@ var (
 		},
 		[]string{"operation_type"},
 	)
-	PodStartDuration = prometheus.NewHistogram(
+	PodStartDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: KubeletSubsystem,
 			Name:      PodStartDurationKey,
 			Help:      "Duration in seconds for a single pod to go from pending to running.",
 			Buckets:   prometheus.DefBuckets,
 		},
+		[]string{"pod_id"},
 	)
 	CgroupManagerDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
