@@ -125,7 +125,7 @@ var (
 			Name:      PodStartDurationCounterKey,
 			Help:      "Duration in seconds for a single pod to go from pending to running.",
 		},
-		[]string{"pod_id"},
+		[]string{"pod_name"},
 	)
 	CgroupManagerDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{

@@ -1529,7 +1529,7 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	if !ok || existingStatus.Phase == v1.PodPending && apiPodStatus.Phase == v1.PodRunning &&
 		!firstSeenTime.IsZero() {
 		metrics.PodStartDuration.Observe(metrics.SinceInSeconds(firstSeenTime))
-		metrics.PodStartCounterDuration.WithLabelValues(string(pod.UID)).Set(metrics.SinceInSeconds(firstSeenTime))
+		metrics.PodStartCounterDuration.WithLabelValues(pod.Name).Set(metrics.SinceInSeconds(firstSeenTime))
 		metrics.DeprecatedPodStartLatency.Observe(metrics.SinceInMicroseconds(firstSeenTime))
 	}
 
