@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog"
 	clientset "k8s.io/client-go/kubernetes"
-	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
+	kubetypes "k8s.io/kubernetes/pkg/kubelet-tming/types"
 	nodeutil "k8s.io/kubernetes/pkg/util/node"
 	cloudprovider "k8s.io/cloud-provider"
 )
@@ -121,6 +121,6 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		}
 	}
 
-	return &Kubelet{}, nil 
+	return &Kubelet{}, nil
 
 }

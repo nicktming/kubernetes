@@ -25,7 +25,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"net/url"
+	//"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -72,12 +72,12 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/certificate/bootstrap"
 	"k8s.io/kubernetes/pkg/kubelet/cm"
 	"k8s.io/kubernetes/pkg/kubelet-tming/config"
-	"k8s.io/kubernetes/pkg/kubelet/dockershim"
-	dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
+	//"k8s.io/kubernetes/pkg/kubelet/dockershim"
+	//dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
 	dynamickubeletconfig "k8s.io/kubernetes/pkg/kubelet/kubeletconfig"
 	"k8s.io/kubernetes/pkg/kubelet/kubeletconfig/configfiles"
 	"k8s.io/kubernetes/pkg/kubelet/server"
-	"k8s.io/kubernetes/pkg/kubelet/server/streaming"
+	//"k8s.io/kubernetes/pkg/kubelet/server/streaming"
 	"k8s.io/kubernetes/pkg/kubelet/stats/pidlimit"
 	"k8s.io/kubernetes/pkg/util/configz"
 	utilfs "k8s.io/kubernetes/pkg/util/filesystem"
@@ -172,9 +172,9 @@ HTTP server: The kubelet can also listen for HTTP and respond to a simple API
 				klog.Fatal(err)
 			}
 
-			if kubeletFlags.ContainerRuntime == "remote" && cleanFlagSet.Changed("pod-infra-container-image") {
-				klog.Warning("Warning: For remote container runtime, --pod-infra-container-image is ignored in kubelet, which should be set in that remote runtime instead")
-			}
+			//if kubeletFlags.ContainerRuntime == "remote" && cleanFlagSet.Changed("pod-infra-container-image") {
+			//	klog.Warning("Warning: For remote container runtime, --pod-infra-container-image is ignored in kubelet, which should be set in that remote runtime instead")
+			//}
 
 			// load kubelet config file, if provided
 			if configFile := kubeletFlags.KubeletConfigFile; len(configFile) > 0 {
@@ -245,12 +245,12 @@ HTTP server: The kubelet can also listen for HTTP and respond to a simple API
 			stopCh := genericapiserver.SetupSignalHandler()
 
 			// start the experimental docker shim, if enabled
-			if kubeletServer.KubeletFlags.ExperimentalDockershim {
-				if err := RunDockershim(&kubeletServer.KubeletFlags, kubeletConfig, stopCh); err != nil {
-					klog.Fatal(err)
-				}
-				return
-			}
+			//if kubeletServer.KubeletFlags.ExperimentalDockershim {
+			//	if err := RunDockershim(&kubeletServer.KubeletFlags, kubeletConfig, stopCh); err != nil {
+			//		klog.Fatal(err)
+			//	}
+			//	return
+			//}
 
 			// run the kubelet
 			klog.V(5).Infof("KubeletConfiguration: %#v", kubeletServer.KubeletConfiguration)
@@ -617,18 +617,18 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 		cgroupRoots = append(cgroupRoots, kubeletCgroup)
 	}
 
-	runtimeCgroup, err := cm.GetRuntimeContainer(s.ContainerRuntime, s.RuntimeCgroups)
-	if err != nil {
-		klog.Warningf("failed to get the container runtime's cgroup: %v. Runtime system container metrics may be missing.", err)
-	} else if runtimeCgroup != "" {
-		// RuntimeCgroups is optional, so ignore if it isn't specified
-		cgroupRoots = append(cgroupRoots, runtimeCgroup)
-	}
-
-	if s.SystemCgroups != "" {
-		// SystemCgroups is optional, so ignore if it isn't specified
-		cgroupRoots = append(cgroupRoots, s.SystemCgroups)
-	}
+	//runtimeCgroup, err := cm.GetRuntimeContainer(s.ContainerRuntime, s.RuntimeCgroups)
+	//if err != nil {
+	//	klog.Warningf("failed to get the container runtime's cgroup: %v. Runtime system container metrics may be missing.", err)
+	//} else if runtimeCgroup != "" {
+	//	// RuntimeCgroups is optional, so ignore if it isn't specified
+	//	cgroupRoots = append(cgroupRoots, runtimeCgroup)
+	//}
+	//
+	//if s.SystemCgroups != "" {
+	//	// SystemCgroups is optional, so ignore if it isn't specified
+	//	cgroupRoots = append(cgroupRoots, s.SystemCgroups)
+	//}
 
 	//if kubeDeps.CAdvisorInterface == nil {
 	//	imageFsInfoProvider := cadvisor.NewImageFsInfoProvider(s.ContainerRuntime, s.RemoteRuntimeEndpoint)
@@ -1016,8 +1016,10 @@ func RunKubelet(kubeServer *options.KubeletServer, kubeDeps *kubelet.Dependencie
 	k, err := createAndInitKubelet(&kubeServer.KubeletConfiguration,
 		kubeDeps,
 		&kubeServer.ContainerRuntimeOptions,
-		kubeServer.ContainerRuntime,
-		kubeServer.RuntimeCgroups,
+		//kubeServer.ContainerRuntime,
+		//kubeServer.RuntimeCgroups,
+		nil,
+		nil,
 		kubeServer.HostnameOverride,
 		kubeServer.NodeIP,
 		kubeServer.ProviderID,
@@ -1218,47 +1220,47 @@ func BootstrapKubeletConfigController(dynamicConfigDir string, transform dynamic
 
 // RunDockershim only starts the dockershim in current process. This is only used for cri validate testing purpose
 // TODO(random-liu): Move this to a separate binary.
-func RunDockershim(f *options.KubeletFlags, c *kubeletconfiginternal.KubeletConfiguration, stopCh <-chan struct{}) error {
-	r := &f.ContainerRuntimeOptions
-
-	// Initialize docker client configuration.
-	dockerClientConfig := &dockershim.ClientConfig{
-		DockerEndpoint:            r.DockerEndpoint,
-		RuntimeRequestTimeout:     c.RuntimeRequestTimeout.Duration,
-		ImagePullProgressDeadline: r.ImagePullProgressDeadline.Duration,
-	}
-
-	// Initialize network plugin settings.
-	pluginSettings := dockershim.NetworkPluginSettings{
-		HairpinMode:        kubeletconfiginternal.HairpinMode(c.HairpinMode),
-		NonMasqueradeCIDR:  f.NonMasqueradeCIDR,
-		PluginName:         r.NetworkPluginName,
-		PluginConfDir:      r.CNIConfDir,
-		PluginBinDirString: r.CNIBinDir,
-		MTU:                int(r.NetworkPluginMTU),
-	}
-
-	// Initialize streaming configuration. (Not using TLS now)
-	streamingConfig := &streaming.Config{
-		// Use a relative redirect (no scheme or host).
-		BaseURL:                         &url.URL{Path: "/cri/"},
-		StreamIdleTimeout:               c.StreamingConnectionIdleTimeout.Duration,
-		StreamCreationTimeout:           streaming.DefaultConfig.StreamCreationTimeout,
-		SupportedRemoteCommandProtocols: streaming.DefaultConfig.SupportedRemoteCommandProtocols,
-		SupportedPortForwardProtocols:   streaming.DefaultConfig.SupportedPortForwardProtocols,
-	}
-
-	// Standalone dockershim will always start the local streaming server.
-	ds, err := dockershim.NewDockerService(dockerClientConfig, r.PodSandboxImage, streamingConfig, &pluginSettings,
-		f.RuntimeCgroups, c.CgroupDriver, r.DockershimRootDirectory, true /*startLocalStreamingServer*/)
-	if err != nil {
-		return err
-	}
-	klog.V(2).Infof("Starting the GRPC server for the docker CRI shim.")
-	server := dockerremote.NewDockerServer(f.RemoteRuntimeEndpoint, ds)
-	if err := server.Start(); err != nil {
-		return err
-	}
-	<-stopCh
-	return nil
-}
+//func RunDockershim(f *options.KubeletFlags, c *kubeletconfiginternal.KubeletConfiguration, stopCh <-chan struct{}) error {
+//	r := &f.ContainerRuntimeOptions
+//
+//	// Initialize docker client configuration.
+//	dockerClientConfig := &dockershim.ClientConfig{
+//		DockerEndpoint:            r.DockerEndpoint,
+//		RuntimeRequestTimeout:     c.RuntimeRequestTimeout.Duration,
+//		ImagePullProgressDeadline: r.ImagePullProgressDeadline.Duration,
+//	}
+//
+//	// Initialize network plugin settings.
+//	pluginSettings := dockershim.NetworkPluginSettings{
+//		HairpinMode:        kubeletconfiginternal.HairpinMode(c.HairpinMode),
+//		NonMasqueradeCIDR:  f.NonMasqueradeCIDR,
+//		PluginName:         r.NetworkPluginName,
+//		PluginConfDir:      r.CNIConfDir,
+//		PluginBinDirString: r.CNIBinDir,
+//		MTU:                int(r.NetworkPluginMTU),
+//	}
+//
+//	// Initialize streaming configuration. (Not using TLS now)
+//	streamingConfig := &streaming.Config{
+//		// Use a relative redirect (no scheme or host).
+//		BaseURL:                         &url.URL{Path: "/cri/"},
+//		StreamIdleTimeout:               c.StreamingConnectionIdleTimeout.Duration,
+//		StreamCreationTimeout:           streaming.DefaultConfig.StreamCreationTimeout,
+//		SupportedRemoteCommandProtocols: streaming.DefaultConfig.SupportedRemoteCommandProtocols,
+//		SupportedPortForwardProtocols:   streaming.DefaultConfig.SupportedPortForwardProtocols,
+//	}
+//
+//	// Standalone dockershim will always start the local streaming server.
+//	ds, err := dockershim.NewDockerService(dockerClientConfig, r.PodSandboxImage, streamingConfig, &pluginSettings,
+//		f.RuntimeCgroups, c.CgroupDriver, r.DockershimRootDirectory, true /*startLocalStreamingServer*/)
+//	if err != nil {
+//		return err
+//	}
+//	klog.V(2).Infof("Starting the GRPC server for the docker CRI shim.")
+//	server := dockerremote.NewDockerServer(f.RemoteRuntimeEndpoint, ds)
+//	if err := server.Start(); err != nil {
+//		return err
+//	}
+//	<-stopCh
+//	return nil
+//}
