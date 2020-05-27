@@ -124,7 +124,7 @@ func (kl *Kubelet) GetNode() (*v1.Node, error) {
 	if kl.kubeClient == nil {
 		return kl.initialNode()
 	}
-	return kl.nodeInfo
+	return kl.nodeInfo.GetNodeInfo(string(kl.nodeName))
 }
 
 
