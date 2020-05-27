@@ -52,7 +52,7 @@ func (k *Kubelet) BirthCry() {
 }
 
 func (k *Kubelet) Run(<-chan kubetypes.PodUpdate) {
-	klog.Infof("kubelet run")
+	//klog.Infof("kubelet run")
 }
 
 func makePodSourceConfig(kubeCfg *kubeletconfiginternal.KubeletConfiguration, kubeDeps *Dependencies, nodeName types.NodeName, bootstrapCheckpointPath string) (*config.PodConfig, error) {
