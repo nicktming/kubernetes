@@ -249,15 +249,16 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	nodeInfo := &predicates.CachedNodeInfo{NodeLister: corelisters.NewNodeLister(nodeIndexer)}
 
 	return &Kubelet{
-		kubeClient: kubeDeps.KubeClient,
-		nodeName:   nodeName,
-		hostname:   string(nodeName),
-		heartbeatClient: kubeDeps.HeartbeatClient,
-		clock: 		clock.RealClock{},
-		onRepeatedHeartbeatFailure: kubeDeps.OnHeartbeatFailure,
-		nodeStatusUpdateFrequency:               kubeCfg.NodeStatusUpdateFrequency.Duration,
-		nodeInfo:     nodeInfo,
-		registerNode: 		registerNode,
+		kubeClient: 					kubeDeps.KubeClient,
+		nodeName:   					nodeName,
+		hostname:   					string(nodeName),
+		heartbeatClient: 				kubeDeps.HeartbeatClient,
+		clock: 						clock.RealClock{},
+		onRepeatedHeartbeatFailure: 			kubeDeps.OnHeartbeatFailure,
+		nodeStatusUpdateFrequency:               	kubeCfg.NodeStatusUpdateFrequency.Duration,
+		nodeInfo:     					nodeInfo,
+		registerNode: 					registerNode,
+		registerSchedulable: 				registerSchedulable,
 	}, nil
 
 }
