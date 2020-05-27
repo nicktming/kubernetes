@@ -390,7 +390,7 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 		//ContainerManager:    nil,
 		//DockerClientConfig:  dockerClientConfig,
 		KubeClient:          nil,
-		//HeartbeatClient:     nil,
+		HeartbeatClient:     nil,
 		//EventClient:         nil,
 		//Mounter:             mounter,
 		//Subpather:           subpather,
@@ -558,7 +558,7 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 		if closeAllConns == nil {
 			return errors.New("closeAllConns must be a valid function other than nil")
 		}
-		//kubeDeps.OnHeartbeatFailure = closeAllConns
+		kubeDeps.OnHeartbeatFailure = closeAllConns
 
 		kubeDeps.KubeClient, err = clientset.NewForConfig(clientConfig)
 		if err != nil {
@@ -585,7 +585,7 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 			}
 		}
 		heartbeatClientConfig.QPS = float32(-1)
-		//kubeDeps.HeartbeatClient, err = clientset.NewForConfig(&heartbeatClientConfig)
+		kubeDeps.HeartbeatClient, err = clientset.NewForConfig(&heartbeatClientConfig)
 		if err != nil {
 			return fmt.Errorf("failed to initialize kubelet heartbeat client: %v", err)
 		}

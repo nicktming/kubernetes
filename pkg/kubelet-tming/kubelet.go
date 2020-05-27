@@ -11,6 +11,20 @@ import (
 	kubetypes "k8s.io/kubernetes/pkg/kubelet-tming/types"
 	nodeutil "k8s.io/kubernetes/pkg/util/node"
 	cloudprovider "k8s.io/cloud-provider"
+	"sync"
+	v1 "k8s.io/api/core/v1"
+	"time"
+	"k8s.io/apimachinery/pkg/util/clock"
+	"fmt"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/apimachinery/pkg/fields"
+	corelisters "k8s.io/client-go/listers/core/v1"
+)
+
+const (
+	nodeStatusUpdateRetry = 5
 )
 
 type Dependencies struct {
@@ -23,8 +37,8 @@ type Dependencies struct {
 	//ContainerManager        cm.ContainerManager
 	//DockerClientConfig      *dockershim.ClientConfig
 	//EventClient             v1core.EventsGetter
-	//HeartbeatClient         clientset.Interface
-	//OnHeartbeatFailure      func()
+	HeartbeatClient         clientset.Interface
+	OnHeartbeatFailure      func()
 	KubeClient              clientset.Interface
 	//Mounter                 mount.Interface
 	//OOMAdjuster             *oom.OOMAdjuster
@@ -44,16 +58,120 @@ type Bootstrap interface {
 }
 
 type Kubelet struct {
+	kubeClient      clientset.Interface
+	heartbeatClient clientset.Interface
 
+	syncNodeStatusMux sync.Mutex
+
+	registerNode bool
+	registrationCompleted bool
+
+	nodeName        types.NodeName
+
+	// hostname is the hostname the kubelet detected or was given via flag/config
+	hostname string
+	// hostnameOverridden indicates the hostname was overridden via flag/config
+	hostnameOverridden bool
+
+	registerSchedulable bool
+
+	// handlers called during the tryUpdateNodeStatus cycle
+	setNodeStatusFuncs []func(*v1.Node) error
+
+	// lastStatusReportTime is the time when node status was last reported.
+	lastStatusReportTime time.Time
+
+	clock clock.Clock
+
+	lastObservedNodeAddressesMux sync.RWMutex
+	lastObservedNodeAddresses    []v1.NodeAddress
+
+	// onRepeatedHeartbeatFailure is called when a heartbeat operation fails more than once. optional.
+	onRepeatedHeartbeatFailure func()
+
+	nodeStatusUpdateFrequency time.Duration
+
+	// nodeInfo knows how to get information about the node for this kubelet.
+	nodeInfo predicates.NodeInfo
 }
 
-func (k *Kubelet) BirthCry() {
+func (kl *Kubelet) BirthCry() {
 	klog.Infof("kubelet BirthCry")
 }
 
-func (k *Kubelet) Run(<-chan kubetypes.PodUpdate) {
+func (kl *Kubelet) Run(<-chan kubetypes.PodUpdate) {
 	//klog.Infof("kubelet run")
+
+	if kl.kubeClient != nil {
+		go wait.Until(kl.syncNodeStatus, kl.nodeStatusUpdateFrequency, wait.NeverStop)
+	}
+
 }
+
+func (kl *Kubelet) fastStatusUpdateOnce() {
+	//for {
+	//	time.Sleep(100 * time.Millisecond)
+	//	node, err := kl.GetNode()
+	//	if err != nil {
+	//		klog.Errorf(err.Error())
+	//		continue
+	//	}
+	//}
+}
+
+
+func (kl *Kubelet) GetNode() (*v1.Node, error) {
+	if kl.kubeClient == nil {
+		return kl.initialNode()
+	}
+	return kl.nodeInfo
+}
+
+
+func (kl *Kubelet) syncNodeStatus() {
+	kl.syncNodeStatusMux.Lock()
+	defer kl.syncNodeStatusMux.Unlock()
+
+	if kl.kubeClient == nil {
+		return
+	}
+
+	if kl.registerNode {
+		kl.registerWithAPIServer()
+	}
+
+	if err := kl.updateNodeStatus(); err != nil {
+		klog.Errorf("Unable to update node status: %v", err)
+	}
+
+}
+
+func (kl *Kubelet) updateNodeStatus() error {
+	klog.Infof("updating node status")
+	for i := 0; i < nodeStatusUpdateRetry; i++ {
+		if err := kl.tryUpdateNodeStatus(i); err != nil {
+			//if i > 0 && kl.onRepeatedHeartbeatFailure != nil {
+			//	kl.onRepeatedHeartbeatFailure()
+			//}
+			klog.Errorf("Error updating node status, will retry: %v", err)
+		} else {
+			return nil
+		}
+	}
+	return fmt.Errorf("update node status exceeds retry count")
+}
+
+func (kl *Kubelet) setLastObservedNodeAddresses(addresses []v1.NodeAddress) {
+	kl.lastObservedNodeAddressesMux.Lock()
+	defer kl.lastObservedNodeAddressesMux.Unlock()
+	kl.lastObservedNodeAddresses = addresses
+}
+func (kl *Kubelet) getLastObservedNodeAddresses() []v1.NodeAddress {
+	kl.lastObservedNodeAddressesMux.RLock()
+	defer kl.lastObservedNodeAddressesMux.RUnlock()
+	return kl.lastObservedNodeAddresses
+}
+
 
 func makePodSourceConfig(kubeCfg *kubeletconfiginternal.KubeletConfiguration, kubeDeps *Dependencies, nodeName types.NodeName, bootstrapCheckpointPath string) (*config.PodConfig, error) {
 
@@ -121,6 +239,24 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		}
 	}
 
-	return &Kubelet{}, nil
+	nodeIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	if kubeDeps.KubeClient != nil {
+		fieldSelector := fields.Set{api.ObjectNameField: string(nodeName)}.AsSelector()
+		nodeLW := cache.NewListWatchFromClient(kubeDeps.KubeClient.CoreV1().RESTClient(), "nodes", metav1.NamespaceAll, fieldSelector)
+		r := cache.NewReflector(nodeLW, &v1.Node{}, nodeIndexer, 0)
+		go r.Run(wait.NeverStop)
+	}
+	nodeInfo := &predicates.CachedNodeInfo{NodeLister: corelisters.NewNodeLister(nodeIndexer)}
+
+	return &Kubelet{
+		kubeClient: kubeDeps.KubeClient,
+		nodeName:   nodeName,
+		hostname:   string(nodeName),
+		heartbeatClient: kubeDeps.HeartbeatClient,
+		clock: 		clock.RealClock{},
+		onRepeatedHeartbeatFailure: kubeDeps.OnHeartbeatFailure,
+		nodeStatusUpdateFrequency:               kubeCfg.NodeStatusUpdateFrequency.Duration,
+		nodeInfo:     nodeInfo,
+	}, nil
 
 }
