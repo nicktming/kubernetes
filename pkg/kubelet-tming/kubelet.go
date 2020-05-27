@@ -121,6 +121,6 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		}
 	}
 
-	return nil
+	return &Kubelet{}, nil 
 
 }
