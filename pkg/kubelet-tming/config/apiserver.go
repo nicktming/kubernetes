@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/api/core/v1"
-	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
+	kubetypes "k8s.io/kubernetes/pkg/kubelet-tming/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
