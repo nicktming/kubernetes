@@ -257,6 +257,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		onRepeatedHeartbeatFailure: kubeDeps.OnHeartbeatFailure,
 		nodeStatusUpdateFrequency:               kubeCfg.NodeStatusUpdateFrequency.Duration,
 		nodeInfo:     nodeInfo,
+		registerNode: 		registerNode,
 	}, nil
 
 }
