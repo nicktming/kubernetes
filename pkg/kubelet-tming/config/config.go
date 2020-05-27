@@ -116,6 +116,7 @@ func (s *podStorage) Merge(source string, change interface{}) error {
 			s.updates <- *reconciles
 		}
  	}
+	return nil
 }
 
 
