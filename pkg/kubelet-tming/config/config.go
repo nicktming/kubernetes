@@ -147,13 +147,13 @@ func (s *podStorage) merge(source string, change interface{}) (adds, updates, de
 				pods[ref.UID] = existing
 				needUpdate, needReconcile, needGracefulDelete := checkAndUpdatePod(existing, ref)
 				if needUpdate {
-					klog.Info("update new pods from source %s : %v", source, existing.Name)
+					klog.Info("update new pods from source %s : %s", source, existing.Name)
 					updatePods = append(updatePods, existing)
 				} else if needReconcile {
-					klog.Info("Status changes pods from source %s : %v", source, existing.Name)
+					klog.Info("Status changes pods from source %s : %s", source, existing.Name)
 					reconcilePods = append(reconcilePods, existing)
 				} else if needGracefulDelete {
-					klog.Info("Graceful deleting pods from source %s : %v", source, existing.Name)
+					klog.Info("Graceful deleting pods from source %s : %s", source, existing.Name)
 					deletePods = append(deletePods, existing)
 				}
 				continue
@@ -195,8 +195,10 @@ func (s *podStorage) merge(source string, change interface{}) (adds, updates, de
 		pods = make(map[types.UID]*v1.Pod)
 		updatePodsFunc(update.Pods, oldPods, pods)
 
-		for _, existing := range oldPods {
-			removePods = append(removePods, existing)
+		for uid, existing := range oldPods {
+			if _, found := pods[uid]; !found {
+				removePods = append(removePods, existing)
+			}
 		}
 
 	case kubetypes.RESTORE:
