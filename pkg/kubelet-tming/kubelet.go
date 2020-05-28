@@ -288,6 +288,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		externalCloudProvider:                   	cloudprovider.IsExternal(cloudProvider),
 	}
 
+	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
 
 	return klet, nil
 
