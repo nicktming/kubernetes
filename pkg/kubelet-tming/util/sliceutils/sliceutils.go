@@ -1,7 +1,7 @@
 package sliceutils
 
 import (
-	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
 )
 
 func StringInSlice(s string, list []string) bool {
