@@ -72,7 +72,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/certificate/bootstrap"
 	"k8s.io/kubernetes/pkg/kubelet/cm"
 	"k8s.io/kubernetes/pkg/kubelet-tming/config"
-	//"k8s.io/kubernetes/pkg/kubelet/dockershim"
+	"k8s.io/kubernetes/pkg/kubelet/dockershim"
 	//dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
 	dynamickubeletconfig "k8s.io/kubernetes/pkg/kubelet/kubeletconfig"
 	"k8s.io/kubernetes/pkg/kubelet/kubeletconfig/configfiles"
@@ -87,6 +87,7 @@ import (
 	"k8s.io/kubernetes/pkg/util/rlimit"
 	"k8s.io/kubernetes/pkg/version"
 	"k8s.io/kubernetes/pkg/version/verflag"
+	kubetypes "k8s.io/kubernetes/pkg/kubelet-tming/types"
 )
 
 const (
@@ -374,21 +375,21 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 	//	}
 	//}
 
-	//var dockerClientConfig *dockershim.ClientConfig
-	//if s.ContainerRuntime == kubetypes.DockerContainerRuntime {
-	//	dockerClientConfig = &dockershim.ClientConfig{
-	//		DockerEndpoint:            s.DockerEndpoint,
-	//		RuntimeRequestTimeout:     s.RuntimeRequestTimeout.Duration,
-	//		ImagePullProgressDeadline: s.ImagePullProgressDeadline.Duration,
-	//	}
-	//}
+	var dockerClientConfig *dockershim.ClientConfig
+	if s.ContainerRuntime == kubetypes.DockerContainerRuntime {
+		dockerClientConfig = &dockershim.ClientConfig{
+			DockerEndpoint:            s.DockerEndpoint,
+			RuntimeRequestTimeout:     s.RuntimeRequestTimeout.Duration,
+			ImagePullProgressDeadline: s.ImagePullProgressDeadline.Duration,
+		}
+	}
 
 	return &kubelet.Dependencies{
 		//Auth:                nil, // default does not enforce auth[nz]
 		//CAdvisorInterface:   nil, // cadvisor.New launches background processes (bg http.ListenAndServe, and some bg cleaners), not set here
 		//Cloud:               nil, // cloud provider might start background processes
 		//ContainerManager:    nil,
-		//DockerClientConfig:  dockerClientConfig,
+		DockerClientConfig:  dockerClientConfig,
 		KubeClient:          nil,
 		HeartbeatClient:     nil,
 		//EventClient:         nil,
