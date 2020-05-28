@@ -28,6 +28,8 @@ func (kl *Kubelet) defaultNodeStatusFuncs() []func(*v1.Node) error {
 
 	setters = append(setters,
 		nodestatus.NodeAddress(kl.nodeIP, kl.nodeIPValidator, kl.hostname, kl.hostnameOverridden, kl.externalCloudProvider, kl.cloud, nodeAddressFunc),
+		nodestatus.GoRuntime(),
+		nodestatus.Images(kl.nodeStatusMaxImages, kl.imageManager.GetImageList()),
 	)
 
 	return setters

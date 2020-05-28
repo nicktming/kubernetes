@@ -24,6 +24,20 @@ import (
 	"net"
 
 	"k8s.io/kubernetes/pkg/kubelet/cloudresource"
+	"k8s.io/kubernetes/pkg/kubelet-tming/images"
+
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
+	"net/url"
+
+	"k8s.io/kubernetes/pkg/kubelet/server/streaming"
+	"k8s.io/kubernetes/pkg/kubelet/server"
+	"k8s.io/kubernetes/pkg/kubelet/dockershim"
+	dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
+	"k8s.io/kubernetes/pkg/kubelet-tming/remote"
+
+	internalapi "k8s.io/cri-api/pkg/apis"
+	"k8s.io/kubernetes/pkg/kubelet-tming/kuberuntime"
+	"k8s.io/client-go/tools/record"
 )
 
 const (
@@ -38,7 +52,7 @@ type Dependencies struct {
 	//CAdvisorInterface       cadvisor.Interface
 	Cloud                   cloudprovider.Interface
 	//ContainerManager        cm.ContainerManager
-	//DockerClientConfig      *dockershim.ClientConfig
+	DockerClientConfig      *dockershim.ClientConfig
 	//EventClient             v1core.EventsGetter
 	HeartbeatClient         clientset.Interface
 	OnHeartbeatFailure      func()
@@ -47,12 +61,14 @@ type Dependencies struct {
 	//OOMAdjuster             *oom.OOMAdjuster
 	//OSInterface             kubecontainer.OSInterface
 	PodConfig               *config.PodConfig
-	//Recorder                record.EventRecorder
+	Recorder                record.EventRecorder
 	//Subpather               subpath.Interface
 	//VolumePlugins           []volume.VolumePlugin
 	//DynamicPluginProber     volume.DynamicPluginProber
-	//TLSOptions              *server.TLSOptions
+	TLSOptions              *server.TLSOptions
 	//KubeletConfigController *kubeletconfig.Controller
+
+
 }
 
 type Bootstrap interface {
@@ -109,10 +125,32 @@ type Kubelet struct {
 	cloud cloudprovider.Interface
 	// Handles requests to cloud provider with timeout
 	cloudResourceSyncManager cloudresource.SyncManager
+
+	// Needed to observe and respond to situations that could impact node stability
+	//evictionManager eviction.Manager
+
+	// Manager for image garbage collection.
+	imageManager images.ImageGCManager
+
+	// The name of the container runtime
+	containerRuntimeName string
+
+	// Container runtime.
+	containerRuntime kubecontainer.Runtime
+
+	runtimeService internalapi.RuntimeService
+
+	nodeStatusMaxImages int32
+
+
 }
 
 func (kl *Kubelet) BirthCry() {
 	klog.Infof("kubelet BirthCry")
+}
+
+func (kl *Kubelet) initializeModules() error {
+	kl.imageManager.Start()
 }
 
 func (kl *Kubelet) Run(<-chan kubetypes.PodUpdate) {
@@ -271,6 +309,13 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	//	protocol = utilipt.ProtocolIpv6
 	//}
 
+	nodeRef := &v1.ObjectReference{
+		Kind:      "Node",
+		Name:      string(nodeName),
+		UID:       types.UID(nodeName),
+		Namespace: "",
+	}
+
 	klet := &Kubelet{
 		kubeClient: 					kubeDeps.KubeClient,
 		nodeName:   					nodeName,
@@ -286,10 +331,109 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		nodeIPValidator:                         	validateNodeIP,
 		cloud:                                   	kubeDeps.Cloud,
 		externalCloudProvider:                   	cloudprovider.IsExternal(cloudProvider),
+		containerRuntimeName:				containerRuntime,
+		nodeStatusMaxImages:				-1,
 	}
 
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
 
+	pluginSettings := dockershim.NetworkPluginSettings{
+		HairpinMode:        kubeletconfiginternal.HairpinMode(kubeCfg.HairpinMode),
+		NonMasqueradeCIDR:  nonMasqueradeCIDR,
+		PluginName:         crOptions.NetworkPluginName,
+		PluginConfDir:      crOptions.CNIConfDir,
+		PluginBinDirString: crOptions.CNIBinDir,
+		MTU:                int(crOptions.NetworkPluginMTU),
+	}
+
+	switch containerRuntime {
+	case kubetypes.DockerContainerRuntime:
+
+		streamingConfig := getStreamingConfig(kubeCfg, kubeDeps, crOptions)
+		ds, err := dockershim.NewDockerService(kubeDeps.DockerClientConfig, crOptions.PodSandboxImage, streamingConfig,
+			&pluginSettings, runtimeCgroups, kubeCfg.CgroupDriver, crOptions.DockershimRootDirectory, !crOptions.RedirectContainerStreaming)
+		if err != nil {
+			return nil, err
+		}
+		// TODO criHandler
+
+		klog.Infof("RemoteRuntimeEndpoint: %q, RemoteImageEndpoint: %q",
+			remoteRuntimeEndpoint,
+			remoteImageEndpoint)
+		klog.Infof("Starting the GRPC server for the docker CRI shim.")
+		server := dockerremote.NewDockerServer(remoteRuntimeEndpoint, ds)
+		if err := server.Start(); err != nil {
+			return nil, err
+		}
+		// TODO ds.IsCRISupportedLogDriver()
+	default:
+		return nil, fmt.Errorf("unsupported CRI runtime: %q", containerRuntime)
+	}
+
+	runtimeService, imageService, err := getRuntimeAndImageServices(remoteRuntimeEndpoint, remoteImageEndpoint, kubeCfg.RuntimeRequestTimeout)
+	if err != nil {
+		return nil, err
+	}
+	klet.runtimeService = runtimeService
+
+	// TODO RuntimeClass
+
+
+	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService)
+	if err != nil {
+		return nil, err
+	}
+
+	klet.containerRuntime = runtime
+
+	imageGCPolicy := images.ImageGCPolicy{
+		MinAge:               kubeCfg.ImageMinimumGCAge.Duration,
+		HighThresholdPercent: int(kubeCfg.ImageGCHighThresholdPercent),
+		LowThresholdPercent:  int(kubeCfg.ImageGCLowThresholdPercent),
+	}
+
+	imageManager, err := images.NewImageGCManager(klet.containerRuntime, kubeDeps.Recorder, nodeRef, imageGCPolicy, crOptions.PodSandboxImage)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize image manager: %v", err)
+	}
+
+	klet.imageManager = imageManager
+
 	return klet, nil
 
+}
+
+func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
+	rs, err := remote.NewRemoteRuntimeService(remoteRuntimeEndpoint, runtimeRequestTimeout.Duration)
+	if err != nil {
+		return nil, nil, err
+	}
+	is, err := remote.NewRemoteImageService(remoteImageEndpoint, runtimeRequestTimeout.Duration)
+	if err != nil {
+		return nil, nil, err
+	}
+	return rs, is, err
+}
+
+
+func getStreamingConfig(kubeCfg *kubeletconfiginternal.KubeletConfiguration, kubeDeps *Dependencies, crOptions *config.ContainerRuntimeOptions) *streaming.Config {
+	config := &streaming.Config{
+		StreamIdleTimeout:               kubeCfg.StreamingConnectionIdleTimeout.Duration,
+		StreamCreationTimeout:           streaming.DefaultConfig.StreamCreationTimeout,
+		SupportedRemoteCommandProtocols: streaming.DefaultConfig.SupportedRemoteCommandProtocols,
+		SupportedPortForwardProtocols:   streaming.DefaultConfig.SupportedPortForwardProtocols,
+	}
+	if !crOptions.RedirectContainerStreaming {
+		config.Addr = net.JoinHostPort("localhost", "0")
+	} else {
+		// Use a relative redirect (no scheme or host).
+		config.BaseURL = &url.URL{
+			Path: "/cri/",
+		}
+		if kubeDeps.TLSOptions != nil {
+			config.TLSConfig = kubeDeps.TLSOptions.Config
+		}
+	}
+	return config
 }
