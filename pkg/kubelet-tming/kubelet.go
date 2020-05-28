@@ -157,6 +157,8 @@ func (kl *Kubelet) initializeModules() error {
 func (kl *Kubelet) Run(<-chan kubetypes.PodUpdate) {
 	//klog.Infof("kubelet run")
 
+	kl.initializeModules()
+
 	if kl.kubeClient != nil {
 		go wait.Until(kl.syncNodeStatus, kl.nodeStatusUpdateFrequency, wait.NeverStop)
 	}
