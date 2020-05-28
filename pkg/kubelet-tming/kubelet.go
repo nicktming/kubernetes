@@ -151,6 +151,7 @@ func (kl *Kubelet) BirthCry() {
 
 func (kl *Kubelet) initializeModules() error {
 	kl.imageManager.Start()
+	return nil
 }
 
 func (kl *Kubelet) Run(<-chan kubetypes.PodUpdate) {
