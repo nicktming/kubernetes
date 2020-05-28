@@ -336,7 +336,11 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		nodeStatusMaxImages:				-1,
 	}
 
-
+	if remoteRuntimeEndpoint != "" {
+		if remoteImageEndpoint == "" {
+			remoteImageEndpoint = remoteRuntimeEndpoint
+		}
+	}
 
 	pluginSettings := dockershim.NetworkPluginSettings{
 		HairpinMode:        kubeletconfiginternal.HairpinMode(kubeCfg.HairpinMode),
