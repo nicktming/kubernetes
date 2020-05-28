@@ -17,12 +17,12 @@ limitations under the License.
 package options
 
 import (
-	//"runtime"
-	//"time"
-	//
-	//metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"runtime"
+	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/pkg/kubelet-tming/config"
-	//kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
+	kubetypes "k8s.io/kubernetes/pkg/kubelet-tming/types"
 )
 
 const (
@@ -39,22 +39,22 @@ var (
 // NewContainerRuntimeOptions will create a new ContainerRuntimeOptions with
 // default values.
 func NewContainerRuntimeOptions() *config.ContainerRuntimeOptions {
-	//dockerEndpoint := ""
-	//if runtime.GOOS != "windows" {
-	//	dockerEndpoint = "unix:///var/run/docker.sock"
-	//}
+	dockerEndpoint := ""
+	if runtime.GOOS != "windows" {
+		dockerEndpoint = "unix:///var/run/docker.sock"
+	}
 
 	return &config.ContainerRuntimeOptions{
-		//ContainerRuntime:           kubetypes.DockerContainerRuntime,
-		//RedirectContainerStreaming: false,
-		//DockerEndpoint:             dockerEndpoint,
-		//DockershimRootDirectory:    "/var/lib/dockershim",
-		//PodSandboxImage:            defaultPodSandboxImage,
-		//ImagePullProgressDeadline:  metav1.Duration{Duration: 1 * time.Minute},
-		//ExperimentalDockershim:     false,
-		//
-		////Alpha feature
-		//CNIBinDir:  "/opt/cni/bin",
-		//CNIConfDir: "/etc/cni/net.d",
+		ContainerRuntime:           kubetypes.DockerContainerRuntime,
+		RedirectContainerStreaming: false,
+		DockerEndpoint:             dockerEndpoint,
+		DockershimRootDirectory:    "/var/lib/dockershim",
+		PodSandboxImage:            defaultPodSandboxImage,
+		ImagePullProgressDeadline:  metav1.Duration{Duration: 1 * time.Minute},
+		ExperimentalDockershim:     false,
+
+		//Alpha feature
+		CNIBinDir:  "/opt/cni/bin",
+		CNIConfDir: "/etc/cni/net.d",
 	}
 }
