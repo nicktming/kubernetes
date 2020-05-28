@@ -21,6 +21,9 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/apimachinery/pkg/fields"
 	corelisters "k8s.io/client-go/listers/core/v1"
+	"net"
+
+	"k8s.io/kubernetes/pkg/kubelet/cloudresource"
 )
 
 const (
@@ -93,6 +96,19 @@ type Kubelet struct {
 
 	// nodeInfo knows how to get information about the node for this kubelet.
 	nodeInfo predicates.NodeInfo
+
+	// If non-nil, use this IP address for the node
+	nodeIP net.IP
+
+	nodeIPValidator func(net.IP) error
+
+	// Indicates that the node initialization happens in an external cloud controller
+	externalCloudProvider bool
+
+	// Cloud provider interface.
+	cloud cloudprovider.Interface
+	// Handles requests to cloud provider with timeout
+	cloudResourceSyncManager cloudresource.SyncManager
 }
 
 func (kl *Kubelet) BirthCry() {
@@ -248,7 +264,14 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	}
 	nodeInfo := &predicates.CachedNodeInfo{NodeLister: corelisters.NewNodeLister(nodeIndexer)}
 
-	return &Kubelet{
+	parsedNodeIP := net.ParseIP(nodeIP)
+	//protocol := utilipt.ProtocolIpv4
+	//if parsedNodeIP != nil && parsedNodeIP.To4() == nil {
+	//	klog.V(0).Infof("IPv6 node IP (%s), assume IPv6 operation", nodeIP)
+	//	protocol = utilipt.ProtocolIpv6
+	//}
+
+	klet := &Kubelet{
 		kubeClient: 					kubeDeps.KubeClient,
 		nodeName:   					nodeName,
 		hostname:   					string(nodeName),
@@ -259,6 +282,13 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		nodeInfo:     					nodeInfo,
 		registerNode: 					registerNode,
 		registerSchedulable: 				registerSchedulable,
-	}, nil
+		nodeIP:						parsedNodeIP,
+		nodeIPValidator:                         	validateNodeIP,
+		cloud:                                   	kubeDeps.Cloud,
+		externalCloudProvider:                   	cloudprovider.IsExternal(cloudProvider),
+	}
+
+
+	return klet, nil
 
 }

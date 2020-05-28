@@ -13,7 +13,65 @@ import (
 	"fmt"
 	nodeutil "k8s.io/kubernetes/pkg/util/node"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/kubernetes/pkg/kubelet-tming/nodestatus"
+	"net"
 )
+
+
+func (kl *Kubelet) defaultNodeStatusFuncs() []func(*v1.Node) error {
+
+	var nodeAddressFunc func() ([]v1.NodeAddress, error)
+
+	// TODO kl.cloud and kl.appArmorValidator
+
+	var setters []func(n *v1.Node) error
+
+	setters = append(setters,
+		nodestatus.NodeAddress(kl.nodeIP, kl.nodeIPValidator, kl.hostname, kl.hostnameOverridden, kl.externalCloudProvider, kl.cloud, nodeAddressFunc),
+	)
+
+	return setters
+}
+
+// Validate given node IP belongs to the current host
+func validateNodeIP(nodeIP net.IP) error {
+	// Honor IP limitations set in setNodeStatus()
+	if nodeIP.To4() == nil && nodeIP.To16() == nil {
+		return fmt.Errorf("nodeIP must be a valid IP address")
+	}
+	if nodeIP.IsLoopback() {
+		return fmt.Errorf("nodeIP can't be loopback address")
+	}
+	if nodeIP.IsMulticast() {
+		return fmt.Errorf("nodeIP can't be a multicast address")
+	}
+	if nodeIP.IsLinkLocalUnicast() {
+		return fmt.Errorf("nodeIP can't be a link-local unicast address")
+	}
+	if nodeIP.IsUnspecified() {
+		return fmt.Errorf("nodeIP can't be an all zeros address")
+	}
+
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return err
+	}
+	for _, addr := range addrs {
+		var ip net.IP
+		switch v := addr.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if ip != nil && ip.Equal(nodeIP) {
+			return nil
+		}
+	}
+	return fmt.Errorf("Node IP: %q not found in the host's network interfaces", nodeIP.String())
+}
+
+
 
 func (kl *Kubelet) initialNode() (*v1.Node, error) {
 	node := &v1.Node{
@@ -137,5 +195,6 @@ func (kl *Kubelet) tryRegisterWithAPIServer(node *v1.Node) bool {
 
 	return true
 }
+
 
 
