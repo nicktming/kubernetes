@@ -134,7 +134,7 @@ func (im *realImageGCManager) Start() {
 
 	go wait.Until(func(){
 		images, err := im.runtime.ListImages()
-		klog.Infof("images: %v", images)
+		klog.V(5).Infof("images: %v", images)
 		if err != nil {
 			klog.Warningf("[imageGCManager] Failed to update image list: %v", err)
 		} else {
