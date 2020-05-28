@@ -9,6 +9,8 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/util"
 	"context"
 	"google.golang.org/grpc"
+	"errors"
+	"fmt"
 )
 
 type RemoteImageService struct {
@@ -55,3 +57,139 @@ func (r *RemoteImageService) ListImages(filter *runtimeapi.ImageFilter) ([]*runt
 
 	return resp.Images, nil
 }
+
+func (r *RemoteImageService) ImageStatus(image *runtimeapi.ImageSpec) (*runtimeapi.Image, error) {
+	ctx, cancel := getContextWithTimeout(r.timeout)
+	defer cancel()
+
+	resp, err := r.imageClient.ImageStatus(ctx, &runtimeapi.ImageStatusRequest{
+		Image: 		image,
+	})
+
+	if err != nil {
+		klog.Errorf("ImageStatus %q from image service failed: %v", image.Image, err)
+		return nil, err
+	}
+
+	if resp.Image != nil {
+		if resp.Image.Id == "" || resp.Image.Size_ == 0 {
+			errorMessage := fmt.Sprintf("Id or size of image %q is not set", image.Image)
+			klog.Errorf("ImageStatus failed: %s", errorMessage)
+			return nil, errors.New(errorMessage)
+		}
+	}
+
+	return resp.Image, nil
+}
+
+
+// PullImage pulls an image with authentication config.
+func (r *RemoteImageService) PullImage(image *runtimeapi.ImageSpec, auth *runtimeapi.AuthConfig, podSandboxConfig *runtimeapi.PodSandboxConfig) (string, error) {
+	ctx, cancel := getContextWithCancel()
+	defer cancel()
+
+	resp, err := r.imageClient.PullImage(ctx, &runtimeapi.PullImageRequest{
+		Image:         image,
+		Auth:          auth,
+		SandboxConfig: podSandboxConfig,
+	})
+	if err != nil {
+		klog.Errorf("PullImage %q from image service failed: %v", image.Image, err)
+		return "", err
+	}
+
+	if resp.ImageRef == "" {
+		errorMessage := fmt.Sprintf("imageRef of image %q is not set", image.Image)
+		klog.Errorf("PullImage failed: %s", errorMessage)
+		return "", errors.New(errorMessage)
+	}
+
+	return resp.ImageRef, nil
+}
+
+// RemoveImage removes the image.
+func (r *RemoteImageService) RemoveImage(image *runtimeapi.ImageSpec) error {
+	ctx, cancel := getContextWithTimeout(r.timeout)
+	defer cancel()
+
+	_, err := r.imageClient.RemoveImage(ctx, &runtimeapi.RemoveImageRequest{
+		Image: image,
+	})
+	if err != nil {
+		klog.Errorf("RemoveImage %q from image service failed: %v", image.Image, err)
+		return err
+	}
+
+	return nil
+}
+
+
+// ImageFsInfo returns information of the filesystem that is used to store images.
+func (r *RemoteImageService) ImageFsInfo() ([]*runtimeapi.FilesystemUsage, error) {
+	// Do not set timeout, because `ImageFsInfo` takes time.
+	// TODO(random-liu): Should we assume runtime should cache the result, and set timeout here?
+	ctx, cancel := getContextWithCancel()
+	defer cancel()
+
+	resp, err := r.imageClient.ImageFsInfo(ctx, &runtimeapi.ImageFsInfoRequest{})
+	if err != nil {
+		klog.Errorf("ImageFsInfo from image service failed: %v", err)
+		return nil, err
+	}
+	return resp.GetImageFilesystems(), nil
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

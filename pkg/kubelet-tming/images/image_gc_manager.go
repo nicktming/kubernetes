@@ -8,7 +8,7 @@ import (
 	"k8s.io/api/core/v1"
 	"sync"
 	"sort"
-	"k8s.io/kubernetes/pkg/kubelet/util/sliceutils"
+	"k8s.io/kubernetes/pkg/kubelet-tming/util/sliceutils"
 	"fmt"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog"

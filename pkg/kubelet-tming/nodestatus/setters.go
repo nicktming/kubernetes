@@ -62,7 +62,7 @@ func MemoryPressureCondition(nowFunc func() time.Time,
 
 		for i := range node.Status.Conditions {
 			if node.Status.Conditions[i].Type == v1.NodeMemoryPressure {
-				condition = &node.Status.Conditions
+				condition = &node.Status.Conditions[i]
 			}
 		}
 
