@@ -336,7 +336,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		nodeStatusMaxImages:				-1,
 	}
 
-	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
+
 
 	pluginSettings := dockershim.NetworkPluginSettings{
 		HairpinMode:        kubeletconfiginternal.HairpinMode(kubeCfg.HairpinMode),
@@ -400,6 +400,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	}
 
 	klet.imageManager = imageManager
+
+	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
 
 	return klet, nil
 
