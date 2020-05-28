@@ -129,7 +129,7 @@ func (kl *Kubelet) tryUpdateNodeStatus(tryNumber int) error {
 
 func (kl *Kubelet) setNodeStatus(node *v1.Node) {
 	for i, f := range kl.setNodeStatusFuncs {
-		klog.Infof("Setting node status at position %v", i)
+		klog.V(5).Infof("Setting node status at position %v", i)
 		if err := f(node); err != nil {
 			klog.Warningf("Failed to set some node status filelds: %s", err)
 		}

@@ -23,6 +23,9 @@ func (m *kubeGenericRuntimeManager) ListImages() ([]kubecontainer.Image, error) 
 	var images []kubecontainer.Image
 
 	allImages, err := m.imageService.ListImages(nil)
+
+	klog.Infof("allImages: %v", allImages)
+
 	if err != nil {
 		klog.Errorf("ListImages failed: %v", err)
 		return nil, err
