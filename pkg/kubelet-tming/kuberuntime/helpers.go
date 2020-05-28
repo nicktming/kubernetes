@@ -4,7 +4,6 @@ import (
 	"fmt"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
-	"k8s.io/klog"
 )
 
 func (m *kubeGenericRuntimeManager) sandboxToKubeContainer(s *runtimeapi.PodSandbox) (*kubecontainer.Container, error) {
@@ -34,4 +33,19 @@ func (m *kubeGenericRuntimeManager) toKubeContainer(c *runtimeapi.Container) (*k
 		Hash:    annotatedInfo.Hash,
 		State:   toKubeContainerState(c.State),
 	}, nil
+}
+
+func toKubeContainerState(state runtimeapi.ContainerState) kubecontainer.ContainerState {
+	switch state {
+	case runtimeapi.ContainerState_CONTAINER_CREATED:
+		return kubecontainer.ContainerStateCreated
+	case runtimeapi.ContainerState_CONTAINER_RUNNING:
+		return kubecontainer.ContainerStateRunning
+	case runtimeapi.ContainerState_CONTAINER_EXITED:
+		return kubecontainer.ContainerStateExited
+	case runtimeapi.ContainerState_CONTAINER_UNKNOWN:
+		return kubecontainer.ContainerStateUnknown
+	}
+
+	return kubecontainer.ContainerStateUnknown
 }
