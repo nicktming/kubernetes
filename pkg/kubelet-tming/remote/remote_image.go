@@ -51,7 +51,7 @@ func (r *RemoteImageService) ListImages(filter *runtimeapi.ImageFilter) ([]*runt
 		Filter: filter,
 	})
 	if err != nil {
-		klog.Errorf("ListImages with filter %+v from image service failed: %v", filter, err)
+		//klog.Errorf("ListImages with filter %+v from image service failed: %v", filter, err)
 		return nil, err
 	}
 
@@ -67,7 +67,7 @@ func (r *RemoteImageService) ImageStatus(image *runtimeapi.ImageSpec) (*runtimea
 	})
 
 	if err != nil {
-		klog.Errorf("ImageStatus %q from image service failed: %v", image.Image, err)
+		//klog.Errorf("ImageStatus %q from image service failed: %v", image.Image, err)
 		return nil, err
 	}
 
