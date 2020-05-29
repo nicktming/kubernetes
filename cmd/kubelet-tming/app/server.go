@@ -387,7 +387,7 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 	return &kubelet.Dependencies{
 		//Auth:                nil, // default does not enforce auth[nz]
 		//CAdvisorInterface:   nil, // cadvisor.New launches background processes (bg http.ListenAndServe, and some bg cleaners), not set here
-		//Cloud:               nil, // cloud provider might start background processes
+		Cloud:               nil, // cloud provider might start background processes
 		//ContainerManager:    nil,
 		DockerClientConfig:  dockerClientConfig,
 		KubeClient:          nil,

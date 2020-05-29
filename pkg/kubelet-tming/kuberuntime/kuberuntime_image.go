@@ -27,7 +27,7 @@ func (m *kubeGenericRuntimeManager) ListImages() ([]kubecontainer.Image, error) 
 	klog.V(5).Infof("allImages: %v", allImages)
 
 	if err != nil {
-		klog.Errorf("ListImages failed: %v", err)
+		//klog.Errorf("ListImages failed: %v", err)
 		return nil, err
 	}
 

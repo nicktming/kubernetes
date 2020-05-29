@@ -136,7 +136,7 @@ func (im *realImageGCManager) Start() {
 		images, err := im.runtime.ListImages()
 		klog.V(5).Infof("images: %v", images)
 		if err != nil {
-			klog.Warningf("[imageGCManager] Failed to update image list: %v", err)
+			//klog.Warningf("[imageGCManager] Failed to update image list: %v", err)
 		} else {
 			im.imageCache.set(images)
 		}
