@@ -119,18 +119,18 @@ func NewImageGCManager(runtime container.Runtime, recorder record.EventRecorder,
 
 
 func (im *realImageGCManager) Start() {
-	go wait.Until(func(){
-		var ts time.Time
-		if im.initialized {
-			ts = time.Now()
-		}
-		_, err := im.detectImages(ts)
-		if err != nil {
-			klog.Warningf("[imageGCManager] Failed to monitor images: %v", err)
-		} else {
-			im.initialized = true
-		}
-	}, 5 * time.Minute, wait.NeverStop)
+	//go wait.Until(func(){
+	//	var ts time.Time
+	//	if im.initialized {
+	//		ts = time.Now()
+	//	}
+	//	_, err := im.detectImages(ts)
+	//	if err != nil {
+	//		klog.Warningf("[imageGCManager] Failed to monitor images: %v", err)
+	//	} else {
+	//		im.initialized = true
+	//	}
+	//}, 5 * time.Minute, wait.NeverStop)
 
 	go wait.Until(func(){
 		images, err := im.runtime.ListImages()
@@ -140,7 +140,7 @@ func (im *realImageGCManager) Start() {
 		} else {
 			im.imageCache.set(images)
 		}
-	}, 30 * time.Second, wait.NeverStop)
+	}, 5 * time.Minute, wait.NeverStop)
 }
 
 
