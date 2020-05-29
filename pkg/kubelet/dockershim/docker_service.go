@@ -180,6 +180,7 @@ func NewDockerClientFromConfig(config *ClientConfig) libdocker.Interface {
 			config.WithTraceDisabled,
 			config.EnableSleep,
 		)
+		klog.Infof("client:%v", client)
 		return client
 	}
 

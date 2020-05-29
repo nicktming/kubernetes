@@ -98,6 +98,7 @@ func ConnectToDockerOrDie(dockerEndpoint string, requestTimeout, imagePullProgre
 		return fakeClient
 	}
 	client, err := getDockerClient(dockerEndpoint)
+	klog.Infof("client:%v, err:%v", client, err)
 	if err != nil {
 		klog.Fatalf("Couldn't connect to docker: %v", err)
 	}
