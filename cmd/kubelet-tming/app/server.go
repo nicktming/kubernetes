@@ -70,7 +70,7 @@ import (
 	kubeletconfigvalidation "k8s.io/kubernetes/pkg/kubelet/apis/config/validation"
 	kubeletcertificate "k8s.io/kubernetes/pkg/kubelet/certificate"
 	"k8s.io/kubernetes/pkg/kubelet/certificate/bootstrap"
-	"k8s.io/kubernetes/pkg/kubelet/cm"
+	"k8s.io/kubernetes/pkg/kubelet-tming/cm"
 	"k8s.io/kubernetes/pkg/kubelet-tming/config"
 	"k8s.io/kubernetes/pkg/kubelet/dockershim"
 	//dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
@@ -387,9 +387,9 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 
 	return &kubelet.Dependencies{
 		//Auth:                nil, // default does not enforce auth[nz]
-		//CAdvisorInterface:   nil, // cadvisor.New launches background processes (bg http.ListenAndServe, and some bg cleaners), not set here
+		CAdvisorInterface:   nil, // cadvisor.New launches background processes (bg http.ListenAndServe, and some bg cleaners), not set here
 		Cloud:               nil, // cloud provider might start background processes
-		//ContainerManager:    nil,
+		ContainerManager:    nil,
 		DockerClientConfig:  dockerClientConfig,
 		KubeClient:          nil,
 		HeartbeatClient:     nil,
@@ -611,6 +611,9 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 
 	var cgroupRoots []string
 
+	klog.Infof("init cgroups s.CgroupRoot:%v, s.CgroupDriver:%v, s.KubeletCgroups:%v, s.RuntimeCgroups:%v, s.SystemCgroups:%v",
+			s.CgroupRoot, s.CgroupDriver, s.KubeletCgroups, s.RuntimeCgroups, s.SystemCgroups)
+
 	cgroupRoots = append(cgroupRoots, cm.NodeAllocatableRoot(s.CgroupRoot, s.CgroupDriver))
 	kubeletCgroup, err := cm.GetKubeletContainer(s.KubeletCgroups)
 	if err != nil {
@@ -631,6 +634,8 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 		// SystemCgroups is optional, so ignore if it isn't specified
 		cgroupRoots = append(cgroupRoots, s.SystemCgroups)
 	}
+
+	klog.Infof("result nodeallocatableRoot:%v, kubeletCgroup: %s, runtimeCgroup: %v", cm.NodeAllocatableRoot(s.CgroupRoot, s.CgroupDriver), kubeletCgroup, runtimeCgroup)
 
 	klog.Infof("init cadvisor interface RootDirectory: %s, cgroupRoots: %v", s.RootDirectory, cgroupRoots)
 

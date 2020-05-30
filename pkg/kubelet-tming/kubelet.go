@@ -39,6 +39,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-tming/kuberuntime"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/kubelet-tming/cadvisor"
+	"k8s.io/kubernetes/pkg/kubelet-tming/cm"
 )
 
 const (
@@ -52,7 +53,7 @@ type Dependencies struct {
 	//Auth                    server.AuthInterface
 	CAdvisorInterface       cadvisor.Interface
 	Cloud                   cloudprovider.Interface
-	//ContainerManager        cm.ContainerManager
+	ContainerManager        cm.ContainerManager
 	DockerClientConfig      *dockershim.ClientConfig
 	//EventClient             v1core.EventsGetter
 	HeartbeatClient         clientset.Interface

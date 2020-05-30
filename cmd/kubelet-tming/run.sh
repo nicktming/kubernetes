@@ -11,3 +11,7 @@ config="$config --kubeconfig=$homepath/ssl_keys/node/kubelet_kubeconfig"
 #config="$config --runtime-cgroups=/systemd/system.slice --kubelet-cgroups=/systemd/system.slice"
 
 ./kubelet-tming $config
+
+
+// TODO
+// 1. /proc/$$/cgroup
