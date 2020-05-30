@@ -147,13 +147,13 @@ func (s *podStorage) merge(source string, change interface{}) (adds, updates, de
 				pods[ref.UID] = existing
 				needUpdate, needReconcile, needGracefulDelete := checkAndUpdatePod(existing, ref)
 				if needUpdate {
-					klog.Info("update new pods from source %s : %s", source, existing.Name)
+					klog.Infof("update new pods from source %s : %s", source, existing.Name)
 					updatePods = append(updatePods, existing)
 				} else if needReconcile {
-					klog.Info("Status changes pods from source %s : %s", source, existing.Name)
+					klog.Infof("Status changes pods from source %s : %s", source, existing.Name)
 					reconcilePods = append(reconcilePods, existing)
 				} else if needGracefulDelete {
-					klog.Info("Graceful deleting pods from source %s : %s", source, existing.Name)
+					klog.Infof("Graceful deleting pods from source %s : %s", source, existing.Name)
 					deletePods = append(deletePods, existing)
 				}
 				continue
