@@ -88,6 +88,7 @@ import (
 	"k8s.io/kubernetes/pkg/version"
 	"k8s.io/kubernetes/pkg/version/verflag"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet-tming/types"
+	"k8s.io/kubernetes/pkg/kubelet-tming/cadvisor"
 )
 
 const (
@@ -618,18 +619,20 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 		cgroupRoots = append(cgroupRoots, kubeletCgroup)
 	}
 
-	//runtimeCgroup, err := cm.GetRuntimeContainer(s.ContainerRuntime, s.RuntimeCgroups)
-	//if err != nil {
-	//	klog.Warningf("failed to get the container runtime's cgroup: %v. Runtime system container metrics may be missing.", err)
-	//} else if runtimeCgroup != "" {
-	//	// RuntimeCgroups is optional, so ignore if it isn't specified
-	//	cgroupRoots = append(cgroupRoots, runtimeCgroup)
-	//}
-	//
-	//if s.SystemCgroups != "" {
-	//	// SystemCgroups is optional, so ignore if it isn't specified
-	//	cgroupRoots = append(cgroupRoots, s.SystemCgroups)
-	//}
+	runtimeCgroup, err := cm.GetRuntimeContainer(s.ContainerRuntime, s.RuntimeCgroups)
+	if err != nil {
+		klog.Warningf("failed to get the container runtime's cgroup: %v. Runtime system container metrics may be missing.", err)
+	} else if runtimeCgroup != "" {
+		// RuntimeCgroups is optional, so ignore if it isn't specified
+		cgroupRoots = append(cgroupRoots, runtimeCgroup)
+	}
+
+	if s.SystemCgroups != "" {
+		// SystemCgroups is optional, so ignore if it isn't specified
+		cgroupRoots = append(cgroupRoots, s.SystemCgroups)
+	}
+
+	klog.Infof("init cadvisor interface RootDirectory: %s, cgroupRoots: %v", s.RootDirectory, cgroupRoots)
 
 	if kubeDeps.CAdvisorInterface == nil {
 		imageFsInfoProvider := cadvisor.NewImageFsInfoProvider(s.ContainerRuntime, s.RemoteRuntimeEndpoint)

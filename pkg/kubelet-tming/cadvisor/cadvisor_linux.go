@@ -107,15 +107,66 @@ func New(ImageFsInfoProvider ImageFsInfoProvider, rootPath string, cgroupRoots [
 	return cadvisorClient, nil
 }
 
+func (cc *cadvisorClient) ContainerInfo(name string, req *cadvisorapi.ContainerInfoRequest) (*cadvisorapi.ContainerInfo, error) {
+	return cc.GetContainerInfo(name, req)
+}
 
+func (cc *cadvisorClient) ContainerInfoV2(name string, options cadvisorapiv2.RequestOptions) (map[string]cadvisorapiv2.ContainerInfo, error) {
+	return cc.GetContainerInfoV2(name, options)
+}
 
+func (cc *cadvisorClient) VersionInfo() (*cadvisorapi.VersionInfo, error) {
+	return cc.GetVersionInfo()
+}
 
+func (cc *cadvisorClient) SubcontainerInfo(name string, req *cadvisorapi.ContainerInfoRequest) (map[string]*cadvisorapi.ContainerInfo, error) {
+	infos, err := cc.SubcontainersInfo(name, req)
+	if err != nil && len(infos) == 0 {
+		return nil, err
+	}
 
+	result := make(map[string]*cadvisorapi.ContainerInfo, len(infos))
+	for _, info := range infos {
+		result[info.Name] = info
+	}
+	return result, err
+}
 
+func (cc *cadvisorClient) MachineInfo() (*cadvisorapi.MachineInfo, error) {
+	return cc.GetMachineInfo()
+}
 
+func (cc *cadvisorClient) ImagesFsInfo() (cadvisorapiv2.FsInfo, error) {
+	label, err := cc.imageFsInfoProvider.ImageFsInfoLabel()
+	if err != nil {
+		return cadvisorapiv2.FsInfo{}, err
+	}
+	return cc.getFsInfo(label)
+}
 
+func (cc *cadvisorClient) RootFsInfo() (cadvisorapiv2.FsInfo, error) {
+	return cc.GetDirFsInfo(cc.rootPath)
+}
 
+func (cc *cadvisorClient) getFsInfo(label string) (cadvisorapiv2.FsInfo, error) {
+	res, err := cc.GetFsInfo(label)
+	if err != nil {
+		return cadvisorapiv2.FsInfo{}, err
+	}
+	if len(res) == 0 {
+		return cadvisorapiv2.FsInfo{}, fmt.Errorf("failed to find information for the filesystem labeled %q", label)
+	}
+	// TODO(vmarmol): Handle this better when a label has more than one image filesystem.
+	if len(res) > 1 {
+		klog.Warningf("More than one filesystem labeled %q: %#v. Only using the first one", label, res)
+	}
 
+	return res[0], nil
+}
+
+func (cc *cadvisorClient) WatchEvents(request *events.Request) (*events.EventChannel, error) {
+	return cc.WatchForEvents(request)
+}
 
 
 

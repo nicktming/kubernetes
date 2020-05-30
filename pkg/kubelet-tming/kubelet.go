@@ -38,6 +38,7 @@ import (
 	internalapi "k8s.io/cri-api/pkg/apis"
 	"k8s.io/kubernetes/pkg/kubelet-tming/kuberuntime"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/kubernetes/pkg/kubelet-tming/cadvisor"
 )
 
 const (
@@ -49,7 +50,7 @@ type Dependencies struct {
 	//
 	//// Injected Dependencies
 	//Auth                    server.AuthInterface
-	//CAdvisorInterface       cadvisor.Interface
+	CAdvisorInterface       cadvisor.Interface
 	Cloud                   cloudprovider.Interface
 	//ContainerManager        cm.ContainerManager
 	DockerClientConfig      *dockershim.ClientConfig
