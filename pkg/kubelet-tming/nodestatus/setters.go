@@ -34,7 +34,7 @@ func MachineInfo(nodeName string,
 		podsPerCore int,
 		machineInfoFunc func() (*cadvisorapiv1.MachineInfo, error),
 		capacityFunc func() v1.ResourceList,
-		devicePluginResourceCapacityFunc func() (v1.ResourceList, v1.ResourceList, []string),
+		//devicePluginResourceCapacityFunc func() (v1.ResourceList, v1.ResourceList, []string),
 		nodeAllocatableReservationFunc func() v1.ResourceList,
 		recordEventFunc func(eventType, event, message string),
 		) Setter {
@@ -44,7 +44,7 @@ func MachineInfo(nodeName string,
 		}
 
 		var devicePluginAllocatable v1.ResourceList
-		var devicePluginCapacity v1.ResourceList
+		//var devicePluginCapacity v1.ResourceList
 		var removedDevicePlugins []string
 
 		info, err := machineInfoFunc()
@@ -91,15 +91,15 @@ func MachineInfo(nodeName string,
 				}
 			}
 
-			devicePluginCapacity, devicePluginAllocatable, removedDevicePlugins = devicePluginResourceCapacityFunc()
-			if devicePluginCapacity != nil {
-				for k, v := range devicePluginCapacity {
-					if old, ok := node.Status.Capacity[k]; !ok || old.Value() != v.Value() {
-						klog.V(2).Infof("Update capacity for %s to %d", k, v.Value())
-					}
-					node.Status.Capacity[k] = v
-				}
-			}
+			//devicePluginCapacity, devicePluginAllocatable, removedDevicePlugins = devicePluginResourceCapacityFunc()
+			//if devicePluginCapacity != nil {
+			//	for k, v := range devicePluginCapacity {
+			//		if old, ok := node.Status.Capacity[k]; !ok || old.Value() != v.Value() {
+			//			klog.V(2).Infof("Update capacity for %s to %d", k, v.Value())
+			//		}
+			//		node.Status.Capacity[k] = v
+			//	}
+			//}
 
 			for _, removedResource := range removedDevicePlugins {
 				klog.V(2).Infof("Set capacity for %s to 0 on device removal", removedResource)
