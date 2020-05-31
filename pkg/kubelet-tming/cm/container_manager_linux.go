@@ -184,7 +184,7 @@ func (cm *containerManagerImpl) Start(node *v1.Node,
 			activePods ActivePodsFunc,
 			sourcesReady config.SourcesReady,
 			podStatusProvider status.PodStatusProvider,
-			runtimeService internalapi.RuntimeService) {
+			runtimeService internalapi.RuntimeService) error {
 
 	// TODO
 	// Initialize CPU manager
@@ -268,29 +268,29 @@ func (cm *containerManagerImpl) GetDevicePluginResourceCapacity() (v1.ResourceLi
 	return cm.deviceManager.GetCapacity()
 }
 
-func (cm *containerManagerImpl) GetNodeAllocatableReservation() v1.ResourceList {
-	evictionReservation := hardEvictionReservation(cm.HardEvictionThresholds, cm.capacity)
-	result := make(v1.ResourceList)
-	for k := range cm.capacity {
-		value := resource.NewQuantity(0, resource.DecimalSI)
-		if cm.NodeConfig.SystemReserved != nil {
-			value.Add(cm.NodeConfig.SystemReserved[k])
-		}
-		if cm.NodeConfig.KubeReserved != nil {
-			value.Add(cm.NodeConfig.KubeReserved[k])
-		}
-		if evictionReservation != nil {
-			value.Add(evictionReservation[k])
-		}
-		if !value.IsZero() {
-			result[k] = *value
-		}
-	}
-	return result
-}
-
-
-
+//func (cm *containerManagerImpl) GetNodeAllocatableReservation() v1.ResourceList {
+//	evictionReservation := hardEvictionReservation(cm.HardEvictionThresholds, cm.capacity)
+//	result := make(v1.ResourceList)
+//	for k := range cm.capacity {
+//		value := resource.NewQuantity(0, resource.DecimalSI)
+//		if cm.NodeConfig.SystemReserved != nil {
+//			value.Add(cm.NodeConfig.SystemReserved[k])
+//		}
+//		if cm.NodeConfig.KubeReserved != nil {
+//			value.Add(cm.NodeConfig.KubeReserved[k])
+//		}
+//		if evictionReservation != nil {
+//			value.Add(evictionReservation[k])
+//		}
+//		if !value.IsZero() {
+//			result[k] = *value
+//		}
+//	}
+//	return result
+//}
+//
+//
+//
 
 
 

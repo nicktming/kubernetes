@@ -17,7 +17,7 @@ import (
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/kubernetes/pkg/kubelet-tming/cadvisor"
-	"k8s.io/kubernetes/pkg/apis/events"
+	//"k8s.io/kubernetes/pkg/apis/events"
 	"k8s.io/kubernetes/pkg/features"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 )
