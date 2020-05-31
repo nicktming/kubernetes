@@ -7,7 +7,26 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
 	kubetypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog"
+	utilversion "k8s.io/apimachinery/pkg/util/version"
+	"errors"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
+
+
+const (
+	kubeRuntimeAPIVersion	= "0.1.0"
+)
+
+
+var (
+	// ErrVersionNotSupported is returned when the api version of runtime interface is not supported
+	ErrVersionNotSupported = errors.New("Runtime api version is not supported")
+)
+
+type podStateProvider interface {
+	IsPodDeleted(kubetypes.UID) bool
+	IsPodTerminated(kubetypes.UID) bool
+}
 
 type kubeGenericRuntimeManager struct {
 	runtimeName 		string
@@ -38,7 +57,57 @@ func NewKubeGenericRuntimeManager(
 		imageService:		imageService,
 	}
 
+	typedVersion, err := kubeRuntimeManager.runtimeService.Version(kubeRuntimeAPIVersion)
+	if err != nil {
+		klog.Errorf("Get runtime version failed: %v", err)
+		return nil, err
+	}
+	if typedVersion.Version != kubeRuntimeAPIVersion {
+		klog.Errorf("Runtime api version %s is not supported, only %s is supported now",
+			typedVersion.Version,
+			kubeRuntimeAPIVersion)
+		return nil, ErrVersionNotSupported
+	}
+
+	kubeRuntimeManager.runtimeName = typedVersion.RuntimeName
+	klog.Infof("Container runtime %s initialized, version: %s, apiVersion: %s",
+		typedVersion.RuntimeName,
+		typedVersion.RuntimeVersion,
+		typedVersion.RuntimeApiVersion)
+
 	return kubeRuntimeManager, nil
+}
+
+func (m *kubeGenericRuntimeManager) Type() string {
+	return m.runtimeName
+}
+
+
+func newRuntimeVersion(version string) (*utilversion.Version, error) {
+	if ver, err := utilversion.ParseSemantic(version); err == nil {
+		return ver, err
+	}
+	return utilversion.ParseGeneric(version)
+}
+
+func (m *kubeGenericRuntimeManager) getTypedVersion() (*runtimeapi.VersionResponse, error) {
+	typedVersion, err := m.runtimeService.Version(kubeRuntimeAPIVersion)
+	if err != nil {
+		klog.Errorf("Get remote runtime typed version failed: %v", err)
+		return nil, err
+	}
+	return typedVersion, nil
+}
+
+// Version returns the version information of the container runtime.
+func (m *kubeGenericRuntimeManager) Version() (kubecontainer.Version, error) {
+	typedVersion, err := m.runtimeService.Version(kubeRuntimeAPIVersion)
+	if err != nil {
+		klog.Errorf("Get remote runtime version failed: %v", err)
+		return nil, err
+	}
+
+	return newRuntimeVersion(typedVersion.RuntimeVersion)
 }
 
 

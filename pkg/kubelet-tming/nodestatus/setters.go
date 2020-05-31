@@ -20,6 +20,7 @@ import (
 	//"k8s.io/kubernetes/pkg/apis/events"
 	"k8s.io/kubernetes/pkg/features"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/kubernetes/pkg/version"
 )
 
 const (
@@ -27,6 +28,45 @@ const (
 )
 
 type Setter func(node *v1.Node) error
+
+
+func VersionInfo(versionInfoFunc func() (*cadvisorapiv1.VersionInfo, error), // typically Kubelet.cadvisor.VersionInfo
+			runtimeTypeFunc func() string, // typically Kubelet.containerRuntime.Type
+			runtimeVersionFunc func() (kubecontainer.Version, error), // typically Kubelet.containerRuntime.Version
+	) Setter {
+	return func(node *v1.Node) error {
+		verinfo, err := versionInfoFunc()
+		if err != nil {
+			// TODO(mtaufen): consider removing this log line, since returned error will be logged
+			klog.Errorf("Error getting version info: %v", err)
+			return fmt.Errorf("error getting version info: %v", err)
+		}
+		node.Status.NodeInfo.KernelVersion = verinfo.KernelVersion
+		node.Status.NodeInfo.OSImage = verinfo.ContainerOsVersion
+
+		runtimeVersion := "Unknown"
+		if runtimeVer, err := runtimeVersionFunc(); err == nil {
+			runtimeVersion = runtimeVer.String()
+		}
+
+		node.Status.NodeInfo.ContainerRuntimeVersion = fmt.Sprintf("%s://%s", runtimeTypeFunc(), runtimeVersion)
+
+		node.Status.NodeInfo.KubeletVersion = version.Get().String()
+		node.Status.NodeInfo.KubeProxyVersion = version.Get().String()
+
+		return nil
+	}
+}
+
+
+
+// DaemonEndpoints returns a Setter that updates the daemon endpoints on the node.
+func DaemonEndpoints(daemonEndpoints *v1.NodeDaemonEndpoints) Setter {
+	return func(node *v1.Node) error {
+		node.Status.DaemonEndpoints = *daemonEndpoints
+		return nil
+	}
+}
 
 
 func MachineInfo(nodeName string,

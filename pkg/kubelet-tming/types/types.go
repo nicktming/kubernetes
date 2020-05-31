@@ -1,6 +1,9 @@
 package types
 
-import "time"
+import (
+	"k8s.io/apimachinery/pkg/types"
+	"time"
+)
 
 type Timestamp struct {
 	time	time.Time
@@ -23,3 +26,9 @@ func (t *Timestamp) Get() time.Time {
 func (t *Timestamp) GetString() string {
 	return t.time.Format(time.RFC3339Nano)
 }
+
+// A pod UID which has been translated/resolved to the representation known to kubelets.
+type ResolvedPodUID types.UID
+
+// A pod UID for a mirror pod.
+type MirrorPodUID types.UID

@@ -44,6 +44,14 @@ import (
 
 	cadvisorapi "github.com/google/cadvisor/info/v1"
 	"k8s.io/kubernetes/pkg/kubelet-tming/status"
+	"k8s.io/kubernetes/pkg/kubelet/secret"
+	"k8s.io/kubernetes/pkg/kubelet/configmap"
+
+	"k8s.io/kubernetes/pkg/kubelet/util/manager"
+
+	kubepod "k8s.io/kubernetes/pkg/kubelet-tming/pod"
+	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager"
+	"k8s.io/kubernetes/pkg/kubelet/util/queue"
 )
 
 const (
@@ -182,6 +190,32 @@ type Kubelet struct {
 
 	// Syncs pods statuses with apiserver; also used as a cache of statuses.
 	statusManager status.Manager
+
+	// Information about the ports which are opened by daemons on Node running this Kubelet server.
+	daemonEndpoints *v1.NodeDaemonEndpoints
+
+	// Policy for handling garbage collection of dead containers.
+	containerGC kubecontainer.ContainerGC
+
+	// Secret manager.
+	secretManager secret.Manager
+
+	// ConfigMap manager.
+	configMapManager configmap.Manager
+
+	// podManager is a facade that abstracts away the various sources of pods
+	// this Kubelet services.
+	podManager kubepod.Manager
+
+
+	// A queue used to trigger pod workers.
+	workQueue queue.WorkQueue
+
+	// Store kubecontainer.PodStatus for all pods.
+	podCache kubecontainer.Cache
+
+	// podWorkers handle syncing Pods in response to events.
+	podWorkers PodWorkers
 }
 
 func (kl *Kubelet) BirthCry() {
@@ -382,6 +416,12 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	nodeStatusMaxImages int32) (*Kubelet, error) {
 
 
+
+
+
+
+
+
 	hostname, err := nodeutil.GetHostname(hostnameOverride)
 	if err != nil {
 		return nil, err
@@ -394,6 +434,12 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	containerGCPolicy := kubecontainer.ContainerGCPolicy{
+		MinAge: 		minimumGCAge.Duration,
+		MaxPerPodContainer: 	int(maxPerPodContainerCount),
+		MaxContainers:		int(maxContainerCount),
 	}
 
 	nodeIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
@@ -411,6 +457,10 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	//	klog.V(0).Infof("IPv6 node IP (%s), assume IPv6 operation", nodeIP)
 	//	protocol = utilipt.ProtocolIpv6
 	//}
+
+	daemonEndpoints := &v1.NodeDaemonEndpoints{
+		KubeletEndpoint: v1.DaemonEndpoint{Port: kubeCfg.Port},
+	}
 
 	nodeRef := &v1.ObjectReference{
 		Kind:      "Node",
@@ -443,7 +493,46 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		recorder:                                	kubeDeps.Recorder,
 		nodeRef: 					nodeRef,
 		sourcesReady:                            	config.NewSourcesReady(kubeDeps.PodConfig.SeenAllSources),
+		daemonEndpoints: 				daemonEndpoints,
 	}
+
+	var secretManager secret.Manager
+	var configMapManager configmap.Manager
+	switch kubeCfg.ConfigMapAndSecretChangeDetectionStrategy {
+	case kubeletconfiginternal.WatchChangeDetectionStrategy:
+		secretManager = secret.NewWatchingSecretManager(kubeDeps.KubeClient)
+		configMapManager = configmap.NewWatchingConfigMapManager(kubeDeps.KubeClient)
+	case kubeletconfiginternal.TTLCacheChangeDetectionStrategy:
+		secretManager = secret.NewCachingSecretManager(
+			kubeDeps.KubeClient, manager.GetObjectTTLFromNodeFunc(klet.GetNode))
+		configMapManager = configmap.NewCachingConfigMapManager(
+			kubeDeps.KubeClient, manager.GetObjectTTLFromNodeFunc(klet.GetNode))
+	case kubeletconfiginternal.GetChangeDetectionStrategy:
+		secretManager = secret.NewSimpleSecretManager(kubeDeps.KubeClient)
+		configMapManager = configmap.NewSimpleConfigMapManager(kubeDeps.KubeClient)
+	default:
+		return nil, fmt.Errorf("unknown configmap and secret manager mode: %v", kubeCfg.ConfigMapAndSecretChangeDetectionStrategy)
+	}
+
+	klet.secretManager = secretManager
+	klet.configMapManager = configMapManager
+
+	containerGC, err := kubecontainer.NewContainerGC(klet.containerRuntime, containerGCPolicy, klet.sourcesReady)
+	if err != nil {
+		return nil, err
+	}
+	klet.containerGC = containerGC
+
+	klet.podCache = kubecontainer.NewCache()
+	var checkpointManager checkpointmanager.CheckpointManager
+	if bootstrapCheckpointPath != "" {
+		checkpointManager, err = checkpointmanager.NewCheckpointManager(bootstrapCheckpointPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize checkpoint manager: %+v", err)
+		}
+	}
+
+	klet.podManager = kubepod.NewBasicPodManager(kubepod.NewBasicMirrorClient(klet.kubeClient), secretManager, configMapManager, checkpointManager)
 
 	if remoteRuntimeEndpoint != "" {
 		if remoteImageEndpoint == "" {
@@ -519,6 +608,10 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	}
 
 	klet.imageManager = imageManager
+
+	klet.workQueue = queue.NewBasicWorkQueue(klet.clock)
+
+
 
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
 
