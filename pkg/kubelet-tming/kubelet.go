@@ -41,6 +41,9 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-tming/cadvisor"
 	"k8s.io/kubernetes/pkg/kubelet-tming/cm"
 	"k8s.io/kubernetes/pkg/util/mount"
+
+	cadvisorapi "github.com/google/cadvisor/info/v1"
+	"k8s.io/kubernetes/pkg/kubelet-tming/status"
 )
 
 const (
@@ -148,6 +151,37 @@ type Kubelet struct {
 	containerManager cm.ContainerManager
 
 
+	// Maximum Number of Pods which can be run by this Kubelet
+	maxPods int
+
+	// the number of allowed pods per core
+	podsPerCore int
+
+	// Cached MachineInfo returned by cadvisor.
+	machineInfo *cadvisorapi.MachineInfo
+
+	// cAdvisor used for container information.
+	cadvisor cadvisor.Interface
+
+
+	// The EventRecorder to use
+	recorder record.EventRecorder
+
+	// Reference to this node.
+	nodeRef *v1.ObjectReference
+
+	// oneTimeInitializer is used to initialize modules that are dependent on the runtime to be up.
+	oneTimeInitializer sync.Once
+
+	// updateRuntimeMux is a lock on updating runtime, because this path is not thread-safe.
+	// This lock is used by Kubelet.updateRuntimeUp function and shouldn't be used anywhere else.
+	updateRuntimeMux sync.Mutex
+
+	// sourcesReady records the sources seen by the kubelet, it is thread-safe.
+	sourcesReady config.SourcesReady
+
+	// Syncs pods statuses with apiserver; also used as a cache of statuses.
+	statusManager status.Manager
 }
 
 func (kl *Kubelet) BirthCry() {
@@ -168,6 +202,66 @@ func (kl *Kubelet) Run(<-chan kubetypes.PodUpdate) {
 		// when k8s delete node, we need to restart kubelet again
 		go wait.Until(kl.syncNodeStatus, kl.nodeStatusUpdateFrequency, wait.NeverStop)
 	}
+
+	go wait.Until(kl.updateRuntimeUp, 5*time.Second, wait.NeverStop)
+}
+
+func (kl *Kubelet) GetActivePods() []*v1.Pod {
+	//allPods := kl.podManager.GetPods()
+	//activePods := kl.filterOutTerminatedPods(allPods)
+	//return activePods
+
+	allPods := make([]*v1.Pod, 0)
+	return allPods
+}
+
+func (kl *Kubelet) initializeRuntimeDependentModules() {
+	if err := kl.cadvisor.Start(); err != nil {
+		// Fail kubelet and rely on the babysitter to retry starting kubelet.
+		// TODO(random-liu): Add backoff logic in the babysitter
+		klog.Fatalf("Failed to start cAdvisor %v", err)
+	}
+
+	// trigger on-demand stats collection once so that we have capacity information for ephemeral storage.
+	// ignore any errors, since if stats collection is not successful, the container manager will fail to start below.
+	//kl.StatsProvider.GetCgroupStats("/", true)
+	// Start container manager.
+	node, err := kl.getNodeAnyWay()
+	if err != nil {
+		// Fail kubelet and rely on the babysitter to retry starting kubelet.
+		klog.Fatalf("Kubelet failed to get node info: %v", err)
+	}
+	// containerManager must start after cAdvisor because it needs filesystem capacity information
+	if err := kl.containerManager.Start(node, kl.GetActivePods, kl.sourcesReady, kl.statusManager, kl.runtimeService); err != nil {
+		// Fail kubelet and rely on the babysitter to retry starting kubelet.
+		klog.Fatalf("Failed to start ContainerManager %v", err)
+	}
+	//// eviction manager must start after cadvisor because it needs to know if the container runtime has a dedicated imagefs
+	//kl.evictionManager.Start(kl.StatsProvider, kl.GetActivePods, kl.podResourcesAreReclaimed, evictionMonitoringPeriod)
+	//
+	//// container log manager must start after container runtime is up to retrieve information from container runtime
+	//// and inform container to reopen log file after log rotation.
+	//kl.containerLogManager.Start()
+	//if kl.enablePluginsWatcher {
+	//	// Adding Registration Callback function for CSI Driver
+	//	kl.pluginManager.AddHandler(pluginwatcherapi.CSIPlugin, plugincache.PluginHandler(csi.PluginHandler))
+	//	// Adding Registration Callback function for Device Manager
+	//	kl.pluginManager.AddHandler(pluginwatcherapi.DevicePlugin, kl.containerManager.GetPluginRegistrationHandler())
+	//	// Start the plugin manager
+	//	klog.V(4).Infof("starting plugin manager")
+	//	go kl.pluginManager.Run(kl.sourcesReady, wait.NeverStop)
+	//}
+}
+
+
+func (kl *Kubelet) updateRuntimeUp() {
+	kl.updateRuntimeMux.Lock()
+	defer kl.updateRuntimeMux.Unlock()
+
+	//klog.Info("update Runtime Up")
+	// TODO a lot
+
+	kl.oneTimeInitializer.Do(kl.initializeRuntimeDependentModules)
 
 }
 
@@ -343,6 +437,12 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		containerRuntimeName:				containerRuntime,
 		nodeStatusMaxImages:				-1,
 		containerManager:                        	kubeDeps.ContainerManager,
+		maxPods:                                 	int(kubeCfg.MaxPods),
+		podsPerCore:                             	int(kubeCfg.PodsPerCore),
+		cadvisor:                                	kubeDeps.CAdvisorInterface,
+		recorder:                                	kubeDeps.Recorder,
+		nodeRef: 					nodeRef,
+		sourcesReady:                            	config.NewSourcesReady(kubeDeps.PodConfig.SeenAllSources),
 	}
 
 	if remoteRuntimeEndpoint != "" {
@@ -383,6 +483,12 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	default:
 		return nil, fmt.Errorf("unsupported CRI runtime: %q", containerRuntime)
 	}
+
+	machineInfo, err := klet.cadvisor.MachineInfo()
+	if err != nil {
+		return nil, err
+	}
+	klet.machineInfo = machineInfo
 
 	runtimeService, imageService, err := getRuntimeAndImageServices(remoteRuntimeEndpoint, remoteImageEndpoint, kubeCfg.RuntimeRequestTimeout)
 	if err != nil {

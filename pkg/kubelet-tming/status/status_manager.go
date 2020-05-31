@@ -27,3 +27,10 @@ type PodStatusProvider interface {
 	// was a cache hit.
 	GetPodStatus(uid types.UID) (v1.PodStatus, bool)
 }
+
+
+type Manager interface {
+	PodStatusProvider
+
+
+}

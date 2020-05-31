@@ -47,6 +47,14 @@ func (c *PodConfig) Channel(source string) chan<- interface{} {
 	return c.mux.Channel(source)
 }
 
+func (c *PodConfig) SeenAllSources(seenSources sets.String) bool {
+	if c.pods == nil {
+		return false
+	}
+	klog.V(5).Infof("Looking for %v, have seen %v", c.sources.List(), seenSources)
+	return seenSources.HasAll(c.sources.List()...) && c.pods.seenSources(c.sources.List()...)
+}
+
 
 func NewPodConfig(mode PodConfigNotificationMode) *PodConfig {
 	updates := make(chan kubetypes.PodUpdate, 50)
