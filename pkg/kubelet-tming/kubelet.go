@@ -40,6 +40,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/kubelet-tming/cadvisor"
 	"k8s.io/kubernetes/pkg/kubelet-tming/cm"
+	"k8s.io/kubernetes/pkg/util/mount"
 )
 
 const (
@@ -59,7 +60,7 @@ type Dependencies struct {
 	HeartbeatClient         clientset.Interface
 	OnHeartbeatFailure      func()
 	KubeClient              clientset.Interface
-	//Mounter                 mount.Interface
+	Mounter                 mount.Interface
 	//OOMAdjuster             *oom.OOMAdjuster
 	//OSInterface             kubecontainer.OSInterface
 	PodConfig               *config.PodConfig
@@ -143,6 +144,8 @@ type Kubelet struct {
 	runtimeService internalapi.RuntimeService
 
 	nodeStatusMaxImages int32
+
+	containerManager cm.ContainerManager
 
 
 }
@@ -339,6 +342,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		externalCloudProvider:                   	cloudprovider.IsExternal(cloudProvider),
 		containerRuntimeName:				containerRuntime,
 		nodeStatusMaxImages:				-1,
+		containerManager:                        	kubeDeps.ContainerManager,
 	}
 
 	if remoteRuntimeEndpoint != "" {

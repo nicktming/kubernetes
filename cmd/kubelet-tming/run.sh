@@ -15,3 +15,4 @@ config="$config --kubeconfig=$homepath/ssl_keys/node/kubelet_kubeconfig"
 
 // TODO
 // 1. /proc/$$/cgroup
+// 2. Check whether swap is enabled. The Kubelet does not support running with swap enabled.

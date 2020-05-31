@@ -89,6 +89,10 @@ import (
 	"k8s.io/kubernetes/pkg/version/verflag"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet-tming/types"
 	"k8s.io/kubernetes/pkg/kubelet-tming/cadvisor"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/kubernetes/pkg/kubelet/eviction"
+
+	evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
 )
 
 const (
@@ -611,7 +615,7 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 
 	var cgroupRoots []string
 
-	klog.Infof("init cgroups s.CgroupRoot:%v, s.CgroupDriver:%v, s.KubeletCgroups:%v, s.RuntimeCgroups:%v, s.SystemCgroups:%v",
+	klog.Infof("init cgroups s.CgroupRoot:%s, s.CgroupDriver:%s, s.KubeletCgroups:%s, s.RuntimeCgroups:%s, s.SystemCgroups:%s",
 			s.CgroupRoot, s.CgroupDriver, s.KubeletCgroups, s.RuntimeCgroups, s.SystemCgroups)
 
 	cgroupRoots = append(cgroupRoots, cm.NodeAllocatableRoot(s.CgroupRoot, s.CgroupDriver))
@@ -649,7 +653,7 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 
 	// Setup event recorder if required.
 	//makeEventRecorder(kubeDeps, nodeName)
-/*
+
 	if kubeDeps.ContainerManager == nil {
 		if s.CgroupsPerQOS && s.CgroupRoot == "" {
 			klog.Info("--cgroups-per-qos enabled, but --cgroup-root was not specified.  defaulting to /")
@@ -714,7 +718,7 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 			return err
 		}
 	}
-*/
+
 	//if err := checkPermissions(); err != nil {
 	//	klog.Error(err)
 	//}

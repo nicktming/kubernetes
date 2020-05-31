@@ -5,6 +5,7 @@ import (
 	"path"
 	"fmt"
 	cgroupsystemd "github.com/opencontainers/runc/libcontainer/cgroups/systemd"
+	libcontainercgroups "github.com/opencontainers/runc/libcontainer/cgroups"
 )
 
 type libcontainerCgroupManagerType string
@@ -14,6 +15,29 @@ const (
 	libcontainerSystemd 	libcontainerCgroupManagerType = "systemd"
 	systemdSuffix	 	string 			      = ".slice"
 )
+
+type CgroupSubsystems struct {
+	Mounts 		[]libcontainercgroups.Mount
+
+	MountPoints 	map[string]string
+}
+
+type cgroupManagerImpl struct {
+	subsystems 	*CgroupSubsystems
+
+	//adapter 	*libcontainerAdapter
+}
+
+func NewCgroupManager(cs *CgroupSubsystems, cgroupDriver string) CgroupManager {
+	//managerType := libcontainerCgroupfs
+	//if cgroupDriver == string(libcontainerSystemd) {
+	//	managerType = libcontainerSystemd
+	//}
+	return &cgroupManagerImpl{
+		subsystems: 	cs,
+		//adapter:
+	}
+}
 
 func NewCgroupName(base CgroupName, components ...string) CgroupName {
 	for _, component := range components {
