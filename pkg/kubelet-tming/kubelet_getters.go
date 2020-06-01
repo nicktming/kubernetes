@@ -25,3 +25,13 @@ func (kl *Kubelet) getNodeAnyWay() (*v1.Node, error) {
 func (kl *Kubelet) GetNodeConfig() cm.NodeConfig {
 	return kl.containerManager.GetNodeConfig()
 }
+
+// GetPodByCgroupfs provides the pod that maps to the specified cgroup, as well
+// as whether the pod was found.
+func (kl *Kubelet) GetPodByCgroupfs(cgroupfs string) (*v1.Pod, bool) {
+	//pcm := kl.containerManager.NewPodContainerManager()
+	//if result, podUID := pcm.IsPodCgroup(cgroupfs); result {
+	//	return kl.podManager.GetPodByUID(podUID)
+	//}
+	return nil, false
+}
