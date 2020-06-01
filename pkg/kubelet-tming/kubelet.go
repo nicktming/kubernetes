@@ -55,7 +55,8 @@ import (
 
 	serverstats "k8s.io/kubernetes/pkg/kubelet-tming/server/stats"
 	"k8s.io/kubernetes/pkg/kubelet-tming/eviction"
-	"k8s.io/kubernetes/pkg/kubelet-tming/server/stats"
+
+	"k8s.io/kubernetes/pkg/kubelet-tming/stats"
 )
 
 const (
@@ -229,6 +230,9 @@ type Kubelet struct {
 
 	// Needed to observe and respond to situations that could impact node stability
 	evictionManager eviction.Manager
+
+	// StatsProvider provides the node and the container stats.
+	*stats.StatsProvider
 
 }
 
