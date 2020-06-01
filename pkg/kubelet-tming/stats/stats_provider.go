@@ -9,7 +9,7 @@ import (
 	kubepod "k8s.io/kubernetes/pkg/kubelet-tming/pod"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
 	statsapi "k8s.io/kubernetes/pkg/kubelet/apis/stats/v1alpha1"
-	"k8s.io/kubernetes/pkg/kubelet/server/stats"
+	"k8s.io/kubernetes/pkg/kubelet-tming/server/stats"
 	"k8s.io/kubernetes/pkg/kubelet-tming/status"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
