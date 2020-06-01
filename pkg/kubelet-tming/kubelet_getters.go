@@ -35,3 +35,15 @@ func (kl *Kubelet) GetPodByCgroupfs(cgroupfs string) (*v1.Pod, bool) {
 	//}
 	return nil, false
 }
+
+// GetPodByFullName gets the pod with the given 'full' name, which
+// incorporates the namespace as well as whether the pod was found.
+func (kl *Kubelet) GetPodByFullName(podFullName string) (*v1.Pod, bool) {
+	return kl.podManager.GetPodByFullName(podFullName)
+}
+
+// GetPodByName provides the first pod that matches namespace and name, as well
+// as whether the pod was found.
+func (kl *Kubelet) GetPodByName(namespace, name string) (*v1.Pod, bool) {
+	return kl.podManager.GetPodByName(namespace, name)
+}
