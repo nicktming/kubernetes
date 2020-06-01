@@ -29,6 +29,8 @@ type ContainerManager interface {
 	// GetNodeConfig returns a NodeConfig that is being used by the container manager.
 	GetNodeConfig() NodeConfig
 
+	GetPodCgroupRoot() string
+
 }
 
 

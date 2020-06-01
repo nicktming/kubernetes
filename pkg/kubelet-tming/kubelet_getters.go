@@ -47,3 +47,8 @@ func (kl *Kubelet) GetPodByFullName(podFullName string) (*v1.Pod, bool) {
 func (kl *Kubelet) GetPodByName(namespace, name string) (*v1.Pod, bool) {
 	return kl.podManager.GetPodByName(namespace, name)
 }
+
+// GetPodCgroupRoot returns the listeral cgroupfs value for the cgroup containing all pods
+func (kl *Kubelet) GetPodCgroupRoot() string {
+	return kl.containerManager.GetPodCgroupRoot()
+}

@@ -105,6 +105,12 @@ func (cgroupName CgroupName) ToSystemd() string {
 
 
 
+func (m *cgroupManagerImpl) Name(name CgroupName) string {
+	//if m.adapter.cgroupManagerType == libcontainerSystemd {
+	//	return name.ToSystemd()
+	//}
+	return name.ToCgroupfs()
+}
 
 
 
