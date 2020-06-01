@@ -31,6 +31,4 @@ type PodStatusProvider interface {
 
 type Manager interface {
 	PodStatusProvider
-
-
 }

@@ -32,11 +32,13 @@ type kubeGenericRuntimeManager struct {
 	runtimeName 		string
 	recorder 		record.EventRecorder
 	// wrapped image puller.
-	imagePuller images.ImageManager
+	imagePuller 		images.ImageManager
 
 	// gRPC service clients
-	runtimeService internalapi.RuntimeService
-	imageService   internalapi.ImageManagerService
+	runtimeService 		internalapi.RuntimeService
+	imageService   		internalapi.ImageManagerService
+
+	containerGC 		*containerGC
 
 }
 
@@ -51,6 +53,7 @@ type KubeGenericRuntime interface {
 func NewKubeGenericRuntimeManager(
 			runtimeService internalapi.RuntimeService,
 			imageService internalapi.ImageManagerService,
+			podStateProvider podStateProvider,
 			) (KubeGenericRuntime, error) {
 	kubeRuntimeManager := &kubeGenericRuntimeManager{
 		runtimeService:		runtimeService,
@@ -74,6 +77,8 @@ func NewKubeGenericRuntimeManager(
 		typedVersion.RuntimeName,
 		typedVersion.RuntimeVersion,
 		typedVersion.RuntimeApiVersion)
+
+	kubeRuntimeManager.containerGC = newContainerGC(runtimeService, podStateProvider, kubeRuntimeManager)
 
 	return kubeRuntimeManager, nil
 }
@@ -182,4 +187,9 @@ func (m *kubeGenericRuntimeManager) GetPods(all bool) ([]*kubecontainer.Pod, err
 
 	return result, nil
 
+}
+
+// GarbageCollect removes dead containers using the specified container gc policy.
+func (m *kubeGenericRuntimeManager) GarbageCollect(gcPolicy kubecontainer.ContainerGCPolicy, allSourcesReady bool, evictNonDeletedPods bool) error {
+	return m.containerGC.GarbageCollect(gcPolicy, allSourcesReady, evictNonDeletedPods)
 }

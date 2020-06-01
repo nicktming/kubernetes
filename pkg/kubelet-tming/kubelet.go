@@ -588,7 +588,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	// TODO RuntimeClass
 
 
-	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService)
+	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet)
 	if err != nil {
 		return nil, err
 	}

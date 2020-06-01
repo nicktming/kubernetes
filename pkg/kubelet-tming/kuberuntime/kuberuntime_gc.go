@@ -12,7 +12,7 @@ type containerGC struct {
 	podStateProvider 	podStateProvider
 }
 
-func newContainerGC(client internalapi.RuntimeService, podStateProvider podStateProvider, manager *kubeGenericRuntimeManager) {
+func newContainerGC(client internalapi.RuntimeService, podStateProvider podStateProvider, manager *kubeGenericRuntimeManager) *containerGC {
 	return &containerGC{
 		client: 		client,
 		manager: 		manager,

@@ -33,6 +33,10 @@ type ImageService interface {
 
 type Runtime interface {
 
+	ImageService
+
+	GetPods(all bool) ([]*Pod, error)
+
 	Type() string
 	Version() (Version, error)
 
@@ -131,10 +135,4 @@ type Pod struct {
 	Namespace 	string
 	Containers 	[]*Container
 	Sandboxes 	[]*Container
-}
-
-type Runtime interface {
-	ImageService
-
-	GetPods(all bool) ([]*Pod, error)
 }
