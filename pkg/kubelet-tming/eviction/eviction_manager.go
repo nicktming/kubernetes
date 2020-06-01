@@ -104,7 +104,7 @@ func (m *managerImpl) synchronize(DiskInfoProvider DiskInfoProvider, podFunc Act
 	}
 	klog.V(3).Infof("eviction manager: synchronize housekeeping")
 
-	res := make([]v1.Pod, 0)
+	res := make([]*v1.Pod, 0)
 
 	return res
 }
