@@ -25,6 +25,10 @@ type ContainerManager interface {
 	GetDevicePluginResourceCapacity() 	(v1.ResourceList, v1.ResourceList, []string)
 
 	GetNodeAllocatableReservation()		v1.ResourceList
+
+	// GetNodeConfig returns a NodeConfig that is being used by the container manager.
+	GetNodeConfig() NodeConfig
+
 }
 
 

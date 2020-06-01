@@ -293,6 +293,11 @@ func (cm *containerManagerImpl) GetDevicePluginResourceCapacity() (v1.ResourceLi
 //
 
 
+func (cm *containerManagerImpl) GetNodeConfig() NodeConfig {
+	cm.RLock()
+	defer cm.RUnlock()
+	return cm.NodeConfig
+}
 
 
 

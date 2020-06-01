@@ -4,6 +4,7 @@ package kubelet_tming
 import (
 	cadvisorapiv1 "github.com/google/cadvisor/info/v1"
 	"k8s.io/api/core/v1"
+	"k8s.io/kubernetes/pkg/kubelet-tming/cm"
 )
 
 // GetCachedMachineInfo assumes that the machine info can't change without a reboot
@@ -18,4 +19,9 @@ func (kl *Kubelet) getNodeAnyWay() (*v1.Node, error) {
 		}
 	}
 	return kl.initialNode()
+}
+
+// GetNodeConfig returns the container manager node config.
+func (kl *Kubelet) GetNodeConfig() cm.NodeConfig {
+	return kl.containerManager.GetNodeConfig()
 }
