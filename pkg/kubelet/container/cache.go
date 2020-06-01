@@ -169,10 +169,13 @@ func (c *cache) notify(id types.UID, timestamp time.Time) {
 	newList := []*subRecord{}
 	for i, r := range list {
 		if timestamp.Before(r.time) {
+			// r.time > timestamp
+
 			// Doesn't meet the time requirement; keep the record.
 			newList = append(newList, list[i])
 			continue
 		}
+		// r.time <= timestamp
 		r.ch <- c.get(id)
 		close(r.ch)
 	}
