@@ -52,6 +52,10 @@ import (
 	kubepod "k8s.io/kubernetes/pkg/kubelet-tming/pod"
 	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager"
 	"k8s.io/kubernetes/pkg/kubelet/util/queue"
+
+	serverstats "k8s.io/kubernetes/pkg/kubelet-tming/server/stats"
+	"k8s.io/kubernetes/pkg/kubelet-tming/eviction"
+	"k8s.io/kubernetes/pkg/kubelet-tming/server/stats"
 )
 
 const (
@@ -216,6 +220,16 @@ type Kubelet struct {
 
 	// podWorkers handle syncing Pods in response to events.
 	podWorkers PodWorkers
+
+	// Monitor resource usage
+	resourceAnalyzer serverstats.ResourceAnalyzer
+
+	// used to measure usage stats on system
+	summaryProvider stats.SummaryProvider
+
+	// Needed to observe and respond to situations that could impact node stability
+	evictionManager eviction.Manager
+
 }
 
 func (kl *Kubelet) BirthCry() {
@@ -549,6 +563,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		MTU:                int(crOptions.NetworkPluginMTU),
 	}
 
+	klet.resourceAnalyzer = serverstats.NewResourceAnalyzer(klet, kubeCfg.VolumeStatsAggPeriod.Duration)
+
 	switch containerRuntime {
 	case kubetypes.DockerContainerRuntime:
 
@@ -587,7 +603,6 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	// TODO RuntimeClass
 
-
 	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet)
 	if err != nil {
 		return nil, err
@@ -611,7 +626,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	klet.workQueue = queue.NewBasicWorkQueue(klet.clock)
 
-
+	evictionManager := eviction.NewManager(klet.resourceAnalyzer)
+	klet.evictionManager = evictionManager
 
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
 

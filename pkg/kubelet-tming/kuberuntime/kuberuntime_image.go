@@ -42,3 +42,17 @@ func (m *kubeGenericRuntimeManager) ListImages() ([]kubecontainer.Image, error) 
 
 	return images, nil
 }
+
+// TODO: Get imagefs stats directly from CRI.
+func (m *kubeGenericRuntimeManager) ImageStats() (*kubecontainer.ImageStats, error) {
+	allImages, err := m.imageService.ListImages(nil)
+	if err != nil {
+		klog.Errorf("ListImages failed: %v", err)
+		return nil, err
+	}
+	stats := &kubecontainer.ImageStats{}
+	for _, img := range allImages {
+		stats.TotalStorageBytes += img.Size_
+	}
+	return stats, nil
+}

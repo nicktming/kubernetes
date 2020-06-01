@@ -30,6 +30,58 @@ const (
 type Setter func(node *v1.Node) error
 
 
+func MemoryPressureCondition(nowFunc func() time.Time,
+			pressureFunc func() bool,
+			recordEventFunc func(eventType, event string),
+) Setter {
+	return func(node *v1.Node) error {
+		currentTime := metav1.NewTime(nowFunc())
+		var condition *v1.NodeCondition
+
+		for i := range node.Status.Conditions {
+			if node.Status.Conditions[i].Type == v1.NodeMemoryPressure {
+				condition = &node.Status.Conditions[i]
+			}
+		}
+
+		newCondition := false
+
+		if condition == nil {
+			condition = &v1.NodeCondition {
+				Type: 		v1.NodeMemoryPressure,
+				Status: 	v1.ConditionUnknown,
+			}
+			newCondition = true
+		}
+
+		condition.LastHeartbeatTime = currentTime
+
+
+		if pressureFunc() {
+			if condition.Status != v1.ConditionTrue {
+				condition.Status = v1.ConditionTrue
+				condition.Reason = "KubeletHasInsufficientMemory"
+				condition.Message = "kubelet has insufficient memory available"
+				condition.LastTransitionTime = currentTime
+				recordEventFunc(v1.EventTypeNormal, "NodeHasInsufficientMemory")
+			}
+		} else if condition.Status != v1.ConditionFalse {
+			condition.Status = v1.ConditionFalse
+			condition.Reason = "KubeletHasSufficientMemory"
+			condition.Message = "kubelet has sufficient memory available"
+			condition.LastTransitionTime = currentTime
+			recordEventFunc(v1.EventTypeNormal, "NodeHasSufficientMemory")
+		}
+
+		if newCondition {
+			node.Status.Conditions = append(node.Status.Conditions, *condition)
+		}
+
+		return nil
+	}
+}
+
+
 func VersionInfo(versionInfoFunc func() (*cadvisorapiv1.VersionInfo, error), // typically Kubelet.cadvisor.VersionInfo
 			runtimeTypeFunc func() string, // typically Kubelet.containerRuntime.Type
 			runtimeVersionFunc func() (kubecontainer.Version, error), // typically Kubelet.containerRuntime.Version
@@ -232,55 +284,6 @@ func Images(nodeStatusMaxImages int32,
 			})
 		}
 		node.Status.Images = imagesOnNode
-		return nil
-	}
-}
-
-func MemoryPressureCondition(nowFunc func() time.Time,
-			pressureFunc func() bool,
-			recordEventFunc func(eventType, event string),
-) Setter {
-	return func(node *v1.Node) error {
-		currentTime := metav1.NewTime(nowFunc())
-
-		var condition *v1.NodeCondition
-
-		for i := range node.Status.Conditions {
-			if node.Status.Conditions[i].Type == v1.NodeMemoryPressure {
-				condition = &node.Status.Conditions[i]
-			}
-		}
-
-		newCondition := false
-		if condition == nil {
-			condition = &v1.NodeCondition {
-				Type: 		v1.NodeMemoryPressure,
-				Status: 	v1.ConditionUnknown,
-			}
-			newCondition = true
-		}
-
-		condition.LastHeartbeatTime = currentTime
-
-		if pressureFunc() {
-			if condition.Status != v1.ConditionTrue {
-				condition.Status = v1.ConditionTrue
-				condition.Reason = "KubeletHasInsufficientMemory"
-				condition.Message = "kubelet has insufficient memory available"
-				recordEventFunc(v1.EventTypeNormal, "NodeHasInsufficientMemory")
-			}
-		} else if condition.Status != v1.ConditionFalse {
-			condition.Status = v1.ConditionFalse
-			condition.Reason = "KubeletHasSufficientMemory"
-			condition.Message = "kubelet has sufficient memory avaiable"
-			condition.LastTransitionTime = currentTime
-			recordEventFunc(v1.EventTypeNormal, "NodeHasSufficientMemory")
-		}
-
-		if newCondition {
-			node.Status.Conditions = append(node.Status.Conditions, *condition)
-		}
-
 		return nil
 	}
 }

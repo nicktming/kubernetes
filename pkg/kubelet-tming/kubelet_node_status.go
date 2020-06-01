@@ -22,6 +22,12 @@ func (kl *Kubelet) recordEvent(eventType, event, message string) {
 	kl.recorder.Eventf(kl.nodeRef, eventType, event, message)
 }
 
+func (kl *Kubelet) recordNodeStatusEvent(eventType, event string) {
+	klog.V(2).Infof("Recording %s event message for node %s", event, kl.nodeName)
+
+	kl.recorder.Eventf(kl.nodeRef, eventType, event, "Node %s status is now: %s", kl.nodeName, event)
+}
+
 func (kl *Kubelet) defaultNodeStatusFuncs() []func(*v1.Node) error {
 
 	var nodeAddressFunc func() ([]v1.NodeAddress, error)
@@ -39,8 +45,11 @@ func (kl *Kubelet) defaultNodeStatusFuncs() []func(*v1.Node) error {
 		nodestatus.GoRuntime(),
 		nodestatus.DaemonEndpoints(kl.daemonEndpoints),
 		nodestatus.Images(kl.nodeStatusMaxImages, kl.imageManager.GetImageList),
-
 	)
+
+	setters = append(setters,
+		nodestatus.MemoryPressureCondition(kl.clock.Now, kl.evictionManager.IsUnderMemoryPressure, kl.recordNodeStatusEvent),
+		)
 
 	return setters
 }
