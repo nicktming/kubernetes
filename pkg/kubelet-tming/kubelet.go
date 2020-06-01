@@ -226,7 +226,7 @@ type Kubelet struct {
 	resourceAnalyzer serverstats.ResourceAnalyzer
 
 	// used to measure usage stats on system
-	summaryProvider stats.SummaryProvider
+	//summaryProvider serverstats.SummaryProvider
 
 	// Needed to observe and respond to situations that could impact node stability
 	evictionManager eviction.Manager
