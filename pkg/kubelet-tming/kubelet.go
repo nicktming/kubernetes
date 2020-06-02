@@ -748,7 +748,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		}
 		if !supported {
 			klet.dockerLegacyService = ds
-			legacyLogProvider = ds
+			//legacyLogProvider = ds
 		}
 
 
@@ -770,7 +770,10 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	// TODO RuntimeClass
 
-	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet, legacyLogProvider)
+	//runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet, legacyLogProvider)
+
+	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet, nil)
+
 	if err != nil {
 		return nil, err
 	}
