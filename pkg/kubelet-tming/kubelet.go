@@ -317,7 +317,7 @@ func (kl *Kubelet) HandlePodAdditions(pods []*v1.Pod) {
 
 		//existingPods := kl.podManager.GetPods()
 
-		//kl.podManager.AddPod(pod)
+		kl.podManager.AddPod(pod)
 
 		//if kubepod.IsMirrorPod(pod) {
 		//	kl.handleMirrorPod(pod, start)

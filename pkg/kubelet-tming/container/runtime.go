@@ -50,6 +50,8 @@ type Runtime interface {
 	Version() (Version, error)
 
 	GarbageCollect(gcPolicy ContainerGCPolicy, allSourcesReady bool, evictNonDeletedPods bool) error
+
+
 }
 
 type ContainerState string

@@ -125,7 +125,7 @@ type podWorkers struct {
 }
 
 func newPodWorkers(syncPodFn syncPodFnType, recorder record.EventRecorder, workQueue queue.WorkQueue,
-resyncInterval, backOffPeriod time.Duration, podCache kubecontainer.Cache) *podWorkers {
+			resyncInterval, backOffPeriod time.Duration, podCache kubecontainer.Cache) *podWorkers {
 	return &podWorkers{
 		podUpdates:                map[types.UID]chan UpdatePodOptions{},
 		isWorking:                 map[types.UID]bool{},
@@ -150,7 +150,7 @@ func (p *podWorkers) managePodLoop(podUpdates <-chan UpdatePodOptions) {
 			// after the cache is at least newer than the finished time of
 			// the previous sync.
 
-			klog.Infof("pod workers got from podcache status starts.")
+			klog.Infof("pod workers got from podcache status starts : lastSyncTime: %v", lastSyncTime)
 
 			status, err := p.podCache.GetNewerThan(podUID, lastSyncTime)
 
