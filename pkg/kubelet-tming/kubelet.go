@@ -254,7 +254,7 @@ func (kl *Kubelet) Run(<-chan kubetypes.PodUpdate) {
 
 	if kl.kubeClient != nil {
 
-		klog.Infof("syncNodeStatus kl.nodeStatusUpdateFrequency: %v", kl.nodeStatusUpdateFrequency)
+		klog.V(5).Infof("syncNodeStatus kl.nodeStatusUpdateFrequency: %v", kl.nodeStatusUpdateFrequency)
 
 		// when k8s delete node, we need to restart kubelet again
 		go wait.Until(kl.syncNodeStatus, kl.nodeStatusUpdateFrequency, wait.NeverStop)
