@@ -62,12 +62,27 @@ import (
 	"net/http"
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
 	//"sort"
+	"k8s.io/kubernetes/pkg/kubelet-tming/pleg"
 )
 
 const (
 	nodeStatusUpdateRetry = 1
 
 	backOffPeriod = time.Second * 10
+
+	// Capacity of the channel for receiving pod lifecycle events. This number
+	// is a bit arbitrary and may be adjusted in the future.
+	plegChannelCapacity = 1000
+
+	// Generic PLEG relies on relisting for discovering container events.
+	// A longer period means that kubelet will take longer to detect container
+	// changes and to update pod status. On the other hand, a shorter period
+	// will cause more frequent relisting (e.g., container runtime operations),
+	// leading to higher cpu usage.
+	// Note that even though we set the period to 1s, the relisting itself can
+	// take more than 1s to finish if the container runtime responds slowly
+	// and/or when there are many container changes in one cycle.
+	plegRelistPeriod = time.Second * 1
 )
 
 type Dependencies struct {
@@ -252,6 +267,8 @@ type Kubelet struct {
 	// pods on this node.
 	resyncInterval time.Duration
 
+	pleg pleg.PodLifecycleEventGenerator
+
 }
 
 func (kl *Kubelet) BirthCry() {
@@ -278,6 +295,8 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 
 	go wait.Until(kl.updateRuntimeUp, 5*time.Second, wait.NeverStop)
 
+	// Start the pod lifecycle event generator.
+	kl.pleg.Start()
 	kl.syncLoop(updates, kl)
 }
 
@@ -760,6 +779,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	evictionManager := eviction.NewManager(klet.resourceAnalyzer)
 	klet.evictionManager = evictionManager
 
+	klet.pleg = pleg.NewGenericPLEG(klet.containerRuntime, plegChannelCapacity, plegRelistPeriod, klet.podCache, clock.RealClock{})
 
 	klet.podWorkers = newPodWorkers(klet.syncPod, kubeDeps.Recorder, klet.workQueue, klet.resyncInterval, backOffPeriod, klet.podCache)
 
