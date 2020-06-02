@@ -21,6 +21,10 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/kubernetes/pkg/version"
+	//"k8s.io/kubernetes/pkg/kubelet-tming/cm"
+	"strings"
+	"k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/kubernetes/pkg/kubelet/events"
 )
 
 const (
@@ -28,6 +32,223 @@ const (
 )
 
 type Setter func(node *v1.Node) error
+
+
+// ReadyCondition returns a Setter that updates the v1.NodeReady condition on the node.
+func ReadyCondition(
+	nowFunc func() time.Time, // typically Kubelet.clock.Now
+	//runtimeErrorsFunc func() error, // typically Kubelet.runtimeState.runtimeErrors
+	//networkErrorsFunc func() error, // typically Kubelet.runtimeState.networkErrors
+	//storageErrorsFunc func() error, // typically Kubelet.runtimeState.storageErrors
+	//appArmorValidateHostFunc func() error, // typically Kubelet.appArmorValidator.ValidateHost, might be nil depending on whether there was an appArmorValidator
+	//cmStatusFunc func() cm.Status, // typically Kubelet.containerManager.Status
+	recordEventFunc func(eventType, event string), // typically Kubelet.recordNodeStatusEvent
+) Setter {
+	return func(node *v1.Node) error {
+
+		currentTime := metav1.NewTime(nowFunc())
+		newNodeReadyCondition := v1.NodeCondition{
+			Type:			v1.NodeReady,
+			Status:			v1.ConditionTrue,
+			Reason:			"KubeletReady",
+			Message:		"kubelet is posting ready status",
+			LastHeartbeatTime: 	currentTime,
+		}
+
+		//errs := []error{runtimeErrorsFunc(), networkErrorsFunc(), storageErrorsFunc()}
+
+		errs := []error{}
+		requiredCapacities := []v1.ResourceName{v1.ResourceCPU, v1.ResourceMemory, v1.ResourcePods}
+		if utilfeature.DefaultFeatureGate.Enabled(features.LocalStorageCapacityIsolation) {
+			requiredCapacities = append(requiredCapacities, v1.ResourceEphemeralStorage)
+		}
+		missingCapacities := []string{}
+		for _, resource := range requiredCapacities {
+			if _, found := node.Status.Capacity[resource]; !found {
+				missingCapacities = append(missingCapacities, string(resource))
+			}
+		}
+		if len(missingCapacities) > 0 {
+			errs = append(errs, fmt.Errorf("Missing node capacity for resources: %s", strings.Join(missingCapacities, ", ")))
+		}
+		if aggregatedErr := errors.NewAggregate(errs); aggregatedErr != nil {
+			newNodeReadyCondition = v1.NodeCondition{
+				Type:              v1.NodeReady,
+				Status:            v1.ConditionFalse,
+				Reason:            "KubeletNotReady",
+				Message:           aggregatedErr.Error(),
+				LastHeartbeatTime: currentTime,
+			}
+		}
+
+		// TODO
+
+		//if appArmorValidateHostFunc != nil && newNodeReadyCondition.Status == v1.ConditionTrue {
+		//	if err := appArmorValidateHostFunc(); err == nil {
+		//		newNodeReadyCondition.Message = fmt.Sprintf("%s. AppArmor enabled", newNodeReadyCondition.Message)
+		//	}
+		//}
+		//
+		//// Record any soft requirements that were not met in the container manager.
+		//status := cmStatusFunc()
+		//if status.SoftRequirements != nil {
+		//	newNodeReadyCondition.Message = fmt.Sprintf("%s. WARNING: %s", newNodeReadyCondition.Message, status.SoftRequirements.Error())
+		//}
+
+		readyConditionUpdated := false
+		needToRecordEvent := false
+		for i := range node.Status.Conditions {
+			if node.Status.Conditions[i].Type == v1.NodeReady {
+				if node.Status.Conditions[i].Status == newNodeReadyCondition.Status {
+					newNodeReadyCondition.LastTransitionTime = node.Status.Conditions[i].LastTransitionTime
+				} else {
+					newNodeReadyCondition.LastTransitionTime = currentTime
+					needToRecordEvent = true
+				}
+				node.Status.Conditions[i] = newNodeReadyCondition
+				readyConditionUpdated = true
+				break
+			}
+		}
+		if !readyConditionUpdated {
+			newNodeReadyCondition.LastTransitionTime = currentTime
+			node.Status.Conditions = append(node.Status.Conditions, newNodeReadyCondition)
+		}
+		if needToRecordEvent {
+			if newNodeReadyCondition.Status == v1.ConditionTrue {
+				recordEventFunc(v1.EventTypeNormal, events.NodeReady)
+			} else {
+				recordEventFunc(v1.EventTypeNormal, events.NodeNotReady)
+				klog.Infof("Node became not ready: %+v", newNodeReadyCondition)
+			}
+		}
+
+		return nil
+	}
+}
+
+// PIDPressureCondition returns a Setter that updates the v1.NodePIDPressure condition on the node.
+func PIDPressureCondition(nowFunc func() time.Time, // typically Kubelet.clock.Now
+		pressureFunc func() bool, // typically Kubelet.evictionManager.IsUnderPIDPressure
+		recordEventFunc func(eventType, event string), // typically Kubelet.recordNodeStatusEvent
+) Setter {
+	return func(node *v1.Node) error {
+		currentTime := metav1.NewTime(nowFunc())
+		var condition *v1.NodeCondition
+
+		// Check if NodePIDPressure condition already exists and if it does, just pick it up for update.
+		for i := range node.Status.Conditions {
+			if node.Status.Conditions[i].Type == v1.NodePIDPressure {
+				condition = &node.Status.Conditions[i]
+			}
+		}
+
+		newCondition := false
+		// If the NodePIDPressure condition doesn't exist, create one
+		if condition == nil {
+			condition = &v1.NodeCondition{
+				Type:   v1.NodePIDPressure,
+				Status: v1.ConditionUnknown,
+			}
+			// cannot be appended to node.Status.Conditions here because it gets
+			// copied to the slice. So if we append to the slice here none of the
+			// updates we make below are reflected in the slice.
+			newCondition = true
+		}
+
+		// Update the heartbeat time
+		condition.LastHeartbeatTime = currentTime
+
+		// Note: The conditions below take care of the case when a new NodePIDPressure condition is
+		// created and as well as the case when the condition already exists. When a new condition
+		// is created its status is set to v1.ConditionUnknown which matches either
+		// condition.Status != v1.ConditionTrue or
+		// condition.Status != v1.ConditionFalse in the conditions below depending on whether
+		// the kubelet is under PID pressure or not.
+		if pressureFunc() {
+			if condition.Status != v1.ConditionTrue {
+				condition.Status = v1.ConditionTrue
+				condition.Reason = "KubeletHasInsufficientPID"
+				condition.Message = "kubelet has insufficient PID available"
+				condition.LastTransitionTime = currentTime
+				recordEventFunc(v1.EventTypeNormal, "NodeHasInsufficientPID")
+			}
+		} else if condition.Status != v1.ConditionFalse {
+			condition.Status = v1.ConditionFalse
+			condition.Reason = "KubeletHasSufficientPID"
+			condition.Message = "kubelet has sufficient PID available"
+			condition.LastTransitionTime = currentTime
+			recordEventFunc(v1.EventTypeNormal, "NodeHasSufficientPID")
+		}
+
+		if newCondition {
+			node.Status.Conditions = append(node.Status.Conditions, *condition)
+		}
+		return nil
+	}
+}
+
+
+// DiskPressureCondition returns a Setter that updates the v1.NodeDiskPressure condition on the node.
+func DiskPressureCondition(nowFunc func() time.Time, // typically Kubelet.clock.Now
+		pressureFunc func() bool, // typically Kubelet.evictionManager.IsUnderDiskPressure
+		recordEventFunc func(eventType, event string), // typically Kubelet.recordNodeStatusEvent
+) Setter {
+	return func(node *v1.Node) error {
+		currentTime := metav1.NewTime(nowFunc())
+		var condition *v1.NodeCondition
+
+		// Check if NodeDiskPressure condition already exists and if it does, just pick it up for update.
+		for i := range node.Status.Conditions {
+			if node.Status.Conditions[i].Type == v1.NodeDiskPressure {
+				condition = &node.Status.Conditions[i]
+			}
+		}
+
+		newCondition := false
+		// If the NodeDiskPressure condition doesn't exist, create one
+		if condition == nil {
+			condition = &v1.NodeCondition{
+				Type:   v1.NodeDiskPressure,
+				Status: v1.ConditionUnknown,
+			}
+			// cannot be appended to node.Status.Conditions here because it gets
+			// copied to the slice. So if we append to the slice here none of the
+			// updates we make below are reflected in the slice.
+			newCondition = true
+		}
+
+		// Update the heartbeat time
+		condition.LastHeartbeatTime = currentTime
+
+		// Note: The conditions below take care of the case when a new NodeDiskPressure condition is
+		// created and as well as the case when the condition already exists. When a new condition
+		// is created its status is set to v1.ConditionUnknown which matches either
+		// condition.Status != v1.ConditionTrue or
+		// condition.Status != v1.ConditionFalse in the conditions below depending on whether
+		// the kubelet is under disk pressure or not.
+		if pressureFunc() {
+			if condition.Status != v1.ConditionTrue {
+				condition.Status = v1.ConditionTrue
+				condition.Reason = "KubeletHasDiskPressure"
+				condition.Message = "kubelet has disk pressure"
+				condition.LastTransitionTime = currentTime
+				recordEventFunc(v1.EventTypeNormal, "NodeHasDiskPressure")
+			}
+		} else if condition.Status != v1.ConditionFalse {
+			condition.Status = v1.ConditionFalse
+			condition.Reason = "KubeletHasNoDiskPressure"
+			condition.Message = "kubelet has no disk pressure"
+			condition.LastTransitionTime = currentTime
+			recordEventFunc(v1.EventTypeNormal, "NodeHasNoDiskPressure")
+		}
+
+		if newCondition {
+			node.Status.Conditions = append(node.Status.Conditions, *condition)
+		}
+		return nil
+	}
+}
 
 
 func MemoryPressureCondition(nowFunc func() time.Time,
