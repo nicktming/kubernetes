@@ -93,6 +93,11 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/eviction"
 
 	evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
+
+	"k8s.io/client-go/tools/record"
+	"k8s.io/kubernetes/pkg/api/legacyscheme"
+
+	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
 const (
@@ -397,7 +402,7 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 		DockerClientConfig:  dockerClientConfig,
 		KubeClient:          nil,
 		HeartbeatClient:     nil,
-		//EventClient:         nil,
+		EventClient:         nil,
 		//Mounter:             mounter,
 		//Subpather:           subpather,
 		//OOMAdjuster:         oom.NewOOMAdjuster(),
@@ -461,18 +466,18 @@ func initConfigz(kc *kubeletconfiginternal.KubeletConfiguration) error {
 
 // makeEventRecorder sets up kubeDeps.Recorder if it's nil. It's a no-op otherwise.
 func makeEventRecorder(kubeDeps *kubelet.Dependencies, nodeName types.NodeName) {
-	//if kubeDeps.Recorder != nil {
-	//	return
-	//}
-	//eventBroadcaster := record.NewBroadcaster()
-	//kubeDeps.Recorder = eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: componentKubelet, Host: string(nodeName)})
-	//eventBroadcaster.StartLogging(klog.V(3).Infof)
-	//if kubeDeps.EventClient != nil {
-	//	klog.V(4).Infof("Sending events to api server.")
-	//	eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: kubeDeps.EventClient.Events("")})
-	//} else {
-	//	klog.Warning("No api server defined - no events will be sent to API server.")
-	//}
+	if kubeDeps.Recorder != nil {
+		return
+	}
+	eventBroadcaster := record.NewBroadcaster()
+	kubeDeps.Recorder = eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: componentKubelet, Host: string(nodeName)})
+	eventBroadcaster.StartLogging(klog.V(3).Infof)
+	if kubeDeps.EventClient != nil {
+		klog.V(4).Infof("Sending events to api server.")
+		eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: kubeDeps.EventClient.Events("")})
+	} else {
+		klog.Warning("No api server defined - no events will be sent to API server.")
+	}
 }
 
 func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan struct{}) (err error) {
@@ -575,7 +580,7 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 		eventClientConfig := *clientConfig
 		eventClientConfig.QPS = float32(s.EventRecordQPS)
 		eventClientConfig.Burst = int(s.EventBurst)
-		//kubeDeps.EventClient, err = v1core.NewForConfig(&eventClientConfig)
+		kubeDeps.EventClient, err = v1core.NewForConfig(&eventClientConfig)
 		if err != nil {
 			return fmt.Errorf("failed to initialize kubelet event client: %v", err)
 		}

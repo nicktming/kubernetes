@@ -57,6 +57,8 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-tming/eviction"
 
 	"k8s.io/kubernetes/pkg/kubelet-tming/stats"
+
+	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
 const (
@@ -72,7 +74,7 @@ type Dependencies struct {
 	Cloud                   cloudprovider.Interface
 	ContainerManager        cm.ContainerManager
 	DockerClientConfig      *dockershim.ClientConfig
-	//EventClient             v1core.EventsGetter
+	EventClient             v1core.EventsGetter
 	HeartbeatClient         clientset.Interface
 	OnHeartbeatFailure      func()
 	KubeClient              clientset.Interface
