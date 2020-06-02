@@ -82,7 +82,7 @@ func NewKubeGenericRuntimeManager(
 		runtimeService:		runtimeService,
 		imageService:		imageService,
 		logReduction:        	logreduction.NewLogReduction(identicalErrorDelay),
-		legacyLogProvider 	legacyLogProvider,
+		legacyLogProvider: 	legacyLogProvider,
 	}
 
 	typedVersion, err := kubeRuntimeManager.runtimeService.Version(kubeRuntimeAPIVersion)
