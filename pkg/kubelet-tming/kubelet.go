@@ -283,6 +283,7 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHandler) {
 	klog.Infof("Starting kubelet main sync loop.")
 
+	kl.syncLoopIteration(updates, kl)
 
 }
 
