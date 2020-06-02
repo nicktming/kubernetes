@@ -60,10 +60,14 @@ import (
 
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"net/http"
+	"k8s.io/kubernetes/pkg/kubelet/util/format"
+	//"sort"
 )
 
 const (
-	nodeStatusUpdateRetry = 5
+	nodeStatusUpdateRetry = 1
+
+	backOffPeriod = time.Second * 10
 )
 
 type Dependencies struct {
@@ -91,6 +95,10 @@ type Dependencies struct {
 	//KubeletConfigController *kubeletconfig.Controller
 
 
+}
+
+type SyncHandler interface {
+	HandlePodAdditions(pods []*v1.Pod)
 }
 
 type Bootstrap interface {
@@ -240,6 +248,10 @@ type Kubelet struct {
 	// The handler serving CRI streaming calls (exec/attach/port-forward).
 	criHandler http.Handler
 
+	// resyncInterval is the interval between periodic full reconciliations of
+	// pods on this node.
+	resyncInterval time.Duration
+
 }
 
 func (kl *Kubelet) BirthCry() {
@@ -251,7 +263,7 @@ func (kl *Kubelet) initializeModules() error {
 	return nil
 }
 
-func (kl *Kubelet) Run(<-chan kubetypes.PodUpdate) {
+func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	//klog.Infof("kubelet run")
 
 	kl.initializeModules()
@@ -266,6 +278,105 @@ func (kl *Kubelet) Run(<-chan kubetypes.PodUpdate) {
 
 	go wait.Until(kl.updateRuntimeUp, 5*time.Second, wait.NeverStop)
 }
+
+
+func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHandler) {
+	klog.Infof("Starting kubelet main sync loop.")
+
+
+}
+
+func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handler SyncHandler) bool {
+	select {
+	case u, open := <- configCh:
+		if !open {
+			klog.Errorf("Update channel is closed. Exiting the sync loop.")
+			return false
+		}
+		switch u.Op {
+		case kubetypes.ADD:
+			klog.Infof("SyncLoop (Add, %q): %q", u.Source, format.Pods(u.Pods))
+			handler.HandlePodAdditions(u.Pods)
+		}
+	}
+	return true
+}
+
+
+func (kl *Kubelet) HandlePodAdditions(pods []*v1.Pod) {
+	start := kl.clock.Now()
+	//sort.Sort(sliceutils.PodsByCreationTime(pods))
+
+	for _, pod := range pods {
+		//if kl.dnsConfigurer != nil && kl.dnsConfigurer.ResolverConfig != "" {
+		//	kl.dnsConfigurer.CheckLimitsForResolvConf()
+		//}
+
+		//existingPods := kl.podManager.GetPods()
+
+		//kl.podManager.AddPod(pod)
+
+		//if kubepod.IsMirrorPod(pod) {
+		//	kl.handleMirrorPod(pod, start)
+		//	continue
+		//}
+
+		//if !kl.podIsTerminated(pod) {
+		//	// Only go through the admission process if the pod is not
+		//	// terminated.
+		//
+		//	// We failed pods that we rejected, so activePods include all admitted
+		//	// pods that are alive.
+		//	activePods := kl.filterOutTerminatedPods(existingPods)
+		//
+		//	// Check if we can admit the pod; if not, reject it.
+		//	if ok, reason, message := kl.canAdmitPod(activePods, pod); !ok {
+		//		kl.rejectPod(pod, reason, message)
+		//		continue
+		//	}
+		//}
+
+		mirrorPod, _ := kl.podManager.GetMirrorPodByPod(pod)
+		kl.dispatchWork(pod, kubetypes.SyncPodCreate, mirrorPod, start)
+		//kl.probeManager.AddPod(pod)
+
+	}
+}
+
+
+func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mirrorPod *v1.Pod, start time.Time) {
+	//
+	//if kl.podIsTerminated(pod) {
+	//	if pod.DeletionTimestamp != nil {
+	//		//kl.statusManager.TerminatePod(pod)
+	//	}
+	//	return
+	//}
+
+	kl.podWorkers.UpdatePod(&UpdatePodOptions{
+		Pod:		pod,
+		MirrorPod: 	mirrorPod,
+		UpdateType:	syncType,
+		OnCompleteFunc: func(err error) {
+			klog.Infof("pod OnCompleteFunc err: %v", err)
+		},
+	})
+
+	// Note the number of containers for new pods.
+	//if syncType == kubetypes.SyncPodCreate {
+	//	metrics.ContainersPerPodCount.Observe(float64(len(pod.Spec.Containers)))
+	//}
+}
+
+
+func (kl *Kubelet) syncPod(o syncPodOptions) error {
+	pod := o.pod
+
+	klog.Infof("syncPod got pod: %v", pod.Name)
+
+	return nil
+}
+
 
 func (kl *Kubelet) GetActivePods() []*v1.Pod {
 	//allPods := kl.podManager.GetPods()
@@ -513,7 +624,10 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		nodeRef: 					nodeRef,
 		sourcesReady:                            	config.NewSourcesReady(kubeDeps.PodConfig.SeenAllSources),
 		daemonEndpoints: 				daemonEndpoints,
+		resyncInterval:                          	kubeCfg.SyncFrequency.Duration,
 	}
+
+
 
 	klet.nodeStatusUpdateFrequency = time.Duration(1 * time.Minute)
 
@@ -642,6 +756,9 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	evictionManager := eviction.NewManager(klet.resourceAnalyzer)
 	klet.evictionManager = evictionManager
+
+
+	klet.podWorkers = newPodWorkers(klet.syncPod, kubeDeps.Recorder, klet.workQueue, klet.resyncInterval, backOffPeriod, klet.podCache)
 
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
 

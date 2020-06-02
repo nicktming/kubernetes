@@ -149,7 +149,13 @@ func (p *podWorkers) managePodLoop(podUpdates <-chan UpdatePodOptions) {
 			// Time. This ensures the worker doesn't start syncing until
 			// after the cache is at least newer than the finished time of
 			// the previous sync.
+
+			klog.Infof("pod workers got from podcache status starts.")
+
 			status, err := p.podCache.GetNewerThan(podUID, lastSyncTime)
+
+			klog.Infof("pod workers status err : %v.", err)
+
 			if err != nil {
 				// This is the legacy event thrown by manage pod loop
 				// all other events are now dispatched from syncPodFn
