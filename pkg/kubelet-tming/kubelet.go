@@ -63,6 +63,8 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
 	//"sort"
 	"k8s.io/kubernetes/pkg/kubelet-tming/pleg"
+
+	"k8s.io/kubernetes/pkg/kubelet/metrics"
 )
 
 const (
@@ -403,8 +405,51 @@ func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mir
 
 func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	pod := o.pod
+	mirrorPod := o.mirrorPod
+	podStatus := o.podStatus
+	updateType := o.updateType
 
-	klog.Infof("syncPod got pod: %v", pod.Name)
+
+	// if we want to kill a pod, do it now!
+	//if updateType == kubetypes.SyncPodKill {
+	//	killPodOptions := o.killPodOptions
+	//	if killPodOptions == nil || killPodOptions.PodStatusFunc == nil {
+	//		return fmt.Errorf("kill pod options are required if update type is kill")
+	//	}
+	//	apiPodStatus := killPodOptions.PodStatusFunc(pod, podStatus)
+	//	kl.statusManager.SetPodStatus(pod, apiPodStatus)
+	//	// we kill the pod with the specified grace period since this is a termination
+	//	if err := kl.killPod(pod, nil, podStatus, killPodOptions.PodTerminationGracePeriodSecondsOverride); err != nil {
+	//		kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToKillPod, "error killing pod: %v", err)
+	//		// there was an error killing the pod, so we return that error directly
+	//		utilruntime.HandleError(err)
+	//		return err
+	//	}
+	//	return nil
+	//}
+
+	// Latency measurements for the main workflow are relative to the
+	// first time the pod was seen by the API server.
+	var firstSeenTime time.Time
+	if firstSeenTimeStr, ok := pod.Annotations[kubetypes.ConfigFirstSeenAnnotationKey]; ok {
+		firstSeenTime = kubetypes.ConvertToTimestamp(firstSeenTimeStr).Get()
+	}
+
+	// Record pod worker start latency if being created
+	// TODO: make pod workers record their own latencies
+	if updateType == kubetypes.SyncPodCreate {
+		if !firstSeenTime.IsZero() {
+			// This is the first time we are syncing the pod. Record the latency
+			// since kubelet first saw the pod if firstSeenTime is set.
+			metrics.PodWorkerStartDuration.Observe(metrics.SinceInSeconds(firstSeenTime))
+			metrics.DeprecatedPodWorkerStartLatency.Observe(metrics.SinceInMicroseconds(firstSeenTime))
+		} else {
+			klog.V(3).Infof("First seen time not recorded for pod %q", pod.UID)
+		}
+	}
+
+	// Generate final API pod status with pod and status manager status
+	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus)
 
 	return nil
 }

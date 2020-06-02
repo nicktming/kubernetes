@@ -154,7 +154,7 @@ func (p *podWorkers) managePodLoop(podUpdates <-chan UpdatePodOptions) {
 
 			status, err := p.podCache.GetNewerThan(podUID, lastSyncTime)
 
-			klog.Infof("pod workers status err : %v.", err)
+			klog.Infof("pod workers status err : %v, status: %v", err, status)
 
 			if err != nil {
 				// This is the legacy event thrown by manage pod loop

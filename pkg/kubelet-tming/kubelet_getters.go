@@ -5,6 +5,8 @@ import (
 	cadvisorapiv1 "github.com/google/cadvisor/info/v1"
 	"k8s.io/api/core/v1"
 	"k8s.io/kubernetes/pkg/kubelet-tming/cm"
+	"net"
+	utilnode "k8s.io/kubernetes/pkg/util/node"
 )
 
 // GetCachedMachineInfo assumes that the machine info can't change without a reboot
@@ -66,3 +68,14 @@ func (kl *Kubelet) GetPods() []*v1.Pod {
 	}
 	return pods
 }
+
+// getHostIPAnyway attempts to return the host IP from kubelet's nodeInfo, or
+// the initialNode.
+func (kl *Kubelet) getHostIPAnyWay() (net.IP, error) {
+	node, err := kl.getNodeAnyWay()
+	if err != nil {
+		return nil, err
+	}
+	return utilnode.GetNodeHostIP(node)
+}
+

@@ -6,6 +6,8 @@ import (
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 	"time"
 	"reflect"
+	"fmt"
+	"strings"
 )
 
 type Version interface {
@@ -127,6 +129,31 @@ type ContainerStatus struct {
 	Message string
 }
 
+func (c *ContainerID) ParseString(data string) error {
+	// Trim the quotes and split the type and ID.
+	parts := strings.Split(strings.Trim(data, "\""), "://")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid container ID: %q", data)
+	}
+	c.Type, c.ID = parts[0], parts[1]
+	return nil
+}
+
+func (c *ContainerID) String() string {
+	return fmt.Sprintf("%s://%s", c.Type, c.ID)
+}
+
+func (c *ContainerID) IsEmpty() bool {
+	return *c == ContainerID{}
+}
+
+func (c *ContainerID) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("%q", c.String())), nil
+}
+
+func (c *ContainerID) UnmarshalJSON(data []byte) error {
+	return c.ParseString(string(data))
+}
 
 
 type ContainerID struct {

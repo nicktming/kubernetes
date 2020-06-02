@@ -15,3 +15,8 @@ func SandboxToContainerState(state runtimeapi.PodSandboxState) ContainerState {
 	return ContainerStateUnknown
 }
 
+
+// Pod must not be nil.
+func IsHostNetworkPod(pod *v1.Pod) bool {
+	return pod.Spec.HostNetwork
+}
