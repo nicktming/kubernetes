@@ -140,7 +140,7 @@ func (im *realImageGCManager) Start() {
 		} else {
 			im.imageCache.set(images)
 		}
-	}, 5 * time.Minute, wait.NeverStop)
+	}, 10 * time.Minute, wait.NeverStop)
 }
 
 

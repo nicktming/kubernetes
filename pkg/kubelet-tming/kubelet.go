@@ -515,6 +515,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		daemonEndpoints: 				daemonEndpoints,
 	}
 
+	klet.nodeStatusUpdateFrequency = time.Duration(1 * time.Minute)
+
 	var secretManager secret.Manager
 	var configMapManager configmap.Manager
 	switch kubeCfg.ConfigMapAndSecretChangeDetectionStrategy {
