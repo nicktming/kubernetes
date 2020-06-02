@@ -86,7 +86,7 @@ type Dependencies struct {
 	//Subpather               subpath.Interface
 	//VolumePlugins           []volume.VolumePlugin
 	//DynamicPluginProber     volume.DynamicPluginProber
-	TLSOptions              *server.TLSOptions
+	//TLSOptions              *server.TLSOptions
 	//KubeletConfigController *kubeletconfig.Controller
 
 
@@ -389,7 +389,6 @@ func (kl *Kubelet) getLastObservedNodeAddresses() []v1.NodeAddress {
 
 func makePodSourceConfig(kubeCfg *kubeletconfiginternal.KubeletConfiguration, kubeDeps *Dependencies, nodeName types.NodeName, bootstrapCheckpointPath string) (*config.PodConfig, error) {
 
-
 	cfg := config.NewPodConfig(config.PodConfigNotificationIncremental)
 
 	var updatechannel chan<- interface{}
@@ -437,13 +436,6 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	seccompProfileRoot string,
 	bootstrapCheckpointPath string,
 	nodeStatusMaxImages int32) (*Kubelet, error) {
-
-
-
-
-
-
-
 
 	hostname, err := nodeutil.GetHostname(hostnameOverride)
 	if err != nil {
@@ -584,6 +576,10 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 			return nil, err
 		}
 		// TODO criHandler
+
+		//if crOptions.RedirectContainerStreaming {
+		//	klet.criHand
+		//}
 
 		klog.Infof("RemoteRuntimeEndpoint: %q, RemoteImageEndpoint: %q",
 			remoteRuntimeEndpoint,

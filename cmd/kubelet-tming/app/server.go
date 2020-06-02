@@ -361,6 +361,7 @@ func loadConfigFile(name string) (*kubeletconfiginternal.KubeletConfiguration, e
 // is not valid.  It will not start any background processes, and does not include authentication/authorization
 func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, error) {
 	// Initialize the TLS Options
+
 	//tlsOptions, err := InitializeTLS(&s.KubeletFlags, &s.KubeletConfiguration)
 	//if err != nil {
 	//	return nil, err
@@ -657,7 +658,7 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 	}
 
 	// Setup event recorder if required.
-	//makeEventRecorder(kubeDeps, nodeName)
+	makeEventRecorder(kubeDeps, nodeName)
 
 	if kubeDeps.ContainerManager == nil {
 		if s.CgroupsPerQOS && s.CgroupRoot == "" {
