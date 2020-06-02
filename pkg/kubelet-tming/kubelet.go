@@ -308,7 +308,13 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHandler) {
 	klog.Infof("Starting kubelet main sync loop.")
 
-	kl.syncLoopIteration(updates, kl)
+	for {
+		if !kl.syncLoopIteration(updates, kl) {
+			break
+		}
+	}
+
+	klog.Infof("syncLoop finishes!")
 
 }
 
@@ -714,7 +720,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 
 	// if left at nil, that means it is unneeded
-	var legacyLogProvider kuberuntime.LegacyLogProvider = nil 
+	var legacyLogProvider kuberuntime.LegacyLogProvider = nil
 
 	switch containerRuntime {
 	case kubetypes.DockerContainerRuntime:
