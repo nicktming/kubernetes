@@ -14,6 +14,8 @@ import (
 	"math/rand"
 	"k8s.io/kubernetes/pkg/util/tail"
 	"os"
+	"github.com/armon/circbuf"
+	"context"
 )
 
 
@@ -83,6 +85,18 @@ func (m *kubeGenericRuntimeManager) getPodContainerStatuses(uid kubetypes.UID, n
 	sort.Sort(containerStatusByCreated(statuses))
 	return statuses, nil
 }
+
+// readLastStringFromContainerLogs attempts to read up to the max log length from the end of the CRI log represented
+// by path. It reads up to max log lines.
+func (m *kubeGenericRuntimeManager) readLastStringFromContainerLogs(path string) string {
+	value := int64(kubecontainer.MaxContainerTerminationMessageLogLines)
+	buf, _ := circbuf.NewBuffer(kubecontainer.MaxContainerTerminationMessageLogLength)
+	if err := m.ReadLogs(context.Background(), path, "", &v1.PodLogOptions{TailLines: &value}, buf, buf); err != nil {
+		return fmt.Sprintf("Error on reading termination message from logs: %v", err)
+	}
+	return buf.String()
+}
+
 
 func toKubeContainerStatus(status *runtimeapi.ContainerStatus, runtimeName string) *kubecontainer.ContainerStatus {
 	annotatedInfo := getContainerInfoFromAnnotations(status.Annotations)
