@@ -410,7 +410,7 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 		//OSInterface:         kubecontainer.RealOS{},
 		//VolumePlugins:       ProbeVolumePlugins(),
 		//DynamicPluginProber: GetDynamicPluginProber(s.VolumePluginDir, pluginRunner),
-		//TLSOptions:          tlsOptions
+		TLSOptions:          tlsOptions,
 	}, nil
 }
 
