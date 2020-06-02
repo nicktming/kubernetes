@@ -236,6 +236,9 @@ type Kubelet struct {
 	// StatsProvider provides the node and the container stats.
 	*stats.StatsProvider
 
+	// The handler serving CRI streaming calls (exec/attach/port-forward).
+	criHandler http.Handler
+
 }
 
 func (kl *Kubelet) BirthCry() {
@@ -577,9 +580,9 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		}
 		// TODO criHandler
 
-		//if crOptions.RedirectContainerStreaming {
-		//	klet.criHand
-		//}
+		if crOptions.RedirectContainerStreaming {
+			klet.criHandler = ds
+		}
 
 		klog.Infof("RemoteRuntimeEndpoint: %q, RemoteImageEndpoint: %q",
 			remoteRuntimeEndpoint,
@@ -590,6 +593,9 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 			return nil, err
 		}
 		// TODO ds.IsCRISupportedLogDriver()
+
+
+
 	default:
 		return nil, fmt.Errorf("unsupported CRI runtime: %q", containerRuntime)
 	}
