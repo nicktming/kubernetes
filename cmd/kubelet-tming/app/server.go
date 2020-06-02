@@ -362,10 +362,10 @@ func loadConfigFile(name string) (*kubeletconfiginternal.KubeletConfiguration, e
 func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, error) {
 	// Initialize the TLS Options
 
-	//tlsOptions, err := InitializeTLS(&s.KubeletFlags, &s.KubeletConfiguration)
-	//if err != nil {
-	//	return nil, err
-	//}
+	tlsOptions, err := InitializeTLS(&s.KubeletFlags, &s.KubeletConfiguration)
+	if err != nil {
+		return nil, err
+	}
 
 	//mounter := mount.New(s.ExperimentalMounterPath)
 	//subpather := subpath.New(mounter)

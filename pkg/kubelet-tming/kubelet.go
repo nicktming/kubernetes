@@ -86,7 +86,7 @@ type Dependencies struct {
 	//Subpather               subpath.Interface
 	//VolumePlugins           []volume.VolumePlugin
 	//DynamicPluginProber     volume.DynamicPluginProber
-	//TLSOptions              *server.TLSOptions
+	TLSOptions              *server.TLSOptions
 	//KubeletConfigController *kubeletconfig.Controller
 
 
