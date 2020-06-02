@@ -277,6 +277,8 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	}
 
 	go wait.Until(kl.updateRuntimeUp, 5*time.Second, wait.NeverStop)
+
+	kl.syncLoop(updates, kl)
 }
 
 
