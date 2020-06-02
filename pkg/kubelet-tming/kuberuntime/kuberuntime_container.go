@@ -63,14 +63,14 @@ func (m *kubeGenericRuntimeManager) getPodContainerStatuses(uid kubetypes.UID, n
 			tMessage, checkLogs := getTerminationMessage(status, annotatedInfo.TerminationMessagePath, fallbackToLogs)
 			if checkLogs {
 				// if dockerLegacyService is populated, we're supposed to use it to fetch logs
-				//if m.legacyLogProvider != nil {
-				//	tMessage, err = m.legacyLogProvider.GetContainerLogTail(uid, name, namespace, kubecontainer.ContainerID{Type: m.runtimeName, ID: c.Id})
-				//	if err != nil {
-				//		tMessage = fmt.Sprintf("Error reading termination message from logs: %v", err)
-				//	}
-				//} else {
-				//	tMessage = m.readLastStringFromContainerLogs(status.GetLogPath())
-				//}
+				if m.legacyLogProvider != nil {
+					tMessage, err = m.legacyLogProvider.GetContainerLogTail(uid, name, namespace, kubecontainer.ContainerID{Type: m.runtimeName, ID: c.Id})
+					if err != nil {
+						tMessage = fmt.Sprintf("Error reading termination message from logs: %v", err)
+					}
+				} else {
+					tMessage = m.readLastStringFromContainerLogs(status.GetLogPath())
+				}
 			}
 			// Use the termination message written by the application is not empty
 			if len(tMessage) != 0 {

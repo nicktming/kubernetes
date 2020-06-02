@@ -14,11 +14,16 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"net"
+	"k8s.io/kubernetes/pkg/kubelet/util/logreduction"
+	"time"
 )
 
 
 const (
 	kubeRuntimeAPIVersion	= "0.1.0"
+
+	// How frequently to report identical errors
+	identicalErrorDelay = 1 * time.Minute
 )
 
 
@@ -44,6 +49,19 @@ type kubeGenericRuntimeManager struct {
 
 	containerGC 		*containerGC
 
+	// Cache last per-container error message to reduce log spam
+	logReduction *logreduction.LogReduction
+
+	// A shim to legacy functions for backward compatibility.
+	legacyLogProvider LegacyLogProvider
+
+}
+
+
+// LegacyLogProvider gives the ability to use unsupported docker log drivers (e.g. journald)
+type LegacyLogProvider interface {
+	// Get the last few lines of the logs for a specific container.
+	GetContainerLogTail(uid kubetypes.UID, name, namespace string, containerID kubecontainer.ContainerID) (string, error)
 }
 
 type KubeGenericRuntime interface {
@@ -58,10 +76,13 @@ func NewKubeGenericRuntimeManager(
 			runtimeService internalapi.RuntimeService,
 			imageService internalapi.ImageManagerService,
 			podStateProvider podStateProvider,
+			legacyLogProvider LegacyLogProvider,
 			) (KubeGenericRuntime, error) {
 	kubeRuntimeManager := &kubeGenericRuntimeManager{
 		runtimeService:		runtimeService,
 		imageService:		imageService,
+		logReduction:        	logreduction.NewLogReduction(identicalErrorDelay),
+		legacyLogProvider 	legacyLogProvider,
 	}
 
 	typedVersion, err := kubeRuntimeManager.runtimeService.Version(kubeRuntimeAPIVersion)
@@ -173,7 +194,7 @@ func (m *kubeGenericRuntimeManager) GetPodStatus(uid kubetypes.UID, name, namesp
 		//}
 		return nil, err
 	}
-	//m.logReduction.ClearID(podFullName)
+	m.logReduction.ClearID(podFullName)
 
 	return &kubecontainer.PodStatus{
 		ID:                uid,

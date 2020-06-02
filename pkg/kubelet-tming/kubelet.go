@@ -269,6 +269,10 @@ type Kubelet struct {
 
 	pleg pleg.PodLifecycleEventGenerator
 
+	// dockerLegacyService contains some legacy methods for backward compatibility.
+	// It should be set only when docker is using non json-file logging driver.
+	dockerLegacyService dockershim.DockerLegacyService
+
 }
 
 func (kl *Kubelet) BirthCry() {
@@ -708,6 +712,10 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	klet.resourceAnalyzer = serverstats.NewResourceAnalyzer(klet, kubeCfg.VolumeStatsAggPeriod.Duration)
 
+
+	// if left at nil, that means it is unneeded
+	var legacyLogProvider kuberuntime.LegacyLogProvider
+
 	switch containerRuntime {
 	case kubetypes.DockerContainerRuntime:
 
@@ -733,6 +741,15 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		}
 		// TODO ds.IsCRISupportedLogDriver()
 
+		// Create dockerLegacyService when the logging driver is not supported.
+		supported, err := ds.IsCRISupportedLogDriver()
+		if err != nil {
+			return nil, err
+		}
+		if !supported {
+			klet.dockerLegacyService = ds
+			legacyLogProvider = ds
+		}
 
 
 	default:
@@ -753,7 +770,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	// TODO RuntimeClass
 
-	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet)
+	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet, legacyLogProvider)
 	if err != nil {
 		return nil, err
 	}
