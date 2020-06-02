@@ -714,7 +714,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 
 	// if left at nil, that means it is unneeded
-	var legacyLogProvider kuberuntime.LegacyLogProvider
+	var legacyLogProvider kuberuntime.LegacyLogProvider = nil 
 
 	switch containerRuntime {
 	case kubetypes.DockerContainerRuntime:
@@ -772,7 +772,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	//runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet, legacyLogProvider)
 
-	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet, nil)
+	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet, legacyLogProvider)
 
 	if err != nil {
 		return nil, err
