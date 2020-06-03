@@ -72,7 +72,7 @@ type kubeGenericRuntimeManager struct {
 
 func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontainer.PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff) (result kubecontainer.PodSyncResult) {
 
-	klog.Infof("kubeGenericRuntimeManager SyncPod pod: %v, podStatus: %v", string(json.Marshal(pod)), string(json.Marshal(podStatus)))
+	klog.Infof("kubeGenericRuntimeManager SyncPod pod: %v, podStatus: %v", string(json.MarshalIndent(pod, "", "\t")), string(json.MarshalIndent(podStatus, "", "\t")))
 
 	return
 }
