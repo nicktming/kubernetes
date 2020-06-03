@@ -53,8 +53,8 @@ func (m *kubeGenericRuntimeManager) removeContainerLog(containerID string) error
 	if err != nil {
 		return fmt.Errorf("failed to get container status %q: %v", containerID, err)
 	}
-	labeledInfo := getContainerInfoFromLabels(status.Labels)
-	path := status.GetLogPath()
+	//labeledInfo := getContainerInfoFromLabels(status.Labels)
+	//path := status.GetLogPath()
 
 	// TODO path
 
