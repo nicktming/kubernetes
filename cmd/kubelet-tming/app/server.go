@@ -98,6 +98,8 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
+
 )
 
 const (
@@ -407,7 +409,7 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 		//Mounter:             mounter,
 		//Subpather:           subpather,
 		//OOMAdjuster:         oom.NewOOMAdjuster(),
-		//OSInterface:         kubecontainer.RealOS{},
+		OSInterface:         kubecontainer.RealOS{},
 		//VolumePlugins:       ProbeVolumePlugins(),
 		//DynamicPluginProber: GetDynamicPluginProber(s.VolumePluginDir, pluginRunner),
 		TLSOptions:          tlsOptions,

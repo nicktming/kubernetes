@@ -4,6 +4,11 @@ import (
 	"fmt"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	"path/filepath"
+	"strings"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog"
+	"k8s.io/api/core/v1"
 )
 
 
@@ -32,6 +37,15 @@ func (c containerStatusByCreated) Len() int           { return len(c) }
 func (c containerStatusByCreated) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 func (c containerStatusByCreated) Less(i, j int) bool { return c[i].CreatedAt.After(c[j].CreatedAt) }
 
+// logPathDelimiter is the delimiter used in the log path.
+const logPathDelimiter = "_"
+
+
+// BuildPodLogsDirectory builds absolute log directory path for a pod sandbox.
+func BuildPodLogsDirectory(podNamespace, podName string, podUID types.UID) string {
+	return filepath.Join(podLogsRootDirectory, strings.Join([]string{podNamespace, podName,
+		string(podUID)}, logPathDelimiter))
+}
 
 
 
@@ -64,6 +78,21 @@ func (m *kubeGenericRuntimeManager) toKubeContainer(c *runtimeapi.Container) (*k
 	}, nil
 }
 
+// toRuntimeProtocol converts v1.Protocol to runtimeapi.Protocol.
+func toRuntimeProtocol(protocol v1.Protocol) runtimeapi.Protocol {
+	switch protocol {
+	case v1.ProtocolTCP:
+		return runtimeapi.Protocol_TCP
+	case v1.ProtocolUDP:
+		return runtimeapi.Protocol_UDP
+	case v1.ProtocolSCTP:
+		return runtimeapi.Protocol_SCTP
+	}
+
+	klog.Warningf("Unknown protocol %q: defaulting to TCP", protocol)
+	return runtimeapi.Protocol_TCP
+}
+
 func toKubeContainerState(state runtimeapi.ContainerState) kubecontainer.ContainerState {
 	switch state {
 	case runtimeapi.ContainerState_CONTAINER_CREATED:
@@ -78,3 +107,32 @@ func toKubeContainerState(state runtimeapi.ContainerState) kubecontainer.Contain
 
 	return kubecontainer.ContainerStateUnknown
 }
+
+// getSeccompProfileFromAnnotations gets seccomp profile from annotations.
+// It gets pod's profile if containerName is empty.
+func (m *kubeGenericRuntimeManager) getSeccompProfileFromAnnotations(annotations map[string]string, containerName string) string {
+	// try the pod profile.
+	profile, profileOK := annotations[v1.SeccompPodAnnotationKey]
+	if containerName != "" {
+		// try the container profile.
+		cProfile, cProfileOK := annotations[v1.SeccompContainerAnnotationKeyPrefix+containerName]
+		if cProfileOK {
+			profile = cProfile
+			profileOK = cProfileOK
+		}
+	}
+
+	if !profileOK {
+		return ""
+	}
+
+	if strings.HasPrefix(profile, "localhost/") {
+		name := strings.TrimPrefix(profile, "localhost/")
+		fname := filepath.Join(m.seccompProfileRoot, filepath.FromSlash(name))
+		return "localhost/" + fname
+	}
+
+	return profile
+}
+
+

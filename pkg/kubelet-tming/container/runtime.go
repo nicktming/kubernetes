@@ -123,6 +123,19 @@ func (podStatus *PodStatus) GetRunningContainerStatuses() []*ContainerStatus {
 	return runningContainerStatuses
 }
 
+type PortMapping struct {
+	// Name of the port mapping
+	Name string
+	// Protocol of the port mapping.
+	Protocol v1.Protocol
+	// The port number within the container.
+	ContainerPort int
+	// The port number on the host.
+	HostPort int
+	// The host IP.
+	HostIP string
+}
+
 
 // ContainerStatus represents the status of a container.
 type ContainerStatus struct {

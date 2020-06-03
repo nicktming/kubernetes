@@ -110,7 +110,7 @@ type Dependencies struct {
 	KubeClient              clientset.Interface
 	Mounter                 mount.Interface
 	//OOMAdjuster             *oom.OOMAdjuster
-	//OSInterface             kubecontainer.OSInterface
+	OSInterface             kubecontainer.OSInterface
 	PodConfig               *config.PodConfig
 	Recorder                record.EventRecorder
 	//Subpather               subpath.Interface
@@ -287,6 +287,9 @@ type Kubelet struct {
 
 	// Container restart Backoff
 	backOff *flowcontrol.Backoff
+
+	// os is a facade for various syscalls that need to be mocked during testing.
+	os kubecontainer.OSInterface
 
 }
 
@@ -940,6 +943,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		daemonEndpoints: 				daemonEndpoints,
 		resyncInterval:                          	kubeCfg.SyncFrequency.Duration,
 		rootDirectory: 					rootDirectory,
+		os:						kubeDeps.OSInterface,
 	}
 
 	klet.backOff = flowcontrol.NewBackOff(backOffPeriod, MaxContainerBackOff)
@@ -1062,7 +1066,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	//runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet, legacyLogProvider)
 
-	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet, legacyLogProvider)
+	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet, legacyLogProvider, seccompProfileRoot, kubeDeps.OSInterface)
 
 	if err != nil {
 		return nil, err
