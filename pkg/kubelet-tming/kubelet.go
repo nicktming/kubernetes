@@ -464,6 +464,8 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	podStatus := o.podStatus
 	updateType := o.updateType
 
+	klog.Infof("pod name: %v, pod.Status: %v, podStatus: %v", pod.Name, pod.Status, podStatus)
+
 
 	// if we want to kill a pod, do it now!
 	//if updateType == kubetypes.SyncPodKill {
@@ -502,6 +504,8 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 			klog.V(3).Infof("First seen time not recorded for pod %q", pod.UID)
 		}
 	}
+
+
 
 	// Generate final API pod status with pod and status manager status
 	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus)
@@ -856,6 +860,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	bootstrapCheckpointPath string,
 	nodeStatusMaxImages int32) (*Kubelet, error) {
 
+	klog.Infof("klet.rootDirectory: %v", rootDirectory)
+
 	if rootDirectory == "" {
 		return nil, fmt.Errorf("invalid root directory %q", rootDirectory)
 	}
@@ -933,6 +939,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		sourcesReady:                            	config.NewSourcesReady(kubeDeps.PodConfig.SeenAllSources),
 		daemonEndpoints: 				daemonEndpoints,
 		resyncInterval:                          	kubeCfg.SyncFrequency.Duration,
+		rootDirectory: 					rootDirectory,
 	}
 
 	klet.backOff = flowcontrol.NewBackOff(backOffPeriod, MaxContainerBackOff)
