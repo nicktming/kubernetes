@@ -16,6 +16,7 @@ import (
 	"net"
 	"k8s.io/kubernetes/pkg/kubelet/util/logreduction"
 	"time"
+	"k8s.io/client-go/util/flowcontrol"
 )
 
 
@@ -55,6 +56,24 @@ type kubeGenericRuntimeManager struct {
 	// A shim to legacy functions for backward compatibility.
 	legacyLogProvider LegacyLogProvider
 
+}
+
+
+// SyncPod syncs the running pod into the desired pod by executing following steps:
+//
+//  1. Compute sandbox and container changes.
+//  2. Kill pod sandbox if necessary.
+//  3. Kill any containers that should not be running.
+//  4. Create sandbox if necessary.
+//  5. Create init containers.
+//  6. Create normal containers.
+
+
+func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontainer.PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff) (result kubecontainer.PodSyncResult) {
+
+	klog.Infof("kubeGenericRuntimeManager SyncPod pod: %v, podStatus: %v", pod, podStatus)
+
+	return
 }
 
 

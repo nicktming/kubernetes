@@ -65,6 +65,11 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-tming/pleg"
 
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
+	"path"
+	"os"
+	"k8s.io/kubernetes/pkg/kubelet/events"
+
+	"k8s.io/client-go/util/flowcontrol"
 )
 
 const (
@@ -85,6 +90,9 @@ const (
 	// take more than 1s to finish if the container runtime responds slowly
 	// and/or when there are many container changes in one cycle.
 	plegRelistPeriod = time.Second * 1
+
+	// MaxContainerBackOff is the max backoff period, exported for the e2e test
+	MaxContainerBackOff = 300 * time.Second
 )
 
 type Dependencies struct {
@@ -275,6 +283,47 @@ type Kubelet struct {
 	// It should be set only when docker is using non json-file logging driver.
 	dockerLegacyService dockershim.DockerLegacyService
 
+	rootDirectory 	string
+
+	// Container restart Backoff
+	backOff *flowcontrol.Backoff
+
+}
+
+
+func (kl *Kubelet) setupDataDirs() error {
+	kl.rootDirectory = path.Clean(kl.rootDirectory)
+	//pluginRegistrationDir := kl.getPluginsRegistrationDir()
+	//pluginsDir := kl.getPluginsDir()
+	if err := os.MkdirAll(kl.getRootDir(), 0750); err != nil {
+		return fmt.Errorf("error creating root directory: %v", err)
+	}
+	//if err := kl.mounter.MakeRShared(kl.getRootDir()); err != nil {
+	//	return fmt.Errorf("error configuring root directory: %v", err)
+	//}
+
+	if err := os.MkdirAll(kl.getPodsDir(), 0750); err != nil {
+		return fmt.Errorf("error creating pods directory: %v", err)
+	}
+
+	if err := os.MkdirAll(kl.getPluginsDir(), 0750); err != nil {
+		return fmt.Errorf("error creating plugins directory: %v", err)
+	}
+	if err := os.MkdirAll(kl.getPluginsRegistrationDir(), 0750); err != nil {
+		return fmt.Errorf("error creating plugins registry directory: %v", err)
+	}
+	//if selinux.SELinuxEnabled() {
+	//	err := selinux.SetFileLabel(pluginRegistrationDir, config.KubeletPluginsDirSELinuxLabel)
+	//	if err != nil {
+	//		klog.Warningf("Unprivileged containerized plugins might not work. Could not set selinux context on %s: %v", pluginRegistrationDir, err)
+	//	}
+	//	err = selinux.SetFileLabel(pluginsDir, config.KubeletPluginsDirSELinuxLabel)
+	//	if err != nil {
+	//		klog.Warningf("Unprivileged containerized plugins might not work. Could not set selinux context on %s: %v", pluginsDir, err)
+	//	}
+	//}
+
+	return nil
 }
 
 func (kl *Kubelet) BirthCry() {
@@ -282,6 +331,12 @@ func (kl *Kubelet) BirthCry() {
 }
 
 func (kl *Kubelet) initializeModules() error {
+
+	// Setup filesystem directories.
+	if err := kl.setupDataDirs(); err != nil {
+		return err
+	}
+
 	kl.imageManager.Start()
 	return nil
 }
@@ -405,7 +460,7 @@ func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mir
 
 func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	pod := o.pod
-	mirrorPod := o.mirrorPod
+	//mirrorPod := o.mirrorPod
 	podStatus := o.podStatus
 	updateType := o.updateType
 
@@ -450,6 +505,178 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
 	// Generate final API pod status with pod and status manager status
 	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus)
+	// The pod IP may be changed in generateAPIPodStatus if the pod is using host network. (See #24576)
+	// TODO(random-liu): After writing pod spec into container labels, check whether pod is using host network, and
+	// set pod IP to hostIP directly in runtime.GetPodStatus
+	podStatus.IP = apiPodStatus.PodIP
+
+	// Record the time it takes for the pod to become running.
+	//existingStatus, ok := kl.statusManager.GetPodStatus(pod.UID)
+	//if !ok || existingStatus.Phase == v1.PodPending && apiPodStatus.Phase == v1.PodRunning &&
+	//	!firstSeenTime.IsZero() {
+	//	metrics.PodStartDuration.Observe(metrics.SinceInSeconds(firstSeenTime))
+	//	metrics.PodStartCounterDuration.WithLabelValues(pod.Name).Set(metrics.SinceInSeconds(firstSeenTime))
+	//	metrics.DeprecatedPodStartLatency.Observe(metrics.SinceInMicroseconds(firstSeenTime))
+	//}
+
+	//runnable := kl.canRunPod(pod)
+	//if !runnable.Admit {
+	//	// Pod is not runnable; update the Pod and Container statuses to why.
+	//	apiPodStatus.Reason = runnable.Reason
+	//	apiPodStatus.Message = runnable.Message
+	//	// Waiting containers are not creating.
+	//	const waitingReason = "Blocked"
+	//	for _, cs := range apiPodStatus.InitContainerStatuses {
+	//		if cs.State.Waiting != nil {
+	//			cs.State.Waiting.Reason = waitingReason
+	//		}
+	//	}
+	//	for _, cs := range apiPodStatus.ContainerStatuses {
+	//		if cs.State.Waiting != nil {
+	//			cs.State.Waiting.Reason = waitingReason
+	//		}
+	//	}
+	//}
+
+	// Update status in the status manager
+	//kl.statusManager.SetPodStatus(pod, apiPodStatus)
+
+	// Kill pod if it should not be running
+	//if !runnable.Admit || pod.DeletionTimestamp != nil || apiPodStatus.Phase == v1.PodFailed {
+	//	var syncErr error
+	//	if err := kl.killPod(pod, nil, podStatus, nil); err != nil {
+	//		kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToKillPod, "error killing pod: %v", err)
+	//		syncErr = fmt.Errorf("error killing pod: %v", err)
+	//		utilruntime.HandleError(syncErr)
+	//	} else {
+	//		if !runnable.Admit {
+	//			// There was no error killing the pod, but the pod cannot be run.
+	//			// Return an error to signal that the sync loop should back off.
+	//			syncErr = fmt.Errorf("pod cannot be run: %s", runnable.Message)
+	//		}
+	//	}
+	//	return syncErr
+	//}
+
+	// If the network plugin is not ready, only start the pod if it uses the host network
+	//if err := kl.runtimeState.networkErrors(); err != nil && !kubecontainer.IsHostNetworkPod(pod) {
+	//	kl.recorder.Eventf(pod, v1.EventTypeWarning, events.NetworkNotReady, "%s: %v", NetworkNotReadyErrorMsg, err)
+	//	return fmt.Errorf("%s: %v", NetworkNotReadyErrorMsg, err)
+	//}
+
+
+
+	// Create Cgroups for the pod and apply resource parameters
+	// to them if cgroups-per-qos flag is enabled.
+	//pcm := kl.containerManager.NewPodContainerManager()
+	// If pod has already been terminated then we need not create
+	// or update the pod's cgroup
+	//if !kl.podIsTerminated(pod) {
+	//	// When the kubelet is restarted with the cgroups-per-qos
+	//	// flag enabled, all the pod's running containers
+	//	// should be killed intermittently and brought back up
+	//	// under the qos cgroup hierarchy.
+	//	// Check if this is the pod's first sync
+	//	firstSync := true
+	//	for _, containerStatus := range apiPodStatus.ContainerStatuses {
+	//		if containerStatus.State.Running != nil {
+	//			firstSync = false
+	//			break
+	//		}
+	//	}
+	//	// Don't kill containers in pod if pod's cgroups already
+	//	// exists or the pod is running for the first time
+	//	podKilled := false
+	//	if !pcm.Exists(pod) && !firstSync {
+	//		if err := kl.killPod(pod, nil, podStatus, nil); err == nil {
+	//			podKilled = true
+	//		}
+	//	}
+	//	// Create and Update pod's Cgroups
+	//	// Don't create cgroups for run once pod if it was killed above
+	//	// The current policy is not to restart the run once pods when
+	//	// the kubelet is restarted with the new flag as run once pods are
+	//	// expected to run only once and if the kubelet is restarted then
+	//	// they are not expected to run again.
+	//	// We don't create and apply updates to cgroup if its a run once pod and was killed above
+	//	if !(podKilled && pod.Spec.RestartPolicy == v1.RestartPolicyNever) {
+	//		if !pcm.Exists(pod) {
+	//			if err := kl.containerManager.UpdateQOSCgroups(); err != nil {
+	//				klog.V(2).Infof("Failed to update QoS cgroups while syncing pod: %v", err)
+	//			}
+	//			if err := pcm.EnsureExists(pod); err != nil {
+	//				kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToCreatePodContainer, "unable to ensure pod container exists: %v", err)
+	//				return fmt.Errorf("failed to ensure that the pod: %v cgroups exist and are correctly applied: %v", pod.UID, err)
+	//			}
+	//		}
+	//	}
+	//}
+
+	// Create Mirror Pod for Static Pod if it doesn't already exist
+	//if kubepod.IsStaticPod(pod) {
+	//	podFullName := kubecontainer.GetPodFullName(pod)
+	//	deleted := false
+	//	if mirrorPod != nil {
+	//		if mirrorPod.DeletionTimestamp != nil || !kl.podManager.IsMirrorPodOf(mirrorPod, pod) {
+	//			// The mirror pod is semantically different from the static pod. Remove
+	//			// it. The mirror pod will get recreated later.
+	//			klog.Infof("Trying to delete pod %s %v", podFullName, mirrorPod.ObjectMeta.UID)
+	//			var err error
+	//			deleted, err = kl.podManager.DeleteMirrorPod(podFullName, &mirrorPod.ObjectMeta.UID)
+	//			if deleted {
+	//				klog.Warningf("Deleted mirror pod %q because it is outdated", format.Pod(mirrorPod))
+	//			} else if err != nil {
+	//				klog.Errorf("Failed deleting mirror pod %q: %v", format.Pod(mirrorPod), err)
+	//			}
+	//		}
+	//	}
+	//	if mirrorPod == nil || deleted {
+	//		node, err := kl.GetNode()
+	//		if err != nil || node.DeletionTimestamp != nil {
+	//			klog.V(4).Infof("No need to create a mirror pod, since node %q has been removed from the cluster", kl.nodeName)
+	//		} else {
+	//			klog.V(4).Infof("Creating a mirror pod for static pod %q", format.Pod(pod))
+	//			if err := kl.podManager.CreateMirrorPod(pod); err != nil {
+	//				klog.Errorf("Failed creating a mirror pod for %q: %v", format.Pod(pod), err)
+	//			}
+	//		}
+	//	}
+	//}
+
+	if err := kl.makePodDataDirs(pod); err != nil {
+		kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToMakePodDataDirectories, "error making pod data directories: %v", err)
+		klog.Errorf("Unable to make pod data directories for pod %q: %v", format.Pod(pod), err)
+		return err
+	}
+
+	// Volume manager will not mount volumes for terminated pods
+	//if !kl.podIsTerminated(pod) {
+	//	// Wait for volumes to attach/mount
+	//	if err := kl.volumeManager.WaitForAttachAndMount(pod); err != nil {
+	//		kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedMountVolume, "Unable to mount volumes for pod %q: %v", format.Pod(pod), err)
+	//		klog.Errorf("Unable to mount volumes for pod %q: %v; skipping pod", format.Pod(pod), err)
+	//		return err
+	//	}
+	//}
+
+	pullSecrets := kl.getPullSecretsForPod(pod)
+
+	result := kl.containerRuntime.SyncPod(pod, podStatus, pullSecrets, kl.backOff)
+	//kl.reasonCache.Update(pod.UID, result)
+	//if err := result.Error(); err != nil {
+	//	// Do not return error if the only failures were pods in backoff
+	//	for _, r := range result.SyncResults {
+	//		if r.Error != kubecontainer.ErrCrashLoopBackOff && r.Error != images.ErrImagePullBackOff {
+	//			// Do not record an event here, as we keep all event logging for sync pod failures
+	//			// local to container runtime so we get better errors
+	//			return err
+	//		}
+	//	}
+	//
+	//	return nil
+	//}
+
+	klog.Infof("syncPod result: %v", result)
 
 	return nil
 }
@@ -629,6 +856,10 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	bootstrapCheckpointPath string,
 	nodeStatusMaxImages int32) (*Kubelet, error) {
 
+	if rootDirectory == "" {
+		return nil, fmt.Errorf("invalid root directory %q", rootDirectory)
+	}
+
 	hostname, err := nodeutil.GetHostname(hostnameOverride)
 	if err != nil {
 		return nil, err
@@ -704,6 +935,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		resyncInterval:                          	kubeCfg.SyncFrequency.Duration,
 	}
 
+	klet.backOff = flowcontrol.NewBackOff(backOffPeriod, MaxContainerBackOff)
 
 
 	klet.nodeStatusUpdateFrequency = time.Duration(1 * time.Minute)

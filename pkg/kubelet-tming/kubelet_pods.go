@@ -13,6 +13,8 @@ import (
 	v1qos "k8s.io/kubernetes/pkg/apis/core/v1/helper/qos"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet-tming/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"os"
+	"path/filepath"
 )
 
 func notRunning(statuses []v1.ContainerStatus) bool {
@@ -22,6 +24,22 @@ func notRunning(statuses []v1.ContainerStatus) bool {
 		}
 	}
 	return true
+}
+
+
+func (kl *Kubelet) makePodDataDirs(pod *v1.Pod) error {
+	uid := pod.UID
+	if err := os.MkdirAll(kl.getPodDir(uid), 0750); err != nil && !os.IsExist(err) {
+		return err
+	}
+
+	if err := os.MkdirAll(kl.getPodVolumesDir(uid), 0750); err != nil && !os.IsExist(err) {
+		return err
+	}
+	if err := os.MkdirAll(kl.getPodPluginsDir(uid), 0750); err != nil && !os.IsExist(err) {
+		return err
+	}
+	return nil
 }
 
 // podIsTerminated returns true if pod is in the terminated state ("Failed" or "Succeeded").
@@ -156,6 +174,24 @@ func (kl *Kubelet) convertStatusToAPIStatus(pod *v1.Pod, podStatus *kubecontaine
 		}
 	}
 	return &apiPodStatus
+}
+
+
+func (kl *Kubelet) getPullSecretsForPod(pod *v1.Pod) []v1.Secret {
+	pullSecrets := []v1.Secret{}
+
+	for _, secretRef := range pod.Spec.ImagePullSecrets {
+		secret, err := kl.secretManager.GetSecret(pod.Namespace, secretRef.Name)
+		if err != nil {
+			klog.Warningf("Unable to retrieve pull secret %s/%s for %s/%s due to %v.  The image pull may not succeed.", pod.Namespace, secretRef.Name, pod.Namespace, pod.Name, err)
+			continue
+		}
+
+		pullSecrets = append(pullSecrets, *secret)
+	}
+
+	return pullSecrets
+
 }
 
 // convertToAPIContainerStatuses converts the given internal container

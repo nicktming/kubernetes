@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"fmt"
 	"strings"
+	"k8s.io/client-go/util/flowcontrol"
 )
 
 type Version interface {
@@ -57,6 +58,9 @@ type Runtime interface {
 	// information of all containers in the pod that are visible in Runtime.
 	GetPodStatus(uid types.UID, name, namespace string) (*PodStatus, error)
 
+	// Syncs the running pod into the desired pod.
+	SyncPod(pod *v1.Pod, podStatus *PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff) PodSyncResult
+
 }
 
 type ContainerState string
@@ -96,6 +100,29 @@ type PodStatus struct {
 	// Only for kuberuntime now, other runtime may keep it nil.
 	SandboxStatuses []*runtimeapi.PodSandboxStatus
 }
+
+// FindContainerStatusByName returns container status in the pod status with the given name.
+// When there are multiple containers' statuses with the same name, the first match will be returned.
+func (podStatus *PodStatus) FindContainerStatusByName(containerName string) *ContainerStatus {
+	for _, containerStatus := range podStatus.ContainerStatuses {
+		if containerStatus.Name == containerName {
+			return containerStatus
+		}
+	}
+	return nil
+}
+
+// Get container status of all the running containers in a pod
+func (podStatus *PodStatus) GetRunningContainerStatuses() []*ContainerStatus {
+	runningContainerStatuses := []*ContainerStatus{}
+	for _, containerStatus := range podStatus.ContainerStatuses {
+		if containerStatus.State == ContainerStateRunning {
+			runningContainerStatuses = append(runningContainerStatuses, containerStatus)
+		}
+	}
+	return runningContainerStatuses
+}
+
 
 // ContainerStatus represents the status of a container.
 type ContainerStatus struct {
@@ -263,6 +290,15 @@ func (p *Pod) ToAPIPod() *v1.Pod {
 // IsEmpty returns true if the pod is empty.
 func (p *Pod) IsEmpty() bool {
 	return reflect.DeepEqual(p, &Pod{})
+}
+
+// Sort the container statuses by creation time.
+type SortContainerStatusesByCreationTime []*ContainerStatus
+
+func (s SortContainerStatusesByCreationTime) Len() int      { return len(s) }
+func (s SortContainerStatusesByCreationTime) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s SortContainerStatusesByCreationTime) Less(i, j int) bool {
+	return s[i].CreatedAt.Before(s[j].CreatedAt)
 }
 
 
