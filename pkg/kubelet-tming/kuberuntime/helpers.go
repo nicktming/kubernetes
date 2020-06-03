@@ -108,6 +108,18 @@ func toKubeContainerState(state runtimeapi.ContainerState) kubecontainer.Contain
 	return kubecontainer.ContainerStateUnknown
 }
 
+// buildContainerLogsPath builds log path for container relative to pod logs directory.
+func buildContainerLogsPath(containerName string, restartCount int) string {
+	return filepath.Join(containerName, fmt.Sprintf("%d.log", restartCount))
+}
+
+
+// BuildContainerLogsDirectory builds absolute log directory path for a container in pod.
+func BuildContainerLogsDirectory(podNamespace, podName string, podUID types.UID, containerName string) string {
+	return filepath.Join(BuildPodLogsDirectory(podNamespace, podName, podUID), containerName)
+}
+
+
 // getSeccompProfileFromAnnotations gets seccomp profile from annotations.
 // It gets pod's profile if containerName is empty.
 func (m *kubeGenericRuntimeManager) getSeccompProfileFromAnnotations(annotations map[string]string, containerName string) string {
@@ -133,6 +145,29 @@ func (m *kubeGenericRuntimeManager) getSeccompProfileFromAnnotations(annotations
 	}
 
 	return profile
+}
+
+
+// getImageUser gets uid or user name that will run the command(s) from image. The function
+// guarantees that only one of them is set.
+func (m *kubeGenericRuntimeManager) getImageUser(image string) (*int64, string, error) {
+	imageStatus, err := m.imageService.ImageStatus(&runtimeapi.ImageSpec{Image: image})
+	if err != nil {
+		return nil, "", err
+	}
+
+	if imageStatus != nil {
+		if imageStatus.Uid != nil {
+			return &imageStatus.GetUid().Value, "", nil
+		}
+
+		if imageStatus.Username != "" {
+			return nil, imageStatus.Username, nil
+		}
+	}
+
+	// If non of them is set, treat it as root.
+	return new(int64), "", nil
 }
 
 

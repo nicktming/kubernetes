@@ -8,8 +8,42 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
 
 	"fmt"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/apimachinery/pkg/runtime"
+	"strings"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/kubernetes/third_party/forked/golang/expansion"
+	"hash/fnv"
+	hashutil "k8s.io/kubernetes/pkg/util/hash"
 )
 
+// EnvVarsToMap constructs a map of environment name to value from a slice
+// of env vars.
+func EnvVarsToMap(envs []EnvVar) map[string]string {
+	result := map[string]string{}
+	for _, env := range envs {
+		result[env.Name] = env.Value
+	}
+	return result
+}
+
+func ExpandContainerCommandAndArgs(container *v1.Container, envs []EnvVar) (command []string, args []string) {
+	mapping := expansion.MappingFuncFor(EnvVarsToMap(envs))
+
+	if len(container.Command) != 0 {
+		for _, cmd := range container.Command {
+			command = append(command, expansion.Expand(cmd, mapping))
+		}
+	}
+
+	if len(container.Args) != 0 {
+		for _, arg := range container.Args {
+			args = append(args, expansion.Expand(arg, mapping))
+		}
+	}
+
+	return command, args
+}
 
 
 func ConvertPodStatusToRunningPod(runtimeName string, podStatus *PodStatus) Pod {
@@ -149,3 +183,61 @@ func HasPrivilegedContainer(pod *v1.Pod) bool {
 	}
 	return false
 }
+
+// Create an event recorder to record object's event except implicitly required container's, like infra container.
+func FilterEventRecorder(recorder record.EventRecorder) record.EventRecorder {
+	return &innerEventRecorder{
+		recorder: recorder,
+	}
+}
+
+type innerEventRecorder struct {
+	recorder record.EventRecorder
+}
+
+func (irecorder *innerEventRecorder) shouldRecordEvent(object runtime.Object) (*v1.ObjectReference, bool) {
+	if object == nil {
+		return nil, false
+	}
+	if ref, ok := object.(*v1.ObjectReference); ok {
+		if !strings.HasPrefix(ref.FieldPath, ImplicitContainerPrefix) {
+			return ref, true
+		}
+	}
+	return nil, false
+}
+
+func (irecorder *innerEventRecorder) Event(object runtime.Object, eventtype, reason, message string) {
+	if ref, ok := irecorder.shouldRecordEvent(object); ok {
+		irecorder.recorder.Event(ref, eventtype, reason, message)
+	}
+}
+
+func (irecorder *innerEventRecorder) Eventf(object runtime.Object, eventtype, reason, messageFmt string, args ...interface{}) {
+	if ref, ok := irecorder.shouldRecordEvent(object); ok {
+		irecorder.recorder.Eventf(ref, eventtype, reason, messageFmt, args...)
+	}
+
+}
+
+func (irecorder *innerEventRecorder) PastEventf(object runtime.Object, timestamp metav1.Time, eventtype, reason, messageFmt string, args ...interface{}) {
+	if ref, ok := irecorder.shouldRecordEvent(object); ok {
+		irecorder.recorder.PastEventf(ref, timestamp, eventtype, reason, messageFmt, args...)
+	}
+}
+
+func (irecorder *innerEventRecorder) AnnotatedEventf(object runtime.Object, annotations map[string]string, eventtype, reason, messageFmt string, args ...interface{}) {
+	if ref, ok := irecorder.shouldRecordEvent(object); ok {
+		irecorder.recorder.AnnotatedEventf(ref, annotations, eventtype, reason, messageFmt, args...)
+	}
+
+}
+
+// HashContainer returns the hash of the container. It is used to compare
+// the running container with its desired spec.
+func HashContainer(container *v1.Container) uint64 {
+	hash := fnv.New32a()
+	hashutil.DeepHashObject(hash, *container)
+	return uint64(hash.Sum32())
+}
+

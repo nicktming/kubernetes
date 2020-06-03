@@ -342,6 +342,26 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 		}
 	}
 
+	// Step 5: start the init container
+	if container := podContainerChanges.NextInitContainerToStart; container != nil {
+		// Start the next init container
+		startContainerResult := kubecontainer.NewSyncResult(kubecontainer.StartContainer, container.Name)
+		result.AddSyncResult(startContainerResult)
+
+		// TODO doBackOff
+		//isInBackOff, msg, err := m.doBackOff(pod, container, podStatus, backOff)
+		//if isInBackOff {
+		//	startContainerResult.Fail(err, msg)
+		//	klog.V(4).Infof("Backing Off restarting init container %+v in pod %v", container, format.Pod(pod))
+		//	return
+		//}
+
+		klog.Infof("Creating init container %+v in pod %v", container, format.Pod(pod))
+
+	}
+
+
+
 	return
 }
 
@@ -361,12 +381,17 @@ type KubeGenericRuntime interface {
 }
 
 func NewKubeGenericRuntimeManager(
+			recorder record.EventRecorder,
 			runtimeService internalapi.RuntimeService,
 			imageService internalapi.ImageManagerService,
 			podStateProvider podStateProvider,
 			legacyLogProvider LegacyLogProvider,
 			seccmpProfileRoot string,
 			osInterface         kubecontainer.OSInterface,
+			imageBackOff *flowcontrol.Backoff,
+			serializeImagePulls bool,
+			imagePullQPS float32,
+			imagePullBurst int,
 			) (KubeGenericRuntime, error) {
 	kubeRuntimeManager := &kubeGenericRuntimeManager{
 		runtimeService:		runtimeService,
@@ -396,6 +421,14 @@ func NewKubeGenericRuntimeManager(
 		typedVersion.RuntimeApiVersion)
 
 	kubeRuntimeManager.containerGC = newContainerGC(runtimeService, podStateProvider, kubeRuntimeManager)
+
+	kubeRuntimeManager.imagePuller = images.NewImageManager(
+		kubecontainer.FilterEventRecorder(recorder),
+		kubeRuntimeManager,
+		imageBackOff,
+		serializeImagePulls,
+		imagePullQPS,
+		imagePullBurst)
 
 	return kubeRuntimeManager, nil
 }

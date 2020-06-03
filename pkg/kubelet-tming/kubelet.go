@@ -1066,7 +1066,17 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	//runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet, legacyLogProvider)
 
-	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(runtimeService, imageService, klet, legacyLogProvider, seccompProfileRoot, kubeDeps.OSInterface)
+	imageBackOff := flowcontrol.NewBackOff(backOffPeriod, MaxContainerBackOff)
+
+
+	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(
+		kubecontainer.FilterEventRecorder(kubeDeps.Recorder),
+		runtimeService, imageService, klet, legacyLogProvider, seccompProfileRoot, kubeDeps.OSInterface,
+		imageBackOff,
+		kubeCfg.SerializeImagePulls,
+		float32(kubeCfg.RegistryPullQPS),
+		int(kubeCfg.RegistryBurst),
+	)
 
 	if err != nil {
 		return nil, err
