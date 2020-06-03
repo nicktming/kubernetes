@@ -17,6 +17,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/util/logreduction"
 	"time"
 	"k8s.io/client-go/util/flowcontrol"
+	"k8s.io/kubernetes_tming/staging/src/k8s.io/apimachinery/pkg/util/json"
 )
 
 
@@ -71,7 +72,7 @@ type kubeGenericRuntimeManager struct {
 
 func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontainer.PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff) (result kubecontainer.PodSyncResult) {
 
-	klog.Infof("kubeGenericRuntimeManager SyncPod pod: %v, podStatus: %v", pod, podStatus)
+	klog.Infof("kubeGenericRuntimeManager SyncPod pod: %v, podStatus: %v", string(json.Marshal(pod)), string(json.Marshal(podStatus)))
 
 	return
 }
