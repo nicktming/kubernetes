@@ -53,23 +53,23 @@ func (m *kubeGenericRuntimeManager) removeContainerLog(containerID string) error
 	if err != nil {
 		return fmt.Errorf("failed to get container status %q: %v", containerID, err)
 	}
-	//labeledInfo := getContainerInfoFromLabels(status.Labels)
-	//path := status.GetLogPath()
+	labeledInfo := getContainerInfoFromLabels(status.Labels)
+	path := status.GetLogPath()
 
 	// TODO path
 
-	//if err := m.osInterface.Remove(path); err != nil && !os.IsNotExist(err) {
-	//	return fmt.Errorf("failed to remove container %q log %q: %v", containerID, path, err)
-	//}
+	if err := m.osInterface.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove container %q log %q: %v", containerID, path, err)
+	}
 
 	// Remove the legacy container log symlink.
 	// TODO(random-liu): Remove this after cluster logging supports CRI container log path.
-	//legacySymlink := legacyLogSymlink(containerID, labeledInfo.ContainerName, labeledInfo.PodName,
-	//	labeledInfo.PodNamespace)
-	//if err := m.osInterface.Remove(legacySymlink); err != nil && !os.IsNotExist(err) {
-	//	return fmt.Errorf("failed to remove container %q log legacy symbolic link %q: %v",
-	//		containerID, legacySymlink, err)
-	//}
+	legacySymlink := legacyLogSymlink(containerID, labeledInfo.ContainerName, labeledInfo.PodName,
+		labeledInfo.PodNamespace)
+	if err := m.osInterface.Remove(legacySymlink); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove container %q log legacy symbolic link %q: %v",
+			containerID, legacySymlink, err)
+	}
 	return nil
 }
 
