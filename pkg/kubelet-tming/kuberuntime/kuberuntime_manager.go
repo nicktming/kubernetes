@@ -17,7 +17,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/util/logreduction"
 	"time"
 	"k8s.io/client-go/util/flowcontrol"
-	"k8s.io/kubernetes_tming/staging/src/k8s.io/apimachinery/pkg/util/json"
+	"encoding/json"
 )
 
 
