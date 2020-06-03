@@ -14,7 +14,7 @@ import (
 	kubetypes "k8s.io/kubernetes/pkg/kubelet-tming/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
-	"path/filepath"
+	//"path/filepath"
 )
 
 func notRunning(statuses []v1.ContainerStatus) bool {
