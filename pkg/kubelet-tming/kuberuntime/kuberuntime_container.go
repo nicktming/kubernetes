@@ -177,7 +177,7 @@ func (m *kubeGenericRuntimeManager) killContainersWithSyncResult(pod *v1.Pod, ru
 
 	for _, container := range runningPod.Containers {
 
-		go func () {
+		go func (container kubecontainer.Container) {
 			defer utilruntime.HandleCrash()
 			defer wg.Done()
 
