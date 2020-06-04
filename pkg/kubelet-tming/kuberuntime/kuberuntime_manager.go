@@ -103,7 +103,7 @@ type podActions struct {
 
 	NextInitContainerToStart 	*v1.Container
 
-	ContainerToStart		[]int
+	ContainersToStart		[]int
 
 	ContainersToKill		map[kubecontainer.ContainerID]containerToKillInfo
 }
@@ -170,7 +170,7 @@ func (m *kubeGenericRuntimeManager) computePodActions(pod *v1.Pod, podStatus *ku
 		CreateSandbox: 		createPodSandbox,
 		SandboxID: 		sandboxID,
 		Attempt: 		attempt,
-		ContainerToStart: 	[]int{},
+		ContainersToStart: 	[]int{},
 		ContainersToKill: 	make(map[kubecontainer.ContainerID]containerToKillInfo),
 	}
 
@@ -189,7 +189,7 @@ func (m *kubeGenericRuntimeManager) computePodActions(pod *v1.Pod, podStatus *ku
 			if containerSucceeded(&c, podStatus) && pod.Spec.RestartPolicy == v1.RestartPolicyOnFailure {
 				continue
 			}
-			changes.ContainerToStart = append(changes.ContainerToStart, idx)
+			changes.ContainersToStart = append(changes.ContainersToStart, idx)
 		}
 		return changes
 	}
@@ -384,6 +384,34 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 		klog.Infof("Completed init container %q for pod %q", container.Name, format.Pod(pod))
 	}
 
+	// Step 6: start containers in podContainerChanges.ContainersToStart
+	for _, idx := range podContainerChanges.ContainersToStart {
+		container := &pod.Spec.Containers[idx]
+		startContainerResult := kubecontainer.NewSyncResult(kubecontainer.StartContainer, container.Name)
+		result.AddSyncResult(startContainerResult)
+
+		// TODO BackOff
+		//isInBackOff, msg, err := m.doBackOff(pod, container, podStatus, backOff)
+		//if isInBackOff {
+		//	startContainerResult.Fail(err, msg)
+		//	klog.V(4).Infof("Backing Off restarting container %+v in pod %v", container, format.Pod(pod))
+		//	continue
+		//}
+
+		klog.Infof("Creating container %+v in pod %v", container, format.Pod(pod))
+		if msg, err := m.startContainer(podSandboxID, podSandboxConfig, container, pod, podStatus, pullSecrets, podIP); err != nil {
+			startContainerResult.Fail(err, msg)
+			// known errors that are logged in other places are logged at higher levels here to avoid
+			// repetitive log spam
+			switch {
+			case err == images.ErrImagePullBackOff:
+				klog.V(3).Infof("container start failed: %v: %s", err, msg)
+			default:
+				utilruntime.HandleError(fmt.Errorf("container start failed: %v: %s", err, msg))
+			}
+			continue
+		}
+	}
 
 
 	return
