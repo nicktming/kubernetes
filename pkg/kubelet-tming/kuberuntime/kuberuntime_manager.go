@@ -22,6 +22,8 @@ import (
 
 	ref "k8s.io/client-go/tools/reference"
 	"k8s.io/kubernetes/pkg/kubelet/events"
+	"fmt"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
 
@@ -342,6 +344,18 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 		}
 	}
 
+	// Get podSandboxConfig for containers to start.
+	configPodSandboxResult := kubecontainer.NewSyncResult(kubecontainer.ConfigPodSandbox, podSandboxID)
+	result.AddSyncResult(configPodSandboxResult)
+	podSandboxConfig, err := m.generatePodSandboxConfig(pod, podContainerChanges.Attempt)
+	if err != nil {
+		message := fmt.Sprintf("GeneratePodSandboxConfig for pod %q failed: %v", format.Pod(pod), err)
+		klog.Error(message)
+		configPodSandboxResult.Fail(kubecontainer.ErrConfigPodSandbox, message)
+		return
+	}
+
+
 	// Step 5: start the init container
 	if container := podContainerChanges.NextInitContainerToStart; container != nil {
 		// Start the next init container
@@ -358,6 +372,12 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 
 		klog.Infof("Creating init container %+v in pod %v", container, format.Pod(pod))
 
+		if msg, err := m.startContainer(podSandboxID, podSandboxConfig, container, pod, podStatus, pullSecrets, podIP); err != nil {
+			startContainerResult.Fail(err, msg)
+			utilruntime.HandleError(fmt.Errorf("init container start failed: %v: %s", err, msg))
+			return
+		}
+		klog.Infof("Completed init container %q for pod %q", container.Name, format.Pod(pod))
 	}
 
 
