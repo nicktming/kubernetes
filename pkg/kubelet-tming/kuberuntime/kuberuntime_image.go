@@ -5,7 +5,66 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
 	"k8s.io/klog"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	"k8s.io/api/core/v1"
+	"k8s.io/kubernetes/pkg/util/parsers"
+	"k8s.io/kubernetes/pkg/credentialprovider"
+	credentialprovidersecrets "k8s.io/kubernetes/pkg/credentialprovider/secrets"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
+
+
+// PullImage pulls an image from the network to local storage using the supplied
+// secrets if necessary.
+func (m *kubeGenericRuntimeManager) PullImage(image kubecontainer.ImageSpec, pullSecrets []v1.Secret, podSandboxConfig *runtimeapi.PodSandboxConfig) (string, error) {
+	img := image.Image
+	repoToPull, _, _, err := parsers.ParseImageName(img)
+	if err != nil {
+		return "", err
+	}
+
+	keyring, err := credentialprovidersecrets.MakeDockerKeyring(pullSecrets, m.keyring)
+	if err != nil {
+		return "", err
+	}
+
+	imgSpec := &runtimeapi.ImageSpec{Image: img}
+	creds, withCredentials := keyring.Lookup(repoToPull)
+	if !withCredentials {
+		klog.V(3).Infof("Pulling image %q without credentials", img)
+
+		imageRef, err := m.imageService.PullImage(imgSpec, nil, podSandboxConfig)
+		if err != nil {
+			klog.Errorf("Pull image %q failed: %v", img, err)
+			return "", err
+		}
+
+		return imageRef, nil
+	}
+
+	var pullErrs []error
+	for _, currentCreds := range creds {
+		authConfig := credentialprovider.LazyProvide(currentCreds, repoToPull)
+		auth := &runtimeapi.AuthConfig{
+			Username:      authConfig.Username,
+			Password:      authConfig.Password,
+			Auth:          authConfig.Auth,
+			ServerAddress: authConfig.ServerAddress,
+			IdentityToken: authConfig.IdentityToken,
+			RegistryToken: authConfig.RegistryToken,
+		}
+
+		imageRef, err := m.imageService.PullImage(imgSpec, auth, podSandboxConfig)
+		// If there was no error, return success
+		if err == nil {
+			return imageRef, nil
+		}
+
+		pullErrs = append(pullErrs, err)
+	}
+
+	return "", utilerrors.NewAggregate(pullErrs)
+}
+
 
 func (m *kubeGenericRuntimeManager) GetImageRef(image kubecontainer.ImageSpec) (string, error) {
 	status, err := m.imageService.ImageStatus(&runtimeapi.ImageSpec{Image: image.Image})

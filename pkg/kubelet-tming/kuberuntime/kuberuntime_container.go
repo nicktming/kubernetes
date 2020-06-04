@@ -197,7 +197,7 @@ func (m *kubeGenericRuntimeManager) removeContainerLog(containerID string) error
 func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Container, pod *v1.Pod, restartCount int, podIP, imageRef string) (*runtimeapi.ContainerConfig, func(), error) {
 	// TODO runtimeHelper
 
-	var cleanupAction *runtimeapi.ContainerConfig  = nil
+	var cleanupAction func()  = nil
 	//opts, cleanupAction, err := m.runtimeHelper.GenerateRunContainerOptions(pod, container, podIP)
 	//if err != nil {
 	//	return nil, nil, err

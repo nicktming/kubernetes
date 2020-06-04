@@ -24,6 +24,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/events"
 	"fmt"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/kubernetes/pkg/credentialprovider"
 )
 
 
@@ -73,6 +74,9 @@ type kubeGenericRuntimeManager struct {
 	seccompProfileRoot string
 
 	osInterface         kubecontainer.OSInterface
+
+	// Keyring for pulling images
+	keyring credentialprovider.DockerKeyring
 
 }
 
@@ -420,6 +424,7 @@ func NewKubeGenericRuntimeManager(
 		legacyLogProvider: 	legacyLogProvider,
 		seccompProfileRoot: 	seccmpProfileRoot,
 		osInterface: 		osInterface,
+		keyring:             	credentialprovider.NewDockerKeyring(),
 	}
 
 	typedVersion, err := kubeRuntimeManager.runtimeService.Version(kubeRuntimeAPIVersion)
