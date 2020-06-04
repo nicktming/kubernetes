@@ -863,7 +863,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	bootstrapCheckpointPath string,
 	nodeStatusMaxImages int32) (*Kubelet, error) {
 
-	klog.Infof("klet.rootDirectory: %v", rootDirectory)
+	klog.Infof("klet.rootDirectory: %v, bootstrapCheckpointPath: %v", rootDirectory, bootstrapCheckpointPath)
 
 	if rootDirectory == "" {
 		return nil, fmt.Errorf("invalid root directory %q", rootDirectory)
