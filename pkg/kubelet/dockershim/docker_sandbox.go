@@ -522,6 +522,7 @@ func (ds *dockerService) ListPodSandbox(_ context.Context, r *runtimeapi.ListPod
 			continue
 		}
 		sandboxIDs[converted.Id] = true
+		klog.V(6).Infof("in containers sandboxID: %v", converted.Id)
 		result = append(result, converted)
 	}
 
@@ -544,6 +545,7 @@ func (ds *dockerService) ListPodSandbox(_ context.Context, r *runtimeapi.ListPod
 			}
 			continue
 		}
+		klog.V(6).Infof("in checkpoint sandboxID: %v", id)
 		result = append(result, checkpointToRuntimeAPISandbox(id, checkpoint))
 	}
 
