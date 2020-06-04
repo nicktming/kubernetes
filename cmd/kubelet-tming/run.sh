@@ -17,3 +17,5 @@ config="$config --kubeconfig=$homepath/ssl_keys/node/kubelet_kubeconfig"
 // 1. /proc/$$/cgroup
 // 2. Check whether swap is enabled. The Kubelet does not support running with swap enabled.
 // 3. MemoryPressureCondition find v1.NodeMemoryPressure to break
+// 4. kubelet custom metrics
+
