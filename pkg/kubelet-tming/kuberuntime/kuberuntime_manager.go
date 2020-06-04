@@ -134,26 +134,26 @@ func (m *kubeGenericRuntimeManager) podSandboxChanged(pod *v1.Pod, podStatus *ku
 
 	// Needs to create a new sandbox when readySandboxCount > 1 or the ready sandbox is not the latest one.
 	sandboxStatus := podStatus.SandboxStatuses[0]
-	//if readySandboxCount > 1 {
-	//	klog.V(2).Infof("More than 1 sandboxes for pod %q are ready. Need to reconcile them", format.Pod(pod))
-	//	return true, sandboxStatus.Metadata.Attempt + 1, sandboxStatus.Id
-	//}
-	//if sandboxStatus.State != runtimeapi.PodSandboxState_SANDBOX_READY {
-	//	klog.V(2).Infof("No ready sandbox for pod %q can be found. Need to start a new one", format.Pod(pod))
-	//	return true, sandboxStatus.Metadata.Attempt + 1, sandboxStatus.Id
-	//}
-	//
-	//// Needs to create a new sandbox when network namespace changed.
+	if readySandboxCount > 1 {
+		klog.V(2).Infof("More than 1 sandboxes for pod %q are ready. Need to reconcile them", format.Pod(pod))
+		return true, sandboxStatus.Metadata.Attempt + 1, sandboxStatus.Id
+	}
+	if sandboxStatus.State != runtimeapi.PodSandboxState_SANDBOX_READY {
+		klog.V(2).Infof("No ready sandbox for pod %q can be found. Need to start a new one", format.Pod(pod))
+		return true, sandboxStatus.Metadata.Attempt + 1, sandboxStatus.Id
+	}
+
+	// Needs to create a new sandbox when network namespace changed.
 	//if sandboxStatus.GetLinux().GetNamespaces().GetOptions().GetNetwork() != networkNamespaceForPod(pod) {
 	//	klog.V(2).Infof("Sandbox for pod %q has changed. Need to start a new one", format.Pod(pod))
 	//	return true, sandboxStatus.Metadata.Attempt + 1, ""
 	//}
-	//
-	//// Needs to create a new sandbox when the sandbox does not have an IP address.
-	//if !kubecontainer.IsHostNetworkPod(pod) && sandboxStatus.Network.Ip == "" {
-	//	klog.V(2).Infof("Sandbox for pod %q has no IP address.  Need to start a new one", format.Pod(pod))
-	//	return true, sandboxStatus.Metadata.Attempt + 1, sandboxStatus.Id
-	//}
+
+	// Needs to create a new sandbox when the sandbox does not have an IP address.
+	if !kubecontainer.IsHostNetworkPod(pod) && sandboxStatus.Network.Ip == "" {
+		klog.V(2).Infof("Sandbox for pod %q has no IP address.  Need to start a new one", format.Pod(pod))
+		return true, sandboxStatus.Metadata.Attempt + 1, sandboxStatus.Id
+	}
 
 	return false, sandboxStatus.Metadata.Attempt, sandboxStatus.Id
 
@@ -194,10 +194,107 @@ func (m *kubeGenericRuntimeManager) computePodActions(pod *v1.Pod, podStatus *ku
 		return changes
 	}
 
+	// TODO init containers
+	// Check initialization progress.
+	//initLastStatus, next, done := findNextInitContainerToRun(pod, podStatus)
+	//if !done {
+	//	if next != nil {
+	//		initFailed := initLastStatus != nil && isInitContainerFailed(initLastStatus)
+	//		if initFailed && !shouldRestartOnFailure(pod) {
+	//			changes.KillPod = true
+	//		} else {
+	//			// Always try to stop containers in unknown state first.
+	//			if initLastStatus != nil && initLastStatus.State == kubecontainer.ContainerStateUnknown {
+	//				changes.ContainersToKill[initLastStatus.ID] = containerToKillInfo{
+	//					name:      next.Name,
+	//					container: next,
+	//					message: fmt.Sprintf("Init container is in %q state, try killing it before restart",
+	//						initLastStatus.State),
+	//				}
+	//			}
+	//			changes.NextInitContainerToStart = next
+	//		}
+	//	}
+	//	// Initialization failed or still in progress. Skip inspecting non-init
+	//	// containers.
+	//	return changes
+	//}
+
+	keepCount := 0
+	for idx, container := range pod.Spec.Containers {
+		containerStatus := podStatus.FindContainerStatusByName(container.Name)
+
+		if containerStatus != nil && containerStatus.State != kubecontainer.ContainerStateRunning {
+			// TODO PostStopContainer
+
+			//if err := m.internalLifecycle.PostStopContainer(containerStatus.ID.ID); err != nil {
+			//	klog.Errorf("internal container post-stop lifecycle hook failed for container %v in pod %v with error %v",
+			//		container.Name, pod.Name, err)
+			//}
+		}
+
+		if containerStatus == nil || containerStatus.State != kubecontainer.ContainerStateRunning {
+			if kubecontainer.ShouldContainerBeRestarted(&container, pod, podStatus) {
+				message := fmt.Sprintf("Container %+v is dead, but RestartPolicy says that we should restart it.", container)
+				klog.Infof(message)
+
+				changes.ContainersToStart = append(changes.ContainersToStart, idx)
+
+				if containerStatus != nil && containerStatus.State == kubecontainer.ContainerStateUnknown {
+					changes.ContainersToKill[containerStatus.ID] = containerToKillInfo{
+						name: 		containerStatus.Name,
+						container: 	&pod.Spec.Containers[idx],
+						message: 	fmt.Sprintf("Container is in %q state, try killing it before restart",
+							containerStatus.State),
+					}
+				}
+			}
+			continue
+		}
+
+		var message string
+		restart := shouldRestartOnFailure(pod)
+		if _, _, changed := containerChanged(&container, containerStatus); changed {
+			message = fmt.Sprintf("Container %s definition changed", container.Name)
+			restart = true
+		} else {
+			keepCount++
+			continue
+		}
+		//else if liveness, found := m.livenessManager.Get(containerStatus.ID); found && liveness == proberesults.Failure {
+		//	// If the container failed the liveness probe, we should kill it.
+		//	message = fmt.Sprintf("Container %s failed liveness probe", container.Name)
+		//}
+
+		if restart {
+			message = fmt.Sprintf("%s, will be restarted", message)
+			changes.ContainersToStart = append(changes.ContainersToStart, idx)
+		}
+
+		changes.ContainersToKill[containerStatus.ID] = containerToKillInfo{
+			name:				containerStatus.Name,
+			container:			&pod.Spec.Containers[idx],
+			message:			message,
+		}
+
+		klog.Infof("Container %q (%q) of pod %s: %s", container.Name, containerStatus.ID, format.Pod(pod), message)
+
+	}
+
+	// TODO why
+
+	//if keepCount == 0 && len(changes.ContainersToStart) == 0 {
+	//	changes.KillPod = true
+	//}
+
 	klog.Infof("should not happen!")
 	return changes
 }
 
+func containerChanged(container *v1.Container, containerStatus *kubecontainer.ContainerStatus) (uint64, uint64, bool) {
+	expectedHash := kubecontainer.HashContainer(container)
+	return expectedHash, containerStatus.Hash, containerStatus.Hash != expectedHash
+}
 
 
 func (m *kubeGenericRuntimeManager) killPodWithSyncResult(pod *v1.Pod, runningPod kubecontainer.Pod, gracePeriodOverride *int64) (result kubecontainer.PodSyncResult) {
