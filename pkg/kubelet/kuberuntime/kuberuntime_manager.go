@@ -615,7 +615,7 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 
 	syncStartTime := time.Now()
 	defer func(){
-		metrics.CriCounterDuration.WithLabelValues(pod.Name).Set(time.Now().Sub(syncStartTime))
+		metrics.CriCounterDuration.WithLabelValues(pod.Name).Set(metrics.SinceInSeconds(syncStartTime))
 	}()
 
 	// Step 1: Compute sandbox and container changes.
