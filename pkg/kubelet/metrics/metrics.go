@@ -388,6 +388,7 @@ func Register(containerCache kubecontainer.RuntimeCache, collectors ...prometheu
 		prometheus.MustRegister(CgroupManagerDuration)
 		prometheus.MustRegister(PodWorkerStartDuration)
 		prometheus.MustRegister(PodStartCounterDuration)
+		prometheus.MustRegister(CriCounterDuration)
 		prometheus.MustRegister(ContainersPerPodCount)
 		prometheus.MustRegister(newPodAndContainerCollector(containerCache))
 		prometheus.MustRegister(PLEGRelistDuration)
