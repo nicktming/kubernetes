@@ -38,6 +38,7 @@ const (
 	PodStartDurationCounterKey           = "pod_start_duration_counter_seconds"
 	PodStartCriDurationCounterKey        = "pod_start_duration_cri_counter_seconds"
 	PodStartDurationKey                  = "pod_start_duration_seconds"
+	SyncPodStartDurationKey              = "sync_pod_start_duration_seconds"
 	CgroupManagerOperationsKey           = "cgroup_manager_duration_seconds"
 	PodWorkerStartDurationKey            = "pod_worker_start_duration_seconds"
 	PLEGRelistDurationKey                = "pleg_relist_duration_seconds"
@@ -136,6 +137,16 @@ var (
 		},
 		[]string{"pod_name"},
 	)
+
+	SyncPodDuration = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: KubeletSubsystem,
+			Name:      SyncPodStartDurationKey,
+			Help:      "Duration in seconds for a single pod to go from pending to running.",
+		},
+		[]string{"pod_name"},
+	)
+
 	CgroupManagerDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: KubeletSubsystem,
@@ -389,6 +400,7 @@ func Register(containerCache kubecontainer.RuntimeCache, collectors ...prometheu
 		prometheus.MustRegister(PodWorkerStartDuration)
 		prometheus.MustRegister(PodStartCounterDuration)
 		prometheus.MustRegister(CriCounterDuration)
+		prometheus.MustRegister(SyncPodDuration)
 		prometheus.MustRegister(ContainersPerPodCount)
 		prometheus.MustRegister(newPodAndContainerCollector(containerCache))
 		prometheus.MustRegister(PLEGRelistDuration)

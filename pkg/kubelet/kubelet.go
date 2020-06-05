@@ -1473,11 +1473,17 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 // the most accurate information possible about an error situation to aid debugging.
 // Callers should not throw an event if this operation returns an error.
 func (kl *Kubelet) syncPod(o syncPodOptions) error {
+
 	// pull out the required options
 	pod := o.pod
 	mirrorPod := o.mirrorPod
 	podStatus := o.podStatus
 	updateType := o.updateType
+
+	syncStartTime := time.Now()
+	defer func(){
+		metrics.CriCounterDuration.WithLabelValues(pod.Name).Set(metrics.SinceInSeconds(syncStartTime))
+	}()
 
 	// if we want to kill a pod, do it now!
 	if updateType == kubetypes.SyncPodKill {
