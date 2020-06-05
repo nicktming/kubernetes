@@ -1482,7 +1482,7 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
 	syncStartTime := time.Now()
 	defer func(){
-		metrics.CriCounterDuration.WithLabelValues(pod.Name).Set(metrics.SinceInSeconds(syncStartTime))
+		metrics.SyncPodDuration.WithLabelValues(pod.Name).Set(metrics.SinceInSeconds(syncStartTime))
 	}()
 
 	// if we want to kill a pod, do it now!
