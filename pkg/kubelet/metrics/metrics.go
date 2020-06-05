@@ -36,6 +36,7 @@ const (
 	NodeLabelKey                         = "node"
 	PodWorkerDurationKey                 = "pod_worker_duration_seconds"
 	PodStartDurationCounterKey           = "pod_start_duration_counter_seconds"
+	PodStartCriDurationCounterKey        = "pod_start_duration_cri_counter_seconds"
 	PodStartDurationKey                  = "pod_start_duration_seconds"
 	CgroupManagerOperationsKey           = "cgroup_manager_duration_seconds"
 	PodWorkerStartDurationKey            = "pod_worker_start_duration_seconds"
@@ -123,6 +124,14 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: KubeletSubsystem,
 			Name:      PodStartDurationCounterKey,
+			Help:      "Duration in seconds for a single pod to go from pending to running.",
+		},
+		[]string{"pod_name"},
+	)
+	CriCounterDuration = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: KubeletSubsystem,
+			Name:      PodStartCriDurationCounterKey,
 			Help:      "Duration in seconds for a single pod to go from pending to running.",
 		},
 		[]string{"pod_name"},
