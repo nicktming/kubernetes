@@ -153,6 +153,14 @@ func (m *manager) syncPod(uid types.UID, status versionedPodStatus) {
 	//}
 }
 
+func (m *manager) GetPodStatus(uid types.UID) (v1.PodStatus, bool) {
+	m.podStatusLock.RLock()
+	defer m.podStatusLock.RUnlock()
+
+	status, ok := m.podStatuses[types.UID(m.podManager.TranslatePodUID(uid))]
+	return status.status, ok
+}
+
 func (m *manager) SetPodStatus(pod *v1.Pod, status v1.PodStatus) {
 	m.podStatusLock.Lock()
 	defer m.podStatusLock.Unlock()
@@ -343,12 +351,12 @@ func mergePodStatus(oldPodStatus, newPodStatus v1.PodStatus) v1.PodStatus {
 
 	podConditions := []v1.PodCondition{}
 	for _, c := range oldPodStatus.Conditions {
-		if !kubetypes.PodConditionsByKubelet(c.Type) {
+		if !kubetypes.PodConditionByKubelet(c.Type) {
 			podConditions = append(podConditions, c)
 		}
 	}
 	for _, c := range newPodStatus.Conditions {
-		if kubetypes.PodConditionsByKubelet(c.Type) {
+		if kubetypes.PodConditionByKubelet(c.Type) {
 			podConditions = append(podConditions, c)
 		}
 	}
