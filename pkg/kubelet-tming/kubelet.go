@@ -70,6 +70,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/events"
 
 	"k8s.io/client-go/util/flowcontrol"
+	"encoding/json"
 )
 
 const (
@@ -359,6 +360,8 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 
 	go wait.Until(kl.updateRuntimeUp, 5*time.Second, wait.NeverStop)
 
+	kl.statusManager.Start()
+
 	// Start the pod lifecycle event generator.
 	kl.pleg.Start()
 	kl.syncLoop(updates, kl)
@@ -512,6 +515,12 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
 	// Generate final API pod status with pod and status manager status
 	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus)
+
+	pretty_podStatus, _ := json.MarshalIndent(podStatus, "", "\t")
+	pretty_apiPodStatus, _ := json.MarshalIndent(apiPodStatus, "", "\t")
+
+	klog.Infof("pretty_podStatus: %v, pretty_apiPodStatus: %v", string(pretty_podStatus), string(pretty_apiPodStatus))
+
 	// The pod IP may be changed in generateAPIPodStatus if the pod is using host network. (See #24576)
 	// TODO(random-liu): After writing pod spec into container labels, check whether pod is using host network, and
 	// set pod IP to hostIP directly in runtime.GetPodStatus
@@ -546,7 +555,7 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	//}
 
 	// Update status in the status manager
-	//kl.statusManager.SetPodStatus(pod, apiPodStatus)
+	kl.statusManager.SetPodStatus(pod, apiPodStatus)
 
 	// Kill pod if it should not be running
 	//if !runnable.Admit || pod.DeletionTimestamp != nil || apiPodStatus.Phase == v1.PodFailed {
@@ -988,6 +997,10 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	}
 
 	klet.podManager = kubepod.NewBasicPodManager(kubepod.NewBasicMirrorClient(klet.kubeClient), secretManager, configMapManager, checkpointManager)
+
+	klet.statusManager = status.NewManager(klet.kubeClient, klet.podManager,
+						//klet,
+						)
 
 	if remoteRuntimeEndpoint != "" {
 		if remoteImageEndpoint == "" {
