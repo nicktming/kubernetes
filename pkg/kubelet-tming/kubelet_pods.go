@@ -15,7 +15,101 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	//"path/filepath"
+	//volumeutil "k8s.io/kubernetes/pkg/volume/util"
 )
+
+// GenerateRunContainerOptions generates the RunContainerOptions, which can be used by
+// the container runtime to set parameters for launching a container.
+
+func (kl *Kubelet) GenerateRunContainerOptions(pod *v1.Pod, container *v1.Container, podIP string) (*kubecontainer.RunContainerOptions, func(), error) {
+	opts, err := kl.containerManager.GetResources(pod, container)
+	if err != nil {
+		return nil, nil, err
+	}
+	//hostname, hostDomainName, err := kl.GeneratePodHostNameAndDomain(pod)
+	//if err != nil {
+	//	return nil, nil, err
+	//}
+	//opts.Hostname = hostname
+	//podName := volumeutil.GetUniquePodName(pod)
+	//volumes := kl.volumeManager.GetMountedVolumesForPod(podName)
+
+	opts.PortMappings = kubecontainer.MakePortMappings(container)
+
+	// TODO: remove feature gate check after no longer needed
+	//if utilfeature.DefaultFeatureGate.Enabled(features.BlockVolume) {
+	//	blkutil := volumepathhandler.NewBlockVolumePathHandler()
+	//	blkVolumes, err := kl.makeBlockVolumes(pod, container, volumes, blkutil)
+	//	if err != nil {
+	//		return nil, nil, err
+	//	}
+	//	opts.Devices = append(opts.Devices, blkVolumes...)
+	//}
+
+	// TODO env
+	//envs, err := kl.makeEnvironmentVariables(pod, container, podIP)
+	//if err != nil {
+	//	return nil, nil, err
+	//}
+	//opts.Envs = append(opts.Envs, envs...)
+
+	// TODO mount
+
+	//mounts, cleanupAction, err := makeMounts(pod, kl.getPodDir(pod.UID), container, hostname, hostDomainName, podIP, volumes, kl.mounter, kl.subpather, opts.Envs)
+	//if err != nil {
+	//	return nil, cleanupAction, err
+	//}
+	//opts.Mounts = append(opts.Mounts, mounts...)
+
+	//if len(container.TerminationMessagePath) != 0 && runtime.GOOS != "windows" {
+	//	p := kl.getPodContainerDir(pod.UID, container.Name)
+	//	if err := os.MkdirAll(p, 0750); err != nil {
+	//		klog.Errorf("Error on creating %q: %v", p, err)
+	//	} else {
+	//		opts.PodContainerDir = p
+	//	}
+	//}
+
+	// only do this check if the experimental behavior is enabled, otherwise allow it to default to false
+	//if kl.experimentalHostUserNamespaceDefaulting {
+	//	opts.EnableHostUserNamespace = kl.enableHostUserNamespace(pod)
+	//}
+
+	//return opts, cleanupAction, nil
+
+	return opts, nil, nil
+
+}
+
+// GeneratePodHostNameAndDomain creates a hostname and domain name for a pod,
+// given that pod's spec and annotations or returns an error.
+//func (kl *Kubelet) GeneratePodHostNameAndDomain(pod *v1.Pod) (string, string, error) {
+//	clusterDomain := kl.dnsConfigurer.ClusterDomain
+//
+//	hostname := pod.Name
+//	if len(pod.Spec.Hostname) > 0 {
+//		if msgs := utilvalidation.IsDNS1123Label(pod.Spec.Hostname); len(msgs) != 0 {
+//			return "", "", fmt.Errorf("Pod Hostname %q is not a valid DNS label: %s", pod.Spec.Hostname, strings.Join(msgs, ";"))
+//		}
+//		hostname = pod.Spec.Hostname
+//	}
+//
+//	hostname, err := truncatePodHostnameIfNeeded(pod.Name, hostname)
+//	if err != nil {
+//		return "", "", err
+//	}
+//
+//	hostDomain := ""
+//	if len(pod.Spec.Subdomain) > 0 {
+//		if msgs := utilvalidation.IsDNS1123Label(pod.Spec.Subdomain); len(msgs) != 0 {
+//			return "", "", fmt.Errorf("Pod Subdomain %q is not a valid DNS label: %s", pod.Spec.Subdomain, strings.Join(msgs, ";"))
+//		}
+//		hostDomain = fmt.Sprintf("%s.%s.svc.%s", pod.Spec.Subdomain, pod.Namespace, clusterDomain)
+//	}
+//
+//	return hostname, hostDomain, nil
+//}
+
 
 func notRunning(statuses []v1.ContainerStatus) bool {
 	for _, status := range statuses {

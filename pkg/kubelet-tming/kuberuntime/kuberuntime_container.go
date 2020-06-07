@@ -197,11 +197,11 @@ func (m *kubeGenericRuntimeManager) removeContainerLog(containerID string) error
 func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Container, pod *v1.Pod, restartCount int, podIP, imageRef string) (*runtimeapi.ContainerConfig, func(), error) {
 	// TODO runtimeHelper
 
-	var cleanupAction func()  = nil
-	//opts, cleanupAction, err := m.runtimeHelper.GenerateRunContainerOptions(pod, container, podIP)
-	//if err != nil {
-	//	return nil, nil, err
-	//}
+	//var cleanupAction func()  = nil
+	opts, cleanupAction, err := m.runtimeHelper.GenerateRunContainerOptions(pod, container, podIP)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	//uid, username, err := m.getImageUser(container.Image)
 	//if err != nil {
@@ -213,11 +213,10 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Contai
 	//	return nil, cleanupAction, err
 	//}
 
-	envs := make([]kubecontainer.EnvVar, 0)
 
-	command, args := kubecontainer.ExpandContainerCommandAndArgs(container, envs)
+	command, args := kubecontainer.ExpandContainerCommandAndArgs(container, opts.Envs)
 	logDir := BuildContainerLogsDirectory(pod.Namespace, pod.Name, pod.UID, container.Name)
-	err := m.osInterface.MkdirAll(logDir, 0755)
+	err = m.osInterface.MkdirAll(logDir, 0755)
 	if err != nil {
 		return nil, cleanupAction, fmt.Errorf("create container log directory for container %s failed: %v", container.Name, err)
 	}
@@ -233,7 +232,7 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Contai
 		Args:        args,
 		WorkingDir:  container.WorkingDir,
 		Labels:      newContainerLabels(container, pod),
-		//Annotations: newContainerAnnotations(container, pod, restartCount, opts),
+		Annotations: newContainerAnnotations(container, pod, restartCount, opts),
 		//Devices:     makeDevices(opts),
 		//Mounts:      m.makeMounts(opts, container),
 		LogPath:     containerLogsPath,
@@ -248,15 +247,15 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Contai
 	//}
 
 	// set environment variables
-	//envs := make([]*runtimeapi.KeyValue, len(opts.Envs))
-	//for idx := range opts.Envs {
-	//	e := opts.Envs[idx]
-	//	envs[idx] = &runtimeapi.KeyValue{
-	//		Key:   e.Name,
-	//		Value: e.Value,
-	//	}
-	//}
-	//config.Envs = envs
+	envs := make([]*runtimeapi.KeyValue, len(opts.Envs))
+	for idx := range opts.Envs {
+		e := opts.Envs[idx]
+		envs[idx] = &runtimeapi.KeyValue{
+			Key:   e.Name,
+			Value: e.Value,
+		}
+	}
+	config.Envs = envs
 
 	return config, cleanupAction, nil
 }

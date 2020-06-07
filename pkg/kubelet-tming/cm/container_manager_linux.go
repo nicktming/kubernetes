@@ -31,6 +31,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"time"
 
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
+
 	//"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -82,6 +84,7 @@ type containerManagerImpl struct {
 	// Interface for CPU affinity management.
 	cpuManager cpumanager.Manager
 }
+
 
 
 
@@ -178,6 +181,25 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 	// TODO CPUManager
 
 	return cm, nil
+}
+
+
+func (cm *containerManagerImpl) GetResources(pod *v1.Pod, container *v1.Container) (*kubecontainer.RunContainerOptions, error) {
+	opts := &kubecontainer.RunContainerOptions{}
+	// Allocate should already be called during predicateAdmitHandler.Admit(),
+	// just try to fetch device runtime information from cached state here
+
+	//devOpts, err := cm.deviceManager.GetDeviceRunContainerOptions(pod, container)
+	//if err != nil {
+	//	return nil, err
+	//} else if devOpts == nil {
+	//	return opts, nil
+	//}
+	//opts.Devices = append(opts.Devices, devOpts.Devices...)
+	//opts.Mounts = append(opts.Mounts, devOpts.Mounts...)
+	//opts.Envs = append(opts.Envs, devOpts.Envs...)
+	//opts.Annotations = append(opts.Annotations, devOpts.Annotations...)
+	return opts, nil
 }
 
 func (cm *containerManagerImpl) Start(node *v1.Node,

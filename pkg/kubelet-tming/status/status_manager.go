@@ -84,6 +84,7 @@ func NewManager(kubeClient clientset.Interface, podManager kubepod.Manager,
 		podManager: 		podManager,
 		podStatuses:		make(map[types.UID]versionedPodStatus),
 		podStatusChannel: 	make(chan podStatusSyncRequest, 1000),
+		apiStatusVersions: 	make(map[kubetypes.MirrorPodUID]uint64),
 	}
 }
 

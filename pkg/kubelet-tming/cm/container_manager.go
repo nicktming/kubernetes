@@ -11,6 +11,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-tming/status"
 	internalapi "k8s.io/cri-api/pkg/apis"
 	evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
 )
 
 type ActivePodsFunc func() []*v1.Pod
@@ -30,6 +31,10 @@ type ContainerManager interface {
 	GetNodeConfig() NodeConfig
 
 	GetPodCgroupRoot() string
+
+	// GetResources returns RunContainerOptions with devices, mounts, and env fields populated for
+	// extended resources required by container.
+	GetResources(pod *v1.Pod, container *v1.Container) (*kubecontainer.RunContainerOptions, error)
 
 }
 

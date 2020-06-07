@@ -78,6 +78,11 @@ type kubeGenericRuntimeManager struct {
 	// Keyring for pulling images
 	keyring credentialprovider.DockerKeyring
 
+	// RuntimeHelper that wraps kubelet to generate runtime container options.
+	runtimeHelper kubecontainer.RuntimeHelper
+
+
+
 }
 
 type containerToKillInfo struct {
@@ -541,6 +546,7 @@ func NewKubeGenericRuntimeManager(
 			serializeImagePulls bool,
 			imagePullQPS float32,
 			imagePullBurst int,
+			runtimeHelper kubecontainer.RuntimeHelper,
 			) (KubeGenericRuntime, error) {
 	kubeRuntimeManager := &kubeGenericRuntimeManager{
 		runtimeService:		runtimeService,
@@ -550,6 +556,7 @@ func NewKubeGenericRuntimeManager(
 		seccompProfileRoot: 	seccmpProfileRoot,
 		osInterface: 		osInterface,
 		keyring:             	credentialprovider.NewDockerKeyring(),
+		runtimeHelper: 		runtimeHelper,
 	}
 
 	typedVersion, err := kubeRuntimeManager.runtimeService.Version(kubeRuntimeAPIVersion)

@@ -18,6 +18,11 @@ import (
 )
 
 
+type RuntimeHelper interface {
+
+	GenerateRunContainerOptions(pod *v1.Pod, container *v1.Container, podIP string) (contOpts *RunContainerOptions, cleanupAction func(), err error)
+
+}
 
 // EnvVarsToMap constructs a map of environment name to value from a slice
 // of env vars.
