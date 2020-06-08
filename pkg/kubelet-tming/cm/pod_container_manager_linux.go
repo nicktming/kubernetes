@@ -54,7 +54,7 @@ func (m *podContainerManagerImpl) GetPodContainerName(pod *v1.Pod) (CgroupName, 
 	// Get the literal cgroupfs name
 	cgroupfsName := m.cgroupManager.Name(cgroupName)
 
-	klog.Infof("GetPodContainerName cgroupName: %v, cgroupfsName: %v", cgroupName, cgroupfsName)
+	klog.Infof("GetPodContainerName parentContainer: %v, cgroupName: %v, cgroupfsName: %v", parentContainer, cgroupName, cgroupfsName)
 
 	return cgroupName, cgroupfsName
 }
