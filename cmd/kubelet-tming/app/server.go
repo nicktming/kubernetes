@@ -691,7 +691,7 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 		devicePluginEnabled := utilfeature.DefaultFeatureGate.Enabled(features.DevicePlugins)
 
 		klog.Infof("server.go s.RuntimeCgroups: %v, s.SystemCgroups: %v, s.KubeletCgroups: %v, s.ContainerRuntime: %v, " +
-			"s.CgroupsPerQOS: %v, s.CgroupRoot: %v, s.CgroupRoot: %v, s.CgroupDriver: %v, s.RootDirectory: %v, " +
+			"s.CgroupsPerQOS: %v, s.CgroupRoot: %v, s.CgroupDriver: %v, s.RootDirectory: %v, " +
 			"s.ProtectKernelDefaults: %v", s.RuntimeCgroups, s.SystemCgroups, s.KubeletCgroups, s.ContainerRuntime, s.CgroupsPerQOS,
 			s.CgroupRoot, s.CgroupDriver, s.RootDirectory, s.ProtectKernelDefaults)
 

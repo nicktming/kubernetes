@@ -265,9 +265,9 @@ func (cm *containerManagerImpl) Start(node *v1.Node,
 
 	// TODO
 	// Setup the node
-	//if err := cm.setupNode(activePods); err != nil {
-	//	return err
-	//}
+	if err := cm.setupNode(activePods); err != nil {
+		return err
+	}
 
 	// Don't run a background thread if there are no ensureStateFuncs.
 	hasEnsureStateFuncs := false
