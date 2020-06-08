@@ -38,9 +38,9 @@ func getCgroupProcs(dir string) ([]int, error) {
 }
 
 // GetPodCgroupNameSuffix returns the last element of the pod CgroupName identifier
-func GetPodCgroupNameSuffix(podUID types.UID) string {
-	return ""
-}
+//func GetPodCgroupNameSuffix(podUID types.UID) string {
+//	return ""
+//}
 
 // NodeAllocatableRoot returns the literal cgroup path for the node allocatable cgroup
 //func NodeAllocatableRoot(cgroupRoot, cgroupDriver string) string {

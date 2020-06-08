@@ -124,9 +124,12 @@ func (m *kubeGenericRuntimeManager) generatePodSandboxConfig(pod *v1.Pod, attemp
 func (m *kubeGenericRuntimeManager) generatePodSandboxLinuxConfig(pod *v1.Pod) (*runtimeapi.LinuxPodSandboxConfig, error) {
 	// TODO
 
-	//cgroupParent := m.runtimeHelper.GetPodCgroupParent(pod)
+	cgroupParent := m.runtimeHelper.GetPodCgroupParent(pod)
+
+	klog.Infof("generatePodSandboxLinuxConfig cgroupParent: %v", cgroupParent)
+
 	lc := &runtimeapi.LinuxPodSandboxConfig{
-		//CgroupParent: cgroupParent,
+		CgroupParent: cgroupParent,
 		SecurityContext: &runtimeapi.LinuxSandboxSecurityContext{
 			Privileged:         kubecontainer.HasPrivilegedContainer(pod),
 			SeccompProfilePath: m.getSeccompProfileFromAnnotations(pod.Annotations, ""),

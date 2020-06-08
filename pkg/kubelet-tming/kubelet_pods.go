@@ -18,6 +18,14 @@ import (
 	//volumeutil "k8s.io/kubernetes/pkg/volume/util"
 )
 
+
+// GetPodCgroupParent gets pod cgroup parent from container manager.
+func (kl *Kubelet) GetPodCgroupParent(pod *v1.Pod) string {
+	pcm := kl.containerManager.NewPodContainerManager()
+	_, cgroupParent := pcm.GetPodContainerName(pod)
+	return cgroupParent
+}
+
 // GenerateRunContainerOptions generates the RunContainerOptions, which can be used by
 // the container runtime to set parameters for launching a container.
 

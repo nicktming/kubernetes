@@ -34,6 +34,7 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
 
 	//"k8s.io/apimachinery/pkg/api/resource"
+	"github.com/opencontainers/runc/libcontainer/configs"
 )
 
 const (
@@ -78,7 +79,7 @@ type containerManagerImpl struct {
 	// Event recorder interface.
 	recorder record.EventRecorder
 	// Interface for QoS cgroup management
-	//qosContainerManager QOSContainerManager
+	qosContainerManager QOSContainerManager
 	// Interface for exporting and allocating devices reported by device plugins.
 	deviceManager devicemanager.Manager
 	// Interface for CPU affinity management.
@@ -137,31 +138,34 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 	cgroupRoot := ParseCgroupfsToCgroupName(nodeConfig.CgroupRoot)
 	cgroupManager := NewCgroupManager(subsystems, nodeConfig.CgroupDriver)
 	// Check if Cgroup-root actually exists on the node
-	//if nodeConfig.CgroupsPerQOS {
-	//	// this does default to / when enabled, but this tests against regressions.
-	//	if nodeConfig.CgroupRoot == "" {
-	//		return nil, fmt.Errorf("invalid configuration: cgroups-per-qos was specified and cgroup-root was not specified. To enable the QoS cgroup hierarchy you need to specify a valid cgroup-root")
-	//	}
-	//
-	//	// we need to check that the cgroup root actually exists for each subsystem
-	//	// of note, we always use the cgroupfs driver when performing this check since
-	//	// the input is provided in that format.
-	//	// this is important because we do not want any name conversion to occur.
-	//	if !cgroupManager.Exists(cgroupRoot) {
-	//		return nil, fmt.Errorf("invalid configuration: cgroup-root %q doesn't exist", cgroupRoot)
-	//	}
-	//	klog.Infof("container manager verified user specified cgroup-root exists: %v", cgroupRoot)
-	//	// Include the top level cgroup for enforcing node allocatable into cgroup-root.
-	//	// This way, all sub modules can avoid having to understand the concept of node allocatable.
-	//	cgroupRoot = NewCgroupName(cgroupRoot, defaultNodeAllocatableCgroupName)
-	//}
+	if nodeConfig.CgroupsPerQOS {
+		// this does default to / when enabled, but this tests against regressions.
+		if nodeConfig.CgroupRoot == "" {
+			return nil, fmt.Errorf("invalid configuration: cgroups-per-qos was specified and cgroup-root was not specified. To enable the QoS cgroup hierarchy you need to specify a valid cgroup-root")
+		}
+
+		// we need to check that the cgroup root actually exists for each subsystem
+		// of note, we always use the cgroupfs driver when performing this check since
+		// the input is provided in that format.
+		// this is important because we do not want any name conversion to occur.
+		if !cgroupManager.Exists(cgroupRoot) {
+			return nil, fmt.Errorf("invalid configuration: cgroup-root %q doesn't exist", cgroupRoot)
+		}
+		klog.Infof("container manager verified user specified cgroup-root exists: %v", cgroupRoot)
+		// Include the top level cgroup for enforcing node allocatable into cgroup-root.
+		// This way, all sub modules can avoid having to understand the concept of node allocatable.
+		cgroupRoot = NewCgroupName(cgroupRoot, defaultNodeAllocatableCgroupName)
+	}
 	klog.Infof("Creating Container Manager object based on Node Config: %+v", nodeConfig)
 
 	// TODO QOS
-	//qosContainerManager, err := NewQOSContainerManager(subsystems, cgroupRoot, nodeConfig, cgroupManager)
-	//if err != nil {
-	//	return nil, err
-	//}
+
+	klog.Infof("NewQOSContainerManager subsystems: %v, cgroupRoot: %v", subsystems, cgroupRoot)
+
+	qosContainerManager, err := NewQOSContainerManager(subsystems, cgroupRoot, nodeConfig, cgroupManager)
+	if err != nil {
+		return nil, err
+	}
 
 
 	cm := &containerManagerImpl{
@@ -174,13 +178,38 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 		internalCapacity:    internalCapacity,
 		cgroupRoot:          cgroupRoot,
 		recorder:            recorder,
-		//qosContainerManager: qosContainerManager,
+		qosContainerManager: qosContainerManager,
 	}
 
 	// TODO deviceplugin
 	// TODO CPUManager
 
 	return cm, nil
+}
+
+
+func (cm *containerManagerImpl) NewPodContainerManager() PodContainerManager {
+	if cm.NodeConfig.CgroupsPerQOS {
+		return &podContainerManagerImpl{
+			qosContainersInfo: cm.GetQOSContainersInfo(),
+			subsystems:        cm.subsystems,
+			cgroupManager:     cm.cgroupManager,
+			podPidsLimit:      cm.ExperimentalPodPidsLimit,
+			enforceCPULimits:  cm.EnforceCPULimits,
+			cpuCFSQuotaPeriod: uint64(cm.CPUCFSQuotaPeriod / time.Microsecond),
+		}
+	}
+	return &podContainerManagerNoop{
+		cgroupRoot: cm.cgroupRoot,
+	}
+}
+
+func (cm *containerManagerImpl) GetQOSContainersInfo() QOSContainersInfo {
+	return cm.qosContainerManager.GetQOSContainersInfo()
+}
+
+func (cm *containerManagerImpl) UpdateQOSCgroups() error {
+	return cm.qosContainerManager.UpdateCgroups()
 }
 
 
@@ -329,10 +358,141 @@ func (cm *containerManagerImpl) GetPodCgroupRoot() string {
 	return cm.cgroupManager.Name(cm.cgroupRoot)
 }
 
+func (cm *containerManagerImpl) setupNode(activePods ActivePodsFunc) error {
+	// TODO CPU hardcapping unsupported
+
+	//f, err := validateSystemRequirements(cm.mountUtil)
+	//if err != nil {
+	//	return err
+	//}
+	//if !f.cpuHardcapping {
+	//	cm.status.SoftRequirements = fmt.Errorf("CPU hardcapping unsupported")
+	//}
+
+	// TODO Kernel
+	//b := KernelTunableModify
+	//if cm.GetNodeConfig().ProtectKernelDefaults {
+	//	b = KernelTunableError
+	//}
+	//if err := setupKernelTunables(b); err != nil {
+	//	return err
+	//}
+
+	if cm.NodeConfig.CgroupsPerQOS {
+		if err := cm.createNodeAllocatableCgroups(); err != nil {
+			return err
+		}
+		err = cm.qosContainerManager.Start(cm.getNodeAllocatableAbsolute, activePods)
+		if err != nil {
+			return fmt.Errorf("failed to initialize top level QOS containers: %v", err)
+		}
+	}
+
+	// Enforce Node Allocatable (if required)
+	//if err := cm.enforceNodeAllocatableCgroups(); err != nil {
+	//	return err
+	//}
+
+	systemContainers := []*systemContainer{}
+	if cm.ContainerRuntime == "docker" {
+		// With the docker-CRI integration, dockershim will manage the cgroups
+		// and oom score for the docker processes.
+		// In the future, NodeSpec should mandate the cgroup that the
+		// runtime processes need to be in. For now, we still check the
+		// cgroup for docker periodically, so that kubelet can recognize
+		// the cgroup for docker and serve stats for the runtime.
+		// TODO(#27097): Fix this after NodeSpec is clearly defined.
+		cm.periodicTasks = append(cm.periodicTasks, func() {
+			klog.V(4).Infof("[ContainerManager]: Adding periodic tasks for docker CRI integration")
+			cont, err := getContainerNameForProcess(dockerProcessName, dockerPidFile)
+			if err != nil {
+				klog.Error(err)
+				return
+			}
+			klog.Infof("[ContainerManager]: Discovered runtime cgroups name: %s", cont)
+			cm.Lock()
+			defer cm.Unlock()
+			cm.RuntimeCgroupsName = cont
+		})
+	}
+
+	// TODO systemcontainers
+
+	//if cm.SystemCgroupsName != "" {
+	//	if cm.SystemCgroupsName == "/" {
+	//		return fmt.Errorf("system container cannot be root (\"/\")")
+	//	}
+	//	cont := newSystemCgroups(cm.SystemCgroupsName)
+	//	cont.ensureStateFunc = func(manager *fs.Manager) error {
+	//		return ensureSystemCgroups("/", manager)
+	//	}
+	//	systemContainers = append(systemContainers, cont)
+	//}
+	//
+	//if cm.KubeletCgroupsName != "" {
+	//	cont := newSystemCgroups(cm.KubeletCgroupsName)
+	//	allowAllDevices := true
+	//	manager := fs.Manager{
+	//		Cgroups: &configs.Cgroup{
+	//			Parent: "/",
+	//			Name:   cm.KubeletCgroupsName,
+	//			Resources: &configs.Resources{
+	//				AllowAllDevices: &allowAllDevices,
+	//			},
+	//		},
+	//	}
+	//	cont.ensureStateFunc = func(_ *fs.Manager) error {
+	//		return ensureProcessInContainerWithOOMScore(os.Getpid(), qos.KubeletOOMScoreAdj, &manager)
+	//	}
+	//	systemContainers = append(systemContainers, cont)
+	//} else {
+	//	cm.periodicTasks = append(cm.periodicTasks, func() {
+	//		if err := ensureProcessInContainerWithOOMScore(os.Getpid(), qos.KubeletOOMScoreAdj, nil); err != nil {
+	//			klog.Error(err)
+	//			return
+	//		}
+	//		cont, err := getContainer(os.Getpid())
+	//		if err != nil {
+	//			klog.Errorf("failed to find cgroups of kubelet - %v", err)
+	//			return
+	//		}
+	//		cm.Lock()
+	//		defer cm.Unlock()
+	//
+	//		cm.KubeletCgroupsName = cont
+	//	})
+	//}
+
+	cm.systemContainers = systemContainers
+	return nil
+}
 
 
+// getNodeAllocatableAbsolute returns the absolute value of Node Allocatable which is primarily useful for enforcement.
+// Note that not all resources that are available on the node are included in the returned list of resources.
+// Returns a ResourceList.
+func (cm *containerManagerImpl) getNodeAllocatableAbsolute() v1.ResourceList {
+	return cm.getNodeAllocatableAbsoluteImpl(cm.capacity)
+}
 
-
+func (cm *containerManagerImpl) getNodeAllocatableAbsoluteImpl(capacity v1.ResourceList) v1.ResourceList {
+	result := make(v1.ResourceList)
+	for k, v := range capacity {
+		value := *(v.Copy())
+		if cm.NodeConfig.SystemReserved != nil {
+			value.Sub(cm.NodeConfig.SystemReserved[k])
+		}
+		if cm.NodeConfig.KubeReserved != nil {
+			value.Sub(cm.NodeConfig.KubeReserved[k])
+		}
+		if value.Sign() < 0 {
+			// Negative Allocatable resources don't make sense.
+			value.Set(0)
+		}
+		result[k] = value
+	}
+	return result
+}
 
 
 

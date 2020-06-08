@@ -3,9 +3,33 @@ package cm
 import (
 	"os"
 	"fmt"
+	"k8s.io/apimachinery/pkg/types"
 
 	libcontainercgroups "github.com/opencontainers/runc/libcontainer/cgroups"
+	"k8s.io/api/core/v1"
+	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 )
+
+func GetPodCgroupNameSuffix(podUID types.UID) string {
+	return podCgroupNamePrefix + string(podUID)
+}
+
+// HugePageLimits converts the API representation to a map
+// from huge page size (in bytes) to huge page limit (in bytes).
+func HugePageLimits(resourceList v1.ResourceList) map[int64]int64 {
+	hugePageLimits := map[int64]int64{}
+	for k, v := range resourceList {
+		if v1helper.IsHugePageResourceName(k) {
+			pageSize, _ := v1helper.HugePageSizeFromResourceName(k)
+			if value, exists := hugePageLimits[pageSize.Value()]; exists {
+				hugePageLimits[pageSize.Value()] = value + v.Value()
+			} else {
+				hugePageLimits[pageSize.Value()] = v.Value()
+			}
+		}
+	}
+	return hugePageLimits
+}
 
 func GetCgroupSubsystems() (*CgroupSubsystems, error) {
 	allCgroups, err := libcontainercgroups.GetCgroupMounts(true)

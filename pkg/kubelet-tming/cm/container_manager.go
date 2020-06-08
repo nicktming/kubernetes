@@ -36,6 +36,10 @@ type ContainerManager interface {
 	// extended resources required by container.
 	GetResources(pod *v1.Pod, container *v1.Container) (*kubecontainer.RunContainerOptions, error)
 
+	// NewPodContainerManager is a factory method which returns a podContainerManager object
+	// Returns a noop implementation if qos cgroup hierarchy is not enabled
+	NewPodContainerManager() PodContainerManager
+
 }
 
 
