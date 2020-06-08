@@ -1,5 +1,11 @@
 package cm
 
+
+import (
+	"k8s.io/api/core/v1"
+	//"k8s.io/apimachinery/pkg/types"
+)
+
 // ResourceConfig holds information about all the supported cgroup resource parameters.
 type ResourceConfig struct {
 	// Memory limit (in bytes).
