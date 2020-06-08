@@ -68,6 +68,9 @@ func (m *qosContainerManagerImpl) GetQOSContainersInfo() QOSContainersInfo {
 func (m *qosContainerManagerImpl) Start(getNodeAllocatable func() v1.ResourceList, activePods ActivePodsFunc) error {
 	cm := m.cgroupManager
 	rootContainer := m.cgroupRoot
+
+	klog.Infof("qosContainerManagerImpl Start rootContainer: %v", rootContainer)
+
 	if !cm.Exists(rootContainer) {
 		return fmt.Errorf("root container %v doesn't exist", rootContainer)
 	}
