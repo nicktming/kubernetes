@@ -1,16 +1,6 @@
 package cm
 
 import (
-	"os"
-	"fmt"
-	"k8s.io/apimachinery/pkg/types"
-
-	libcontainercgroups "github.com/opencontainers/runc/libcontainer/cgroups"
-	"k8s.io/api/core/v1"
-	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
-)
-
-import (
 	"bufio"
 	"fmt"
 	"os"
