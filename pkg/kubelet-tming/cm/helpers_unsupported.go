@@ -1,17 +1,17 @@
 package cm
 
 
-import (
-	//"k8s.io/apimachinery/pkg/types"
-)
-
-const (
-	MinShares     = 0
-	SharesPerCPU  = 0
-	MilliCPUToCPU = 0
-
-	MinQuotaPeriod = 0
-)
+//import (
+//	//"k8s.io/apimachinery/pkg/types"
+//)
+//
+//const (
+//	MinShares     = 0
+//	SharesPerCPU  = 0
+//	MilliCPUToCPU = 0
+//
+//	MinQuotaPeriod = 0
+//)
 
 // MilliCPUToQuota converts milliCPU and period to CFS quota values.
 //func MilliCPUToQuota(milliCPU, period int64) int64 {
