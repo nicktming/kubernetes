@@ -374,7 +374,9 @@ func (ctrl *PersistentVolumeController) claimWorker() {
 		}
 		claim, err := ctrl.claimLister.PersistentVolumeClaims(namespace).Get(name)
 
-		klog.V(2).Infof("claimWorker claim: %v/%v volumeName:%v<-", claim.Namespace, claim.Namespace, claim.Spec.VolumeName)
+		if claim != nil {
+			klog.V(2).Infof("claimWorker claim: %v/%v volumeName:%v<-", claim.Namespace, claim.Namespace, claim.Spec.VolumeName)
+		}
 
 		if err == nil {
 			// The claim still exists in informer cache, the event must have
