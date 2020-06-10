@@ -237,8 +237,10 @@ func (ctrl *PersistentVolumeController) syncClaim(claim *v1.PersistentVolumeClai
 	klog.V(4).Infof("synchronizing PersistentVolumeClaim[%s]: %s", claimToClaimKey(claim), getClaimStatusForLogging(claim))
 
 	if !metav1.HasAnnotation(claim.ObjectMeta, pvutil.AnnBindCompleted) {
+		klog.V(4).Infof("========>111111 syncClaim syncUnboundClaim<============")
 		return ctrl.syncUnboundClaim(claim)
 	} else {
+		klog.V(4).Infof("========>222222 syncClaim syncBoundClaim<============")
 		return ctrl.syncBoundClaim(claim)
 	}
 }
@@ -1361,16 +1363,16 @@ func (ctrl *PersistentVolumeController) provisionClaim(claim *v1.PersistentVolum
 		ctrl.operationTimestamps.AddIfNotExist(claimKey, ctrl.getProvisionerName(plugin, storageClass), "provision")
 		var err error
 
-		klog.V(2).Infof("========>provisionClaim scheduleOperation<============")
+		klog.V(4).Infof("========>provisionClaim scheduleOperation<============")
 
 		if plugin == nil || plugin.IsMigratedToCSI() {
 
-			klog.V(2).Infof("========>111111provisionClaimOperationExternal<============")
+			klog.V(4).Infof("========>111111provisionClaimOperationExternal<============")
 
 			_, err = ctrl.provisionClaimOperationExternal(claim, plugin, storageClass)
 		} else {
 
-			klog.V(2).Infof("========>222222provisionClaimOperationExternal<============")
+			klog.V(4).Infof("========>222222provisionClaimOperation<============")
 
 			_, err = ctrl.provisionClaimOperation(claim, plugin, storageClass)
 		}

@@ -322,7 +322,7 @@ func (ctrl *PersistentVolumeController) volumeWorker() {
 			return false
 		}
 		if !errors.IsNotFound(err) {
-			klog.V(2).Infof("error getting volume %q from informer: %v", key, err)
+			klog.V(4).Infof("error getting volume %q from informer: %v", key, err)
 			return false
 		}
 
