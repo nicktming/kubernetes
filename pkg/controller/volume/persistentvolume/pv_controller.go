@@ -1360,9 +1360,18 @@ func (ctrl *PersistentVolumeController) provisionClaim(claim *v1.PersistentVolum
 		claimKey := claimToClaimKey(claim)
 		ctrl.operationTimestamps.AddIfNotExist(claimKey, ctrl.getProvisionerName(plugin, storageClass), "provision")
 		var err error
+
+		klog.V(2).Infof("========>provisionClaim scheduleOperation<============")
+
 		if plugin == nil || plugin.IsMigratedToCSI() {
+
+			klog.V(2).Infof("========>111111provisionClaimOperationExternal<============")
+
 			_, err = ctrl.provisionClaimOperationExternal(claim, plugin, storageClass)
 		} else {
+
+			klog.V(2).Infof("========>222222provisionClaimOperationExternal<============")
+
 			_, err = ctrl.provisionClaimOperation(claim, plugin, storageClass)
 		}
 		// if error happened, record an error count metric
