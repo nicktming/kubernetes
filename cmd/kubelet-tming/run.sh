@@ -13,10 +13,6 @@ config="$config --kubeconfig=$homepath/ssl_keys/node/kubelet_kubeconfig"
 ./kubelet-tming $config
 
 
-// 潜在的问题
-// 解决方案
-
-
 
 // TODO
 // 1. /proc/$$/cgroup
