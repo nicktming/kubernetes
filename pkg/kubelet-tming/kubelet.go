@@ -127,6 +127,7 @@ type SyncHandler interface {
 	HandlePodAdditions(pods []*v1.Pod)
 	HandlePodUpdates(pods []*v1.Pod)
 	HandlePodReconcile(pods []*v1.Pod)
+	HandlePodSyncs(pods []*v1.Pod)
 }
 
 
@@ -375,8 +376,10 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHandler) {
 	klog.Infof("Starting kubelet main sync loop.")
 
+	plegCh := kl.pleg.Watch()
+
 	for {
-		if !kl.syncLoopIteration(updates, kl) {
+		if !kl.syncLoopIteration(updates, kl, plegCh) {
 			break
 		}
 	}
@@ -385,7 +388,8 @@ func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHand
 
 }
 
-func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handler SyncHandler) bool {
+func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handler SyncHandler,
+				plegCh <- chan *pleg.PodLifecycleEvent) bool {
 	select {
 	case u, open := <- configCh:
 		if !open {
@@ -404,8 +408,39 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handle
 			klog.Infof("SyncLoop (RECONCILE, %q): %q", u.Source, format.Pods(u.Pods))
 			handler.HandlePodReconcile(u.Pods)
 		}
+	case e := <-plegCh:
+		if isSyncPodWorthy(e) {
+			// PLEG event for a pod; sync it.
+			if pod, ok := kl.podManager.GetPodByUID(e.ID); ok {
+				klog.Infof("SyncLoop (PLEG): %q, event: %#v", format.Pod(pod), e)
+				handler.HandlePodSyncs([]*v1.Pod{pod})
+			} else {
+				klog.Infof("SyncLoop (PLEG): ignore irrelevant event: %#v", e)
+			}
+		}
+
+		// TODO pleg.ContainerDied
+		//if e.Type == pleg.ContainerDied {
+		//	if containID, ok := e.Data.(string); ok {
+		//		kl.cle
+		//	}
+		//}
 	}
 	return true
+}
+
+// HandlePodSyncs
+func (kl *Kubelet) HandlePodSyncs(pods []*v1.Pod) {
+	start := kl.clock.Now()
+	for _, pod := range pods {
+		mirrorPod, _ := kl.podManager.GetMirrorPodByPod(pod)
+		kl.dispatchWork(pod, kubetypes.SyncPodSync, mirrorPod, start)
+	}
+}
+
+func isSyncPodWorthy(event *pleg.PodLifecycleEvent) bool {
+	// ContainerRemoved doesn't affect pod state
+	return event.Type != pleg.ContainerStarted
 }
 
 func (kl *Kubelet) HandlePodReconcile(pods []*v1.Pod) {
