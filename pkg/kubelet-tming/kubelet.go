@@ -125,6 +125,7 @@ type Dependencies struct {
 
 type SyncHandler interface {
 	HandlePodAdditions(pods []*v1.Pod)
+	HandlePodUpdates(pods []*v1.Pod)
 }
 
 type Bootstrap interface {
@@ -392,9 +393,34 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handle
 		case kubetypes.ADD:
 			klog.Infof("SyncLoop (Add, %q): %q", u.Source, format.Pods(u.Pods))
 			handler.HandlePodAdditions(u.Pods)
+		case kubetypes.UPDATE:
+			klog.V(2).Infof("SyncLoop (UPDATE, %q): %q", u.Source, format.PodsWithDeletionTimestamps(u.Pods))
+			handler.HandlePodUpdates(u.Pods)
 		}
 	}
 	return true
+}
+
+func (kl *Kubelet) HandlePodUpdates(pods []*v1.Pod) {
+	start := kl.clock.Now()
+	for _, pod := range pods {
+		// TODO resolv.conf
+		// Responsible for checking limits in resolv.conf
+		//if kl.dnsConfigurer != nil && kl.dnsConfigurer.ResolverConfig != "" {
+		//	kl.dnsConfigurer.CheckLimitsForResolvConf()
+		//}
+
+		kl.podManager.UpdatePod(pod)
+		// TODO mirrorPOd
+		//if kubepod.IsMirrorPod(pod) {
+		//	kl.handleMirrorPod(pod, start)
+		//	continue
+		//}
+
+		// TODO: Evaluate if we need to validate and reject updates.
+		mirrorPod, _ := kl.podManager.GetMirrorPodByPod(pod)
+		kl.dispatchWork(pod, kubetypes.SyncPodUpdate, mirrorPod, start)
+	}
 }
 
 
