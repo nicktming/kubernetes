@@ -126,7 +126,10 @@ type Dependencies struct {
 type SyncHandler interface {
 	HandlePodAdditions(pods []*v1.Pod)
 	HandlePodUpdates(pods []*v1.Pod)
+	HandlePodReconcile(pods []*v1.Pod)
 }
+
+
 
 type Bootstrap interface {
 	BirthCry()
@@ -393,12 +396,25 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handle
 		case kubetypes.ADD:
 			klog.Infof("SyncLoop (Add, %q): %q", u.Source, format.Pods(u.Pods))
 			handler.HandlePodAdditions(u.Pods)
-		case kubetypes.UPDATE:
-			klog.V(2).Infof("SyncLoop (UPDATE, %q): %q", u.Source, format.PodsWithDeletionTimestamps(u.Pods))
-			handler.HandlePodUpdates(u.Pods)
+		//case kubetypes.UPDATE:
+		//	klog.Infof("SyncLoop (UPDATE, %q): %q", u.Source, format.PodsWithDeletionTimestamps(u.Pods))
+		//	handler.HandlePodUpdates(u.Pods)
 		}
 	}
 	return true
+}
+
+func (kl *Kubelet) HandlePodReconcile(pods []*v1.Pod) {
+	//start := kl.clock.Now()
+	for _, pod := range pods {
+		// Update the pod in pod manager, status manager will do periodically reconcile according
+		// to the pod manager.  ???
+		kl.podManager.UpdatePod(pod)
+
+		// Reconcile Pod "Ready" codition if necessary. Trigger sync pod for reconciliation.
+
+
+	}
 }
 
 func (kl *Kubelet) HandlePodUpdates(pods []*v1.Pod) {
@@ -496,7 +512,7 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	podStatus := o.podStatus
 	updateType := o.updateType
 
-	klog.Infof("pod name: %v, pod.Status: %v, podStatus: %v", pod.Name, pod.Status, podStatus)
+	//klog.Infof("pod name: %v, pod.Status: %v, podStatus: %v", pod.Name, pod.Status, podStatus)
 
 
 	// if we want to kill a pod, do it now!
@@ -538,11 +554,12 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	}
 
 
+	pretty_podStatus, _ := json.MarshalIndent(podStatus, "", "\t")
 
 	// Generate final API pod status with pod and status manager status
 	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus)
 
-	pretty_podStatus, _ := json.MarshalIndent(podStatus, "", "\t")
+
 	pretty_apiPodStatus, _ := json.MarshalIndent(apiPodStatus, "", "\t")
 
 	klog.Infof("pretty_podStatus: %v, pretty_apiPodStatus: %v", string(pretty_podStatus), string(pretty_apiPodStatus))

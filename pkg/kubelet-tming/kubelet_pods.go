@@ -16,6 +16,7 @@ import (
 	"os"
 	//"path/filepath"
 	//volumeutil "k8s.io/kubernetes/pkg/volume/util"
+	"encoding/json"
 )
 
 
@@ -507,6 +508,11 @@ func getPhase(spec *v1.PodSpec, info []v1.ContainerStatus) v1.PodPhase {
 			unknown++
 		}
 	}
+
+	pretty_containerStatus, _ := json.MarshalIndent(info, "", "\t")
+	klog.Infof("===>getPhase pretty_containerStatus: %v", pretty_containerStatus)
+
+	klog.Infof("===>getPhase pendingInitialization:%v, waiting: %v, running: %v, unknown: %v, stopped: %v", pendingInitialization, waiting, running, unknown, stopped)
 
 	if failedInitialization > 0 && spec.RestartPolicy == v1.RestartPolicyNever {
 		return v1.PodFailed
