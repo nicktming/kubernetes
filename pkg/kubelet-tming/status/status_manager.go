@@ -373,7 +373,7 @@ func NeedToReconcilePodReadiness(pod *v1.Pod) bool {
 		return false
 	}
 
-
+	return false
 }
 
 
