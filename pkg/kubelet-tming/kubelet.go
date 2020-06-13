@@ -399,13 +399,17 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handle
 		//case kubetypes.UPDATE:
 		//	klog.Infof("SyncLoop (UPDATE, %q): %q", u.Source, format.PodsWithDeletionTimestamps(u.Pods))
 		//	handler.HandlePodUpdates(u.Pods)
+
+		case kubetypes.RECONCILE:
+			klog.Infof("SyncLoop (RECONCILE, %q): %q", u.Source, format.Pods(u.Pods))
+			handler.HandlePodReconcile(u.Pods)
 		}
 	}
 	return true
 }
 
 func (kl *Kubelet) HandlePodReconcile(pods []*v1.Pod) {
-	//start := kl.clock.Now()
+	start := kl.clock.Now()
 	for _, pod := range pods {
 		// Update the pod in pod manager, status manager will do periodically reconcile according
 		// to the pod manager.  ???
@@ -413,7 +417,18 @@ func (kl *Kubelet) HandlePodReconcile(pods []*v1.Pod) {
 
 		// Reconcile Pod "Ready" codition if necessary. Trigger sync pod for reconciliation.
 
+		if status.NeedToReconcilePodReadiness(pod) {
+			mirrorPod, _ := kl.podManager.GetMirrorPodByPod(pod)
+			kl.dispatchWork(pod, kubetypes.SyncPodSync, mirrorPod, start)
+		}
 
+		// After an evicted pod is synced, all dead containers in the pod can be removed.
+		// TODO
+		//if eviction.PodIsEvicted(pod.Status) {
+		//	if podStatus, err := kl.podCache.Get(pod.UID); err == nil {
+		//		kl.containerDeletor.deleteContainersInPod("", podStatus, true)
+		//	}
+		//}
 	}
 }
 
