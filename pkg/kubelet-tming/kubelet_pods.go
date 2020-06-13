@@ -202,6 +202,9 @@ func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.Po
 	spec := &pod.Spec
 	allStatus := append(append([]v1.ContainerStatus{}, s.ContainerStatuses...), s.InitContainerStatuses...)
 	s.Phase = getPhase(spec, allStatus)
+
+	klog.Infof("===>generateAPIPodStatus pod(%v/%v(%v)): %v", pod.Namespace, pod.Name, pod.UID, s.Phase)
+
 	// Check for illegal phase transition
 	if pod.Status.Phase == v1.PodFailed || pod.Status.Phase == v1.PodSucceeded {
 		// API server shows terminal phase; transitions are not allowed
@@ -510,7 +513,7 @@ func getPhase(spec *v1.PodSpec, info []v1.ContainerStatus) v1.PodPhase {
 	}
 
 	pretty_containerStatus, _ := json.MarshalIndent(info, "", "\t")
-	klog.Infof("===>getPhase pretty_containerStatus: %v", pretty_containerStatus)
+	klog.Infof("===>getPhase pretty_containerStatus: %v", string(pretty_containerStatus))
 
 	klog.Infof("===>getPhase pendingInitialization:%v, waiting: %v, running: %v, unknown: %v, stopped: %v", pendingInitialization, waiting, running, unknown, stopped)
 
