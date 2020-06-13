@@ -218,6 +218,12 @@ func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.Po
 	// TODO
 	//kl.probeManager.UpdatePodStatus(pod.UID, s)
 
+	// TODO Replace probeManager
+
+	for i, _ := range s.ContainerStatuses {
+		s.ContainerStatuses[i].Ready = s.ContainerStatuses[i].State.Running != nil
+	}
+
 	s.Conditions = append(s.Conditions, status.GeneratePodInitializedCondition(spec, s.InitContainerStatuses, s.Phase))
 	s.Conditions = append(s.Conditions, status.GeneratePodReadyCondition(spec, s.Conditions, s.ContainerStatuses, s.Phase))
 	s.Conditions = append(s.Conditions, status.GenerateContainersReadyCondition(spec, s.ContainerStatuses, s.Phase))
