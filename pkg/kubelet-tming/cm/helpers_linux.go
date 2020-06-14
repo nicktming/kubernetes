@@ -16,6 +16,8 @@ import (
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	v1qos "k8s.io/kubernetes/pkg/apis/core/v1/helper/qos"
 	kubefeatures "k8s.io/kubernetes/pkg/features"
+	"k8s.io/klog"
+	"encoding/json"
 )
 
 const (
@@ -89,14 +91,15 @@ func HugePageLimits(resourceList v1.ResourceList) map[int64]int64 {
 	return hugePageLimits
 }
 
-// ResourceConfigForPod takes the input pod and outputs the cgroup resource config.
+
 func ResourceConfigForPod(pod *v1.Pod, enforceCPULimits bool, cpuPeriod uint64) *ResourceConfig {
-	// sum requests and limits.
+
 	reqs, limits := resource.PodRequestsAndLimits(pod)
 
-	cpuRequests := int64(0)
-	cpuLimits := int64(0)
+	cpuRequests  := int64(0)
+	cpuLimits    := int64(0)
 	memoryLimits := int64(0)
+
 	if request, found := reqs[v1.ResourceCPU]; found {
 		cpuRequests = request.MilliValue()
 	}
@@ -104,66 +107,102 @@ func ResourceConfigForPod(pod *v1.Pod, enforceCPULimits bool, cpuPeriod uint64) 
 		cpuLimits = limit.MilliValue()
 	}
 	if limit, found := limits[v1.ResourceMemory]; found {
-		memoryLimits = limit.Value()
+		memoryLimits = limit.MilliValue()
 	}
+	klog.Infof("ResourceConfigForPod reqs: %v, limits: %v, cpuRequests: %v, cpuLimits: %v, memoryLimits: %v",
+			reqs, limits, cpuRequests, cpuLimits, memoryLimits)
 
-	// convert to CFS values
-	cpuShares := MilliCPUToShares(cpuRequests)
-	cpuQuota := MilliCPUToQuota(cpuLimits, int64(cpuPeriod))
-
-	// track if limits were applied for each resource.
-	memoryLimitsDeclared := true
-	cpuLimitsDeclared := true
-	// map hugepage pagesize (bytes) to limits (bytes)
-	hugePageLimits := map[int64]int64{}
-	for _, container := range pod.Spec.Containers {
-		if container.Resources.Limits.Cpu().IsZero() {
-			cpuLimitsDeclared = false
-		}
-		if container.Resources.Limits.Memory().IsZero() {
-			memoryLimitsDeclared = false
-		}
-		containerHugePageLimits := HugePageLimits(container.Resources.Requests)
-		for k, v := range containerHugePageLimits {
-			if value, exists := hugePageLimits[k]; exists {
-				hugePageLimits[k] = value + v
-			} else {
-				hugePageLimits[k] = v
-			}
-		}
-	}
-
-	// quota is not capped when cfs quota is disabled
-	if !enforceCPULimits {
-		cpuQuota = int64(-1)
-	}
-
-	// determine the qos class
 	qosClass := v1qos.GetPodQOS(pod)
 
-	// build the result
 	result := &ResourceConfig{}
 	if qosClass == v1.PodQOSGuaranteed {
-		result.CpuShares = &cpuShares
-		result.CpuQuota = &cpuQuota
-		result.CpuPeriod = &cpuPeriod
 		result.Memory = &memoryLimits
 	} else if qosClass == v1.PodQOSBurstable {
-		result.CpuShares = &cpuShares
-		if cpuLimitsDeclared {
-			result.CpuQuota = &cpuQuota
-			result.CpuPeriod = &cpuPeriod
-		}
-		if memoryLimitsDeclared {
-			result.Memory = &memoryLimits
-		}
+
 	} else {
 		shares := uint64(MinShares)
 		result.CpuShares = &shares
 	}
-	result.HugePageLimit = hugePageLimits
+	pretty_result, _ := json.MarshalIndent(result, "", "\t")
+	klog.Infof("ResourceConfigForPod result: %v", string(pretty_result))
 	return result
 }
+
+//// ResourceConfigForPod takes the input pod and outputs the cgroup resource config.
+//func ResourceConfigForPod(pod *v1.Pod, enforceCPULimits bool, cpuPeriod uint64) *ResourceConfig {
+//	// sum requests and limits.
+//	reqs, limits := resource.PodRequestsAndLimits(pod)
+//
+//	cpuRequests := int64(0)
+//	cpuLimits := int64(0)
+//	memoryLimits := int64(0)
+//	if request, found := reqs[v1.ResourceCPU]; found {
+//		cpuRequests = request.MilliValue()
+//	}
+//	if limit, found := limits[v1.ResourceCPU]; found {
+//		cpuLimits = limit.MilliValue()
+//	}
+//	if limit, found := limits[v1.ResourceMemory]; found {
+//		memoryLimits = limit.Value()
+//	}
+//
+//	// convert to CFS values
+//	cpuShares := MilliCPUToShares(cpuRequests)
+//	cpuQuota := MilliCPUToQuota(cpuLimits, int64(cpuPeriod))
+//
+//	// track if limits were applied for each resource.
+//	memoryLimitsDeclared := true
+//	cpuLimitsDeclared := true
+//	// map hugepage pagesize (bytes) to limits (bytes)
+//	hugePageLimits := map[int64]int64{}
+//	for _, container := range pod.Spec.Containers {
+//		if container.Resources.Limits.Cpu().IsZero() {
+//			cpuLimitsDeclared = false
+//		}
+//		if container.Resources.Limits.Memory().IsZero() {
+//			memoryLimitsDeclared = false
+//		}
+//		containerHugePageLimits := HugePageLimits(container.Resources.Requests)
+//		for k, v := range containerHugePageLimits {
+//			if value, exists := hugePageLimits[k]; exists {
+//				hugePageLimits[k] = value + v
+//			} else {
+//				hugePageLimits[k] = v
+//			}
+//		}
+//	}
+//
+//	// quota is not capped when cfs quota is disabled
+//	if !enforceCPULimits {
+//		cpuQuota = int64(-1)
+//	}
+//
+//	// determine the qos class
+//	qosClass := v1qos.GetPodQOS(pod)
+//
+//	// build the result
+//	result := &ResourceConfig{}
+//	if qosClass == v1.PodQOSGuaranteed {
+//		result.CpuShares = &cpuShares
+//		result.CpuQuota = &cpuQuota
+//		result.CpuPeriod = &cpuPeriod
+//		result.Memory = &memoryLimits
+//	} else if qosClass == v1.PodQOSBurstable {
+//		result.CpuShares = &cpuShares
+//		if cpuLimitsDeclared {
+//			result.CpuQuota = &cpuQuota
+//			result.CpuPeriod = &cpuPeriod
+//		}
+//		if memoryLimitsDeclared {
+//			result.Memory = &memoryLimits
+//		}
+//	} else {
+//		shares := uint64(MinShares)
+//		result.CpuShares = &shares
+//	}
+//	result.HugePageLimit = hugePageLimits
+//	return result
+//}
 
 // GetCgroupSubsystems returns information about the mounted cgroup subsystems
 func GetCgroupSubsystems() (*CgroupSubsystems, error) {

@@ -85,6 +85,13 @@ type PodContainerManager interface {
 	// GetPodContainerName returns the CgroupName identifier, and its literal cgroupfs form on the host.
 	GetPodContainerName(*v1.Pod) (CgroupName, string)
 
+	// EnsureExists takes a pod as argument and makes sure that pod cgroup exists if qos cgroup hierarchy flag is enabled
+	// If the pod cgroup doesn't already exist this method creates it
+	EnsureExists(*v1.Pod) error
+
+	// Exists returns true if the pod cgroup exists.
+	Exists(*v1.Pod) bool
+
 }
 
 // QOSContainersInfo stores the names of containers per qos
