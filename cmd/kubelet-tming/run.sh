@@ -28,5 +28,7 @@ config="$config --kubeconfig=$homepath/ssl_keys/node/kubelet_kubeconfig"
 // 9. pod 状态?
 // 10. kubectl.kubernetes.io/last-applied-configuration https://www.codercto.com/a/24836.html
 // 11. --grace-period=0
+// 12. parent cgroup / child cgroup 关系
+// 13. hugepage
 
 

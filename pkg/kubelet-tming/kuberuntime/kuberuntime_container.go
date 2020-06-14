@@ -203,10 +203,10 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Contai
 		return nil, nil, err
 	}
 
-	//uid, username, err := m.getImageUser(container.Image)
-	//if err != nil {
-	//	return nil, cleanupAction, err
-	//}
+	uid, username, err := m.getImageUser(container.Image)
+	if err != nil {
+		return nil, cleanupAction, err
+	}
 
 	// Verify RunAsNonRoot. Non-root verification only supports numeric user.
 	//if err := verifyRunAsNonRoot(pod, container, uid, username); err != nil {
@@ -242,9 +242,9 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Contai
 	}
 
 	// set platform specific configurations.
-	//if err := m.applyPlatformSpecificContainerConfig(config, container, pod, uid, username); err != nil {
-	//	return nil, cleanupAction, err
-	//}
+	if err := m.applyPlatformSpecificContainerConfig(config, container, pod, uid, username); err != nil {
+		return nil, cleanupAction, err
+	}
 
 	// set environment variables
 	envs := make([]*runtimeapi.KeyValue, len(opts.Envs))
