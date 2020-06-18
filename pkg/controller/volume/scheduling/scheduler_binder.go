@@ -149,6 +149,8 @@ func (b *volumeBinder) FindPodVolumes(pod *v1.Pod, node *v1.Node) (unboundVolume
 	// Warning: Below log needs high verbosity as it can be printed several times (#60933).
 	klog.V(5).Infof("FindPodVolumes for pod %q, node %q", podName, node.Name)
 
+	klog.V(4).Infof("FindPodVolumes for pod %q, node %q", podName, node.Name)
+
 	// Initialize to true for pods that don't have volumes
 	unboundVolumesSatisfied = true
 	boundVolumesSatisfied = true
@@ -165,6 +167,9 @@ func (b *volumeBinder) FindPodVolumes(pod *v1.Pod, node *v1.Node) (unboundVolume
 		provisionedClaims []*v1.PersistentVolumeClaim
 	)
 	defer func() {
+
+		klog.V(4).Infof("FindPodVolumes for pod %q, node %q, matchedBindings: %v, provisionedClaims: %v", podName, node.Name, matchedBindings, provisionedClaims)
+
 		// We recreate bindings for each new schedule loop.
 		if len(matchedBindings) == 0 && len(provisionedClaims) == 0 {
 			// Clear cache if no claims to bind or provision for this node.
@@ -271,6 +276,8 @@ func (b *volumeBinder) AssumePodVolumes(assumedPod *v1.Pod, nodeName string) (al
 
 	claimsToBind := b.podBindingCache.GetBindings(assumedPod, nodeName)
 	claimsToProvision := b.podBindingCache.GetProvisionedPVCs(assumedPod, nodeName)
+
+	klog.V(4).Infof("AssumePodVolumes for pod %q, node %q, claimsToBind: %v, claimsToProvision: %v", podName, nodeName, claimsToBind, claimsToProvision)
 
 	// Assume PV
 	newBindings := []*bindingInfo{}
