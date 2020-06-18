@@ -125,7 +125,12 @@ type Dependencies struct {
 
 type SyncHandler interface {
 	HandlePodAdditions(pods []*v1.Pod)
+	HandlePodUpdates(pods []*v1.Pod)
+	HandlePodReconcile(pods []*v1.Pod)
+	HandlePodSyncs(pods []*v1.Pod)
 }
+
+
 
 type Bootstrap interface {
 	BirthCry()
@@ -371,8 +376,10 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHandler) {
 	klog.Infof("Starting kubelet main sync loop.")
 
+	plegCh := kl.pleg.Watch()
+
 	for {
-		if !kl.syncLoopIteration(updates, kl) {
+		if !kl.syncLoopIteration(updates, kl, plegCh) {
 			break
 		}
 	}
@@ -381,7 +388,8 @@ func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHand
 
 }
 
-func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handler SyncHandler) bool {
+func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handler SyncHandler,
+				plegCh <- chan *pleg.PodLifecycleEvent) bool {
 	select {
 	case u, open := <- configCh:
 		if !open {
@@ -392,9 +400,93 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handle
 		case kubetypes.ADD:
 			klog.Infof("SyncLoop (Add, %q): %q", u.Source, format.Pods(u.Pods))
 			handler.HandlePodAdditions(u.Pods)
+		//case kubetypes.UPDATE:
+		//	klog.Infof("SyncLoop (UPDATE, %q): %q", u.Source, format.PodsWithDeletionTimestamps(u.Pods))
+		//	handler.HandlePodUpdates(u.Pods)
+
+		case kubetypes.RECONCILE:
+			klog.Infof("SyncLoop (RECONCILE, %q): %q", u.Source, format.Pods(u.Pods))
+			handler.HandlePodReconcile(u.Pods)
 		}
+	case e := <-plegCh:
+		if isSyncPodWorthy(e) {
+			// PLEG event for a pod; sync it.
+			if pod, ok := kl.podManager.GetPodByUID(e.ID); ok {
+				klog.Infof("SyncLoop (PLEG): %q, event: %#v", format.Pod(pod), e)
+				handler.HandlePodSyncs([]*v1.Pod{pod})
+			} else {
+				klog.Infof("SyncLoop (PLEG): ignore irrelevant event: %#v", e)
+			}
+		}
+
+		// TODO pleg.ContainerDied
+		//if e.Type == pleg.ContainerDied {
+		//	if containID, ok := e.Data.(string); ok {
+		//		kl.cle
+		//	}
+		//}
 	}
 	return true
+}
+
+// HandlePodSyncs
+func (kl *Kubelet) HandlePodSyncs(pods []*v1.Pod) {
+	start := kl.clock.Now()
+	for _, pod := range pods {
+		mirrorPod, _ := kl.podManager.GetMirrorPodByPod(pod)
+		kl.dispatchWork(pod, kubetypes.SyncPodSync, mirrorPod, start)
+	}
+}
+
+func isSyncPodWorthy(event *pleg.PodLifecycleEvent) bool {
+	// ContainerRemoved doesn't affect pod state
+	return event.Type != pleg.ContainerStarted
+}
+
+func (kl *Kubelet) HandlePodReconcile(pods []*v1.Pod) {
+	start := kl.clock.Now()
+	for _, pod := range pods {
+		// Update the pod in pod manager, status manager will do periodically reconcile according
+		// to the pod manager.  ???
+		kl.podManager.UpdatePod(pod)
+
+		// Reconcile Pod "Ready" codition if necessary. Trigger sync pod for reconciliation.
+
+		if status.NeedToReconcilePodReadiness(pod) {
+			mirrorPod, _ := kl.podManager.GetMirrorPodByPod(pod)
+			kl.dispatchWork(pod, kubetypes.SyncPodSync, mirrorPod, start)
+		}
+
+		// After an evicted pod is synced, all dead containers in the pod can be removed.
+		// TODO
+		//if eviction.PodIsEvicted(pod.Status) {
+		//	if podStatus, err := kl.podCache.Get(pod.UID); err == nil {
+		//		kl.containerDeletor.deleteContainersInPod("", podStatus, true)
+		//	}
+		//}
+	}
+}
+
+func (kl *Kubelet) HandlePodUpdates(pods []*v1.Pod) {
+	start := kl.clock.Now()
+	for _, pod := range pods {
+		// TODO resolv.conf
+		// Responsible for checking limits in resolv.conf
+		//if kl.dnsConfigurer != nil && kl.dnsConfigurer.ResolverConfig != "" {
+		//	kl.dnsConfigurer.CheckLimitsForResolvConf()
+		//}
+
+		kl.podManager.UpdatePod(pod)
+		// TODO mirrorPOd
+		//if kubepod.IsMirrorPod(pod) {
+		//	kl.handleMirrorPod(pod, start)
+		//	continue
+		//}
+
+		// TODO: Evaluate if we need to validate and reject updates.
+		mirrorPod, _ := kl.podManager.GetMirrorPodByPod(pod)
+		kl.dispatchWork(pod, kubetypes.SyncPodUpdate, mirrorPod, start)
+	}
 }
 
 
@@ -470,7 +562,7 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	podStatus := o.podStatus
 	updateType := o.updateType
 
-	klog.Infof("pod name: %v, pod.Status: %v, podStatus: %v", pod.Name, pod.Status, podStatus)
+	//klog.Infof("pod name: %v, pod.Status: %v, podStatus: %v", pod.Name, pod.Status, podStatus)
 
 
 	// if we want to kill a pod, do it now!
@@ -512,11 +604,12 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	}
 
 
+	pretty_podStatus, _ := json.MarshalIndent(podStatus, "", "\t")
 
 	// Generate final API pod status with pod and status manager status
 	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus)
 
-	pretty_podStatus, _ := json.MarshalIndent(podStatus, "", "\t")
+
 	pretty_apiPodStatus, _ := json.MarshalIndent(apiPodStatus, "", "\t")
 
 	klog.Infof("pretty_podStatus: %v, pretty_apiPodStatus: %v", string(pretty_podStatus), string(pretty_apiPodStatus))
@@ -584,49 +677,53 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
 	// Create Cgroups for the pod and apply resource parameters
 	// to them if cgroups-per-qos flag is enabled.
-	//pcm := kl.containerManager.NewPodContainerManager()
+	pcm := kl.containerManager.NewPodContainerManager()
 	// If pod has already been terminated then we need not create
 	// or update the pod's cgroup
-	//if !kl.podIsTerminated(pod) {
-	//	// When the kubelet is restarted with the cgroups-per-qos
-	//	// flag enabled, all the pod's running containers
-	//	// should be killed intermittently and brought back up
-	//	// under the qos cgroup hierarchy.
-	//	// Check if this is the pod's first sync
-	//	firstSync := true
-	//	for _, containerStatus := range apiPodStatus.ContainerStatuses {
-	//		if containerStatus.State.Running != nil {
-	//			firstSync = false
-	//			break
-	//		}
-	//	}
-	//	// Don't kill containers in pod if pod's cgroups already
-	//	// exists or the pod is running for the first time
-	//	podKilled := false
-	//	if !pcm.Exists(pod) && !firstSync {
-	//		if err := kl.killPod(pod, nil, podStatus, nil); err == nil {
-	//			podKilled = true
-	//		}
-	//	}
-	//	// Create and Update pod's Cgroups
-	//	// Don't create cgroups for run once pod if it was killed above
-	//	// The current policy is not to restart the run once pods when
-	//	// the kubelet is restarted with the new flag as run once pods are
-	//	// expected to run only once and if the kubelet is restarted then
-	//	// they are not expected to run again.
-	//	// We don't create and apply updates to cgroup if its a run once pod and was killed above
-	//	if !(podKilled && pod.Spec.RestartPolicy == v1.RestartPolicyNever) {
-	//		if !pcm.Exists(pod) {
-	//			if err := kl.containerManager.UpdateQOSCgroups(); err != nil {
-	//				klog.V(2).Infof("Failed to update QoS cgroups while syncing pod: %v", err)
-	//			}
-	//			if err := pcm.EnsureExists(pod); err != nil {
-	//				kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToCreatePodContainer, "unable to ensure pod container exists: %v", err)
-	//				return fmt.Errorf("failed to ensure that the pod: %v cgroups exist and are correctly applied: %v", pod.UID, err)
-	//			}
-	//		}
-	//	}
-	//}
+	if !kl.podIsTerminated(pod) {
+		// When the kubelet is restarted with the cgroups-per-qos
+		// flag enabled, all the pod's running containers
+		// should be killed intermittently and brought back up
+		// under the qos cgroup hierarchy.
+		// Check if this is the pod's first sync
+
+		// TODO firstSync
+		//firstSync := true
+		//for _, containerStatus := range apiPodStatus.ContainerStatuses {
+		//	if containerStatus.State.Running != nil {
+		//		firstSync = false
+		//		break
+		//	}
+		//}
+
+		// Don't kill containers in pod if pod's cgroups already
+		// exists or the pod is running for the first time
+		podKilled := false
+		// TODO
+		//if !pcm.Exists(pod) && !firstSync {
+		//	if err := kl.killPod(pod, nil, podStatus, nil); err == nil {
+		//		podKilled = true
+		//	}
+		//}
+		// Create and Update pod's Cgroups
+		// Don't create cgroups for run once pod if it was killed above
+		// The current policy is not to restart the run once pods when
+		// the kubelet is restarted with the new flag as run once pods are
+		// expected to run only once and if the kubelet is restarted then
+		// they are not expected to run again.
+		// We don't create and apply updates to cgroup if its a run once pod and was killed above
+		if !(podKilled && pod.Spec.RestartPolicy == v1.RestartPolicyNever) {
+			if !pcm.Exists(pod) {
+				//if err := kl.containerManager.UpdateQOSCgroups(); err != nil {
+				//	klog.V(2).Infof("Failed to update QoS cgroups while syncing pod: %v", err)
+				//}
+				if err := pcm.EnsureExists(pod); err != nil {
+					kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToCreatePodContainer, "unable to ensure pod container exists: %v", err)
+					return fmt.Errorf("failed to ensure that the pod: %v cgroups exist and are correctly applied: %v", pod.UID, err)
+				}
+			}
+		}
+	}
 
 	// Create Mirror Pod for Static Pod if it doesn't already exist
 	//if kubepod.IsStaticPod(pod) {

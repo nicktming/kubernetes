@@ -10,6 +10,7 @@ import (
 	"k8s.io/klog"
 	"reflect"
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
+	"encoding/json"
 )
 
 type PodConfigNotificationMode int
@@ -288,6 +289,12 @@ func updateAnnotations(existing, ref *v1.Pod) {
 }
 
 func podsDifferSemantically(existing, ref *v1.Pod) bool {
+
+	pretty_existing, _ := json.MarshalIndent(existing, "", "\t")
+	pretty_ref, _ := json.MarshalIndent(ref, "", "\t")
+
+	klog.Infof("podsDifferSemantically pretty_exiting: %v, pretty_ref: %v", string(pretty_existing), string(pretty_ref))
+
 	if reflect.DeepEqual(existing.Spec, ref.Spec) &&
 		reflect.DeepEqual(existing.Labels, ref.Labels) &&
 		reflect.DeepEqual(existing.DeletionTimestamp, ref.DeletionTimestamp) &&

@@ -16,6 +16,7 @@ import (
 	"os"
 	//"path/filepath"
 	//volumeutil "k8s.io/kubernetes/pkg/volume/util"
+	"encoding/json"
 )
 
 
@@ -201,6 +202,9 @@ func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.Po
 	spec := &pod.Spec
 	allStatus := append(append([]v1.ContainerStatus{}, s.ContainerStatuses...), s.InitContainerStatuses...)
 	s.Phase = getPhase(spec, allStatus)
+
+	klog.Infof("===>generateAPIPodStatus pod(%v/%v(%v)): %v", pod.Namespace, pod.Name, pod.UID, s.Phase)
+
 	// Check for illegal phase transition
 	if pod.Status.Phase == v1.PodFailed || pod.Status.Phase == v1.PodSucceeded {
 		// API server shows terminal phase; transitions are not allowed
@@ -213,6 +217,12 @@ func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.Po
 
 	// TODO
 	//kl.probeManager.UpdatePodStatus(pod.UID, s)
+
+	// TODO Replace probeManager
+
+	for i, _ := range s.ContainerStatuses {
+		s.ContainerStatuses[i].Ready = s.ContainerStatuses[i].State.Running != nil
+	}
 
 	s.Conditions = append(s.Conditions, status.GeneratePodInitializedCondition(spec, s.InitContainerStatuses, s.Phase))
 	s.Conditions = append(s.Conditions, status.GeneratePodReadyCondition(spec, s.Conditions, s.ContainerStatuses, s.Phase))
@@ -507,6 +517,11 @@ func getPhase(spec *v1.PodSpec, info []v1.ContainerStatus) v1.PodPhase {
 			unknown++
 		}
 	}
+
+	pretty_containerStatus, _ := json.MarshalIndent(info, "", "\t")
+	klog.Infof("===>getPhase pretty_containerStatus: %v", string(pretty_containerStatus))
+
+	klog.Infof("===>getPhase pendingInitialization:%v, waiting: %v, running: %v, unknown: %v, stopped: %v", pendingInitialization, waiting, running, unknown, stopped)
 
 	if failedInitialization > 0 && spec.RestartPolicy == v1.RestartPolicyNever {
 		return v1.PodFailed

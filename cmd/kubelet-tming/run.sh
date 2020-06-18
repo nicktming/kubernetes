@@ -24,4 +24,11 @@ config="$config --kubeconfig=$homepath/ssl_keys/node/kubelet_kubeconfig"
 //    b. 先删pvc, 会直接删pv, 也会把/local-path-storage里面的内容删除 storageclass的策略是DELETE pvc与pv一一对应
 
 // 7. 如果先创建pv, 会怎么样?
+// 8. yum install docker 整个运行机制?
+// 9. pod 状态?
+// 10. kubectl.kubernetes.io/last-applied-configuration https://www.codercto.com/a/24836.html
+// 11. --grace-period=0
+// 12. parent cgroup / child cgroup 关系
+// 13. hugepage
+
 

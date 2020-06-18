@@ -346,7 +346,7 @@ func updateLastTransitionTime(status, oldStatus *v1.PodStatus, conditionType v1.
 func mergePodStatus(oldPodStatus, newPodStatus v1.PodStatus) v1.PodStatus {
 
 	po, _ := json.MarshalIndent(oldPodStatus, "", "\t")
-	pn, _ := json.MarshalIndent(oldPodStatus, "", "\t")
+	pn, _ := json.MarshalIndent(newPodStatus, "", "\t")
 
 	klog.Infof("mergePodStatus oldPodStatus: %v, newPodStatus: %v", string(po), string(pn))
 
@@ -367,13 +367,28 @@ func mergePodStatus(oldPodStatus, newPodStatus v1.PodStatus) v1.PodStatus {
 
 
 
+// NeedToReconcilePodReadiness returns if the pod "Ready" condition eed to be reconcile
+func NeedToReconcilePodReadiness(pod *v1.Pod) bool {
+	if len(pod.Spec.ReadinessGates) == 0 {
 
+		klog.Infof("NeedToReconcilePodReadiness return false from len(pod.Spec.ReadinessGates) == 0")
 
+		return false
+	}
 
+	podReadyCondition := GeneratePodReadyCondition(&pod.Spec, pod.Status.Conditions, pod.Status.ContainerStatuses, pod.Status.Phase)
 
+	i, curCondition := podutil.GetPodConditionFromList(pod.Status.Conditions, v1.PodReady)
+	if i >= 0 && (curCondition.Status != podReadyCondition.Status || curCondition.Message != podReadyCondition.Message) {
 
+		klog.Infof("NeedToReconcilePodReadiness return true")
 
+		return true
+	}
 
+	klog.Infof("NeedToReconcilePodReadiness return false from the end")
+	return false
+}
 
 
 
