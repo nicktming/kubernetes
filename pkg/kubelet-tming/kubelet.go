@@ -71,6 +71,9 @@ import (
 
 	"k8s.io/client-go/util/flowcontrol"
 	"encoding/json"
+	"k8s.io/kubernetes/pkg/volume"
+
+	"k8s.io/kubernetes/pkg/volume/util/subpath"
 )
 
 const (
@@ -114,9 +117,9 @@ type Dependencies struct {
 	OSInterface             kubecontainer.OSInterface
 	PodConfig               *config.PodConfig
 	Recorder                record.EventRecorder
-	//Subpather               subpath.Interface
-	//VolumePlugins           []volume.VolumePlugin
-	//DynamicPluginProber     volume.DynamicPluginProber
+	Subpather               subpath.Interface
+	VolumePlugins           []volume.VolumePlugin
+	DynamicPluginProber     volume.DynamicPluginProber
 	TLSOptions              *server.TLSOptions
 	//KubeletConfigController *kubeletconfig.Controller
 

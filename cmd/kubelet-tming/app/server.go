@@ -100,6 +100,12 @@ import (
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
 
+	"k8s.io/kubernetes/pkg/util/mount"
+	nsutil "k8s.io/kubernetes/pkg/volume/util/nsenter"
+	"k8s.io/kubernetes/pkg/volume/util/subpath"
+	"k8s.io/utils/exec"
+	"k8s.io/utils/nsenter"
+
 )
 
 const (
@@ -369,24 +375,27 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 		return nil, err
 	}
 
-	//mounter := mount.New(s.ExperimentalMounterPath)
-	//subpather := subpath.New(mounter)
-	//var pluginRunner = exec.New()
-	//if s.Containerized {
-	//	klog.V(2).Info("Running kubelet in containerized mode")
-	//	ne, err := nsenter.NewNsenter(nsenter.DefaultHostRootFsPath, exec.New())
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	mounter = nsutil.NewMounter(s.RootDirectory, ne)
-	//	// NSenter only valid on Linux
-	//	subpather = subpath.NewNSEnter(mounter, ne, s.RootDirectory)
-	//	// an exec interface which can use nsenter for flex plugin calls
-	//	pluginRunner, err = nsenter.NewNsenter(nsenter.DefaultHostRootFsPath, exec.New())
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//}
+	mounter := mount.New(s.ExperimentalMounterPath)
+	subpather := subpath.New(mounter)
+	var pluginRunner = exec.New()
+
+	klog.Infof("===>s.Containerized: %v, s.VolumePluginDir: %v", s.Containerized, s.VolumePluginDir)
+
+	if s.Containerized {
+		klog.V(2).Info("Running kubelet in containerized mode")
+		ne, err := nsenter.NewNsenter(nsenter.DefaultHostRootFsPath, exec.New())
+		if err != nil {
+			return nil, err
+		}
+		mounter = nsutil.NewMounter(s.RootDirectory, ne)
+		// NSenter only valid on Linux
+		subpather = subpath.NewNSEnter(mounter, ne, s.RootDirectory)
+		// an exec interface which can use nsenter for flex plugin calls
+		pluginRunner, err = nsenter.NewNsenter(nsenter.DefaultHostRootFsPath, exec.New())
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	var dockerClientConfig *dockershim.ClientConfig
 	if s.ContainerRuntime == kubetypes.DockerContainerRuntime {
@@ -406,12 +415,12 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 		KubeClient:          nil,
 		HeartbeatClient:     nil,
 		EventClient:         nil,
-		//Mounter:             mounter,
-		//Subpather:           subpather,
+		Mounter:             mounter,
+		Subpather:           subpather,
 		//OOMAdjuster:         oom.NewOOMAdjuster(),
 		OSInterface:         kubecontainer.RealOS{},
-		//VolumePlugins:       ProbeVolumePlugins(),
-		//DynamicPluginProber: GetDynamicPluginProber(s.VolumePluginDir, pluginRunner),
+		VolumePlugins:       ProbeVolumePlugins(),
+		DynamicPluginProber: GetDynamicPluginProber(s.VolumePluginDir, pluginRunner),
 		TLSOptions:          tlsOptions,
 	}, nil
 }
