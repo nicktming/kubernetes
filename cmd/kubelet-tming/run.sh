@@ -30,5 +30,5 @@ config="$config --kubeconfig=$homepath/ssl_keys/node/kubelet_kubeconfig"
 // 11. --grace-period=0
 // 12. parent cgroup / child cgroup 关系
 // 13. hugepage
-
+// 14. PodDisruptionBudget
 

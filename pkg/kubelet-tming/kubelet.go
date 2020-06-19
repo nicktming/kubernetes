@@ -1220,6 +1220,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
 
+	klog.Infof("kubeDeps.VolumePlugins: %v", kubeDeps.VolumePlugins)
+
 	return klet, nil
 
 }
