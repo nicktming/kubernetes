@@ -221,6 +221,7 @@ func (dsw *desiredStateOfWorld) GetVolumesToMount() []VolumeToMount {
 				})
 		}
 	}
+	return volumesToMount
 }
 
 func (dsw *desiredStateOfWorld) isAttachableVolume(volumeSpec *volume.Spec) bool {
