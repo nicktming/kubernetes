@@ -10,6 +10,24 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubernetes/pkg/kubelet-tming/mountpod"
 	"fmt"
+	"k8s.io/klog"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/kubernetes/pkg/volume/util/subpath"
+	execmnt "k8s.io/kubernetes/pkg/volume/util/exec"
+	"k8s.io/kubernetes/pkg/util/mount"
+	"k8s.io/apimachinery/pkg/types"
+	"runtime"
+	"k8s.io/kubernetes/pkg/volume/util"
+	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
+	clientset "k8s.io/client-go/kubernetes"
+	cloudprovider "k8s.io/cloud-provider"
+
+	"k8s.io/client-go/tools/record"
+	"net"
+	authenticationv1 "k8s.io/api/authentication/v1"
+	"k8s.io/kubernetes/pkg/features"
+	"k8s.io/kubernetes/pkg/kubelet-tming/container"
 )
 
 func NewInitializedVolumePluginMgr(
@@ -71,4 +89,218 @@ type kubeletVolumeHost struct {
 	informerFactory  informers.SharedInformerFactory
 	csiDriverLister  storagelisters.CSIDriverLister
 	csiDriversSynced cache.InformerSynced
+}
+
+func (kvh *kubeletVolumeHost) SetKubeletError(err error) {
+	// TODO runtimeState
+	//kvh.kubelet.runtimeState.setStorageState(err)
+}
+
+func (kvh *kubeletVolumeHost) GetVolumeDevicePluginDir(pluginName string) string {
+	return kvh.kubelet.getVolumeDevicePluginDir(pluginName)
+}
+
+func (kvh *kubeletVolumeHost) GetPodsDir() string {
+	return kvh.kubelet.getPodsDir()
+}
+
+func (kvh *kubeletVolumeHost) GetPodVolumeDir(podUID types.UID, pluginName string, volumeName string) string {
+	dir := kvh.kubelet.getPodVolumeDir(podUID, pluginName, volumeName)
+	if runtime.GOOS == "windows" {
+		dir = util.GetWindowsPath(dir)
+	}
+	return dir
+}
+
+func (kvh *kubeletVolumeHost) GetPodVolumeDeviceDir(podUID types.UID, pluginName string) string {
+	return kvh.kubelet.getPodVolumeDeviceDir(podUID, pluginName)
+}
+
+func (kvh *kubeletVolumeHost) GetPodPluginDir(podUID types.UID, pluginName string) string {
+	return kvh.kubelet.getPodPluginDir(podUID, pluginName)
+}
+
+func (kvh *kubeletVolumeHost) GetKubeClient() clientset.Interface {
+	return kvh.kubelet.kubeClient
+}
+
+func (kvh *kubeletVolumeHost) GetSubpather() subpath.Interface {
+	return kvh.kubelet.subpather
+}
+
+func (kvh *kubeletVolumeHost) GetInformerFactory() informers.SharedInformerFactory {
+	return kvh.informerFactory
+}
+
+func (kvh *kubeletVolumeHost) CSIDriverLister() storagelisters.CSIDriverLister {
+	return kvh.csiDriverLister
+}
+
+func (kvh *kubeletVolumeHost) CSIDriversSynced() cache.InformerSynced {
+	return kvh.csiDriversSynced
+}
+
+// WaitForCacheSync is a helper function that waits for cache sync for CSIDriverLister
+func (kvh *kubeletVolumeHost) WaitForCacheSync() error {
+	if kvh.csiDriversSynced == nil {
+		klog.Error("csiDriversSynced not found on KubeletVolumeHost")
+		return fmt.Errorf("csiDriversSynced not found on KubeletVolumeHost")
+	}
+
+	synced := []cache.InformerSynced{kvh.csiDriversSynced}
+	if !cache.WaitForCacheSync(wait.NeverStop, synced...) {
+		klog.Warning("failed to wait for cache sync for CSIDriverLister")
+		return fmt.Errorf("failed to wait for cache sync for CSIDriverLister")
+	}
+
+	return nil
+}
+
+func (kvh *kubeletVolumeHost) NewWrapperMounter(
+	volName string,
+	spec volume.Spec,
+	pod *v1.Pod,
+	opts volume.VolumeOptions) (volume.Mounter, error) {
+	// The name of wrapper volume is set to "wrapped_{wrapped_volume_name}"
+	wrapperVolumeName := "wrapped_" + volName
+	if spec.Volume != nil {
+		spec.Volume.Name = wrapperVolumeName
+	}
+
+	return kvh.kubelet.newVolumeMounterFromPlugins(&spec, pod, opts)
+}
+
+func (kvh *kubeletVolumeHost) NewWrapperUnmounter(volName string, spec volume.Spec, podUID types.UID) (volume.Unmounter, error) {
+	// The name of wrapper volume is set to "wrapped_{wrapped_volume_name}"
+	wrapperVolumeName := "wrapped_" + volName
+	if spec.Volume != nil {
+		spec.Volume.Name = wrapperVolumeName
+	}
+
+	plugin, err := kvh.kubelet.volumePluginMgr.FindPluginBySpec(&spec)
+	if err != nil {
+		return nil, err
+	}
+
+	return plugin.NewUnmounter(spec.Name(), podUID)
+}
+
+func (kvh *kubeletVolumeHost) GetCloudProvider() cloudprovider.Interface {
+	return kvh.kubelet.cloud
+}
+
+func (kvh *kubeletVolumeHost) GetMounter(pluginName string) mount.Interface {
+	exec, err := kvh.getMountExec(pluginName)
+	if err != nil {
+		klog.V(2).Infof("Error finding mount pod for plugin %s: %s", pluginName, err.Error())
+		// Use the default mounter
+		exec = nil
+	}
+	if exec == nil {
+		return kvh.kubelet.mounter
+	}
+	return execmnt.NewExecMounter(exec, kvh.kubelet.mounter)
+}
+
+func (kvh *kubeletVolumeHost) GetHostName() string {
+	return kvh.kubelet.hostname
+}
+
+func (kvh *kubeletVolumeHost) GetHostIP() (net.IP, error) {
+	return kvh.kubelet.GetHostIP()
+}
+
+func (kvh *kubeletVolumeHost) GetNodeAllocatable() (v1.ResourceList, error) {
+	node, err := kvh.kubelet.getNodeAnyWay()
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving node: %v", err)
+	}
+	return node.Status.Allocatable, nil
+}
+
+func (kvh *kubeletVolumeHost) GetSecretFunc() func(namespace, name string) (*v1.Secret, error) {
+	return kvh.secretManager.GetSecret
+}
+
+func (kvh *kubeletVolumeHost) GetConfigMapFunc() func(namespace, name string) (*v1.ConfigMap, error) {
+	return kvh.configMapManager.GetConfigMap
+}
+
+func (kvh *kubeletVolumeHost) GetServiceAccountTokenFunc() func(namespace, name string, tr *authenticationv1.TokenRequest) (*authenticationv1.TokenRequest, error) {
+	return kvh.tokenManager.GetServiceAccountToken
+}
+
+func (kvh *kubeletVolumeHost) DeleteServiceAccountTokenFunc() func(podUID types.UID) {
+	return kvh.tokenManager.DeleteServiceAccountToken
+}
+
+func (kvh *kubeletVolumeHost) GetNodeLabels() (map[string]string, error) {
+	node, err := kvh.kubelet.GetNode()
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving node: %v", err)
+	}
+	return node.Labels, nil
+}
+
+func (kvh *kubeletVolumeHost) GetNodeName() types.NodeName {
+	return kvh.kubelet.nodeName
+}
+
+func (kvh *kubeletVolumeHost) GetEventRecorder() record.EventRecorder {
+	return kvh.kubelet.recorder
+}
+
+func (kvh *kubeletVolumeHost) GetExec(pluginName string) mount.Exec {
+	exec, err := kvh.getMountExec(pluginName)
+	if err != nil {
+		klog.V(2).Infof("Error finding mount pod for plugin %s: %s", pluginName, err.Error())
+		// Use the default exec
+		exec = nil
+	}
+	if exec == nil {
+		return mount.NewOsExec()
+	}
+	return exec
+}
+
+// getMountExec returns mount.Exec implementation that leads to pod with mount
+// utilities. It returns nil,nil when there is no such pod and default mounter /
+// os.Exec should be used.
+func (kvh *kubeletVolumeHost) getMountExec(pluginName string) (mount.Exec, error) {
+	if !utilfeature.DefaultFeatureGate.Enabled(features.MountContainers) {
+		klog.V(5).Infof("using default mounter/exec for %s", pluginName)
+		return nil, nil
+	}
+
+	pod, container, err := kvh.mountPodManager.GetMountPod(pluginName)
+	if err != nil {
+		return nil, err
+	}
+	if pod == nil {
+		// Use default mounter/exec for this plugin
+		klog.V(5).Infof("using default mounter/exec for %s", pluginName)
+		return nil, nil
+	}
+	klog.V(5).Infof("using container %s/%s/%s to execute mount utilities for %s", pod.Namespace, pod.Name, container, pluginName)
+	return &containerExec{
+		pod:           pod,
+		containerName: container,
+		kl:            kvh.kubelet,
+	}, nil
+}
+
+// containerExec is implementation of mount.Exec that executes commands in given
+// container in given pod.
+type containerExec struct {
+	pod           *v1.Pod
+	containerName string
+	kl            *Kubelet
+}
+
+var _ mount.Exec = &containerExec{}
+
+func (e *containerExec) Run(cmd string, args ...string) ([]byte, error) {
+	cmdline := append([]string{cmd}, args...)
+	klog.V(5).Infof("Exec mounter running in pod %s/%s/%s: %v", e.pod.Namespace, e.pod.Name, e.containerName, cmdline)
+	return e.kl.RunInContainer(container.GetPodFullName(e.pod), e.pod.UID, e.containerName, cmdline)
 }

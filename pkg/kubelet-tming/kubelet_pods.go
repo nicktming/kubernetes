@@ -17,8 +17,36 @@ import (
 	//"path/filepath"
 	//volumeutil "k8s.io/kubernetes/pkg/volume/util"
 	"encoding/json"
+	"fmt"
 )
 
+// findContainer finds and returns the container with the given pod ID, full name, and container name.
+// It returns nil if not found.
+func (kl *Kubelet) findContainer(podFullName string, podUID types.UID, containerName string) (*kubecontainer.Container, error) {
+	pods, err := kl.containerRuntime.GetPods(false)
+	if err != nil {
+		return nil, err
+	}
+	// Resolve and type convert back again.
+	// We need the static pod UID but the kubecontainer API works with types.UID.
+	podUID = types.UID(kl.podManager.TranslatePodUID(podUID))
+	pod := kubecontainer.Pods(pods).FindPod(podFullName, podUID)
+	return pod.FindContainerByName(containerName), nil
+}
+
+
+// RunInContainer runs a command in a container, returns the combined stdout, stderr as an array of bytes
+func (kl *Kubelet) RunInContainer(podFullName string, podUID types.UID, containerName string, cmd []string) ([]byte, error) {
+	container, err := kl.findContainer(podFullName, podUID, containerName)
+	if err != nil {
+		return nil, err
+	}
+	if container == nil {
+		return nil, fmt.Errorf("container not found (%q)", containerName)
+	}
+	// TODO(tallclair): Pass a proper timeout value.
+	return kl.runner.RunInContainer(container.ID, cmd, 0)
+}
 
 // GetPodCgroupParent gets pod cgroup parent from container manager.
 func (kl *Kubelet) GetPodCgroupParent(pod *v1.Pod) string {

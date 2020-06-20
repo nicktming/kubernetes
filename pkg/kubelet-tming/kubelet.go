@@ -311,6 +311,14 @@ type Kubelet struct {
 	// scheduled on this node and makes it so.
 	volumeManager volumemanager.VolumeManager
 
+	// Mounter to use for volumes.
+	mounter mount.Interface
+
+	// subpather to execute subpath actions
+	subpather subpath.Interface
+
+	// Optional, defaults to simple Docker implementation
+	runner kubecontainer.ContainerCommandRunner
 }
 
 
@@ -1068,6 +1076,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		resyncInterval:                          	kubeCfg.SyncFrequency.Duration,
 		rootDirectory: 					rootDirectory,
 		os:						kubeDeps.OSInterface,
+		mounter: 					kubeDeps.Mounter,
+		subpather:                              	kubeDeps.Subpather,
 	}
 
 	klet.backOff = flowcontrol.NewBackOff(backOffPeriod, MaxContainerBackOff)
@@ -1212,6 +1222,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	}
 
 	klet.containerRuntime = runtime
+	klet.runner = runtime
 
 	imageGCPolicy := images.ImageGCPolicy{
 		MinAge:               kubeCfg.ImageMinimumGCAge.Duration,

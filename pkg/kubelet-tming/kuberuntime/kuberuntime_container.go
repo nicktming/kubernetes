@@ -139,7 +139,14 @@ func (m *kubeGenericRuntimeManager) startContainer(podSandboxID string, podSandb
 	return "", nil
 }
 
-
+// RunInContainer synchronously executes the command in the container, and returns the output.
+func (m *kubeGenericRuntimeManager) RunInContainer(id kubecontainer.ContainerID, cmd []string, timeout time.Duration) ([]byte, error) {
+	stdout, stderr, err := m.runtimeService.ExecSync(id.ID, cmd, timeout)
+	// NOTE(tallclair): This does not correctly interleave stdout & stderr, but should be sufficient
+	// for logging purposes. A combined output option will need to be added to the ExecSyncRequest
+	// if more precise output ordering is ever required.
+	return append(stdout, stderr...), err
+}
 
 
 // removeContainer removes the container and the container logs.

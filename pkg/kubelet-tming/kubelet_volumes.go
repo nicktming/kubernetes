@@ -4,6 +4,10 @@ package kubelet_tming
 import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/volume"
+	"k8s.io/klog"
+
+	v1 "k8s.io/api/core/v1"
+	"fmt"
 )
 
 // ListVolumesForPod returns a map of the mounted volumes for the given pod.
@@ -23,4 +27,21 @@ func (kl *Kubelet) ListVolumesForPod(podUID types.UID) (map[string]volume.Volume
 	//}
 
 	return volumesToReturn, len(volumesToReturn) > 0
+}
+
+
+// newVolumeMounterFromPlugins attempts to find a plugin by volume spec, pod
+// and volume options and then creates a Mounter.
+// Returns a valid mounter or an error.
+func (kl *Kubelet) newVolumeMounterFromPlugins(spec *volume.Spec, pod *v1.Pod, opts volume.VolumeOptions) (volume.Mounter, error) {
+	plugin, err := kl.volumePluginMgr.FindPluginBySpec(spec)
+	if err != nil {
+		return nil, fmt.Errorf("can't use volume plugins for %s: %v", spec.Name(), err)
+	}
+	physicalMounter, err := plugin.NewMounter(spec, pod, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to instantiate mounter for volume: %s using plugin: %s with a root cause: %v", spec.Name(), plugin.GetPluginName(), err)
+	}
+	klog.V(10).Infof("Using volume plugin %q to mount %s", plugin.GetPluginName(), spec.Name())
+	return physicalMounter, nil
 }
