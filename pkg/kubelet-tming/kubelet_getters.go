@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"k8s.io/kubernetes/pkg/kubelet-tming/config"
 	"k8s.io/apimachinery/pkg/types"
+	"fmt"
 )
 
 // GetHostIP returns host IP or nil in case of error.

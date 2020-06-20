@@ -91,6 +91,10 @@ type kubeletVolumeHost struct {
 	csiDriversSynced cache.InformerSynced
 }
 
+func (kvh *kubeletVolumeHost) GetPluginDir(pluginName string) string {
+	return kvh.kubelet.getPluginDir(pluginName)
+}
+
 func (kvh *kubeletVolumeHost) SetKubeletError(err error) {
 	// TODO runtimeState
 	//kvh.kubelet.runtimeState.setStorageState(err)
