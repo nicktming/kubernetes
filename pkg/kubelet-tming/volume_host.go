@@ -5,9 +5,9 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/configmap"
 	"k8s.io/kubernetes/pkg/kubelet/token"
 	"k8s.io/kubernetes/pkg/volume"
-	"k8s.io/client-go-bak/informers"
+	"k8s.io/client-go/informers"
 	storagelisters "k8s.io/client-go/listers/storage/v1beta1"
-	"k8s.io/client-go-bak/tools/cache"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubernetes/pkg/kubelet-tming/mountpod"
 	"fmt"
 )
