@@ -54,7 +54,8 @@ type Reconciler interface {
 
 	// StatesHasBeenSynced returns true only after syncStates process starts to sync
 	// states at least once after kubelet starts
-	StatesHasBeenSynced() bool
+
+	//StatesHasBeenSynced() bool
 }
 
 
@@ -161,85 +162,86 @@ func (rc *reconciler) reconcile() {
 				// Volume is not attached (or doesn't implement attacher), kubelet attach is disabled, wait
 				// for controller to finish attaching volume.
 				klog.Infof(volumeToMount.GenerateMsgDetailed("Starting operationExecutor.VerifyControllerAttachedVolume", ""))
-				err := rc.operationExecutor.VerifyControllerAttachedVolume(
-					volumeToMount.VolumeToMount,
-					rc.nodeName,
-					rc.actualStateOfWorld)
-				if err != nil &&
-					!nestedpendingoperations.IsAlreadyExists(err) &&
-					!exponentialbackoff.IsExponentialBackoff(err) {
-					// Ignore nestedpendingoperations.IsAlreadyExists and exponentialbackoff.IsExponentialBackoff errors, they are expected.
-					// Log all other errors.
-					klog.Errorf(volumeToMount.GenerateErrorDetailed(fmt.Sprintf("operationExecutor.VerifyControllerAttachedVolume failed (controllerAttachDetachEnabled %v)", rc.controllerAttachDetachEnabled), err).Error())
-				}
-				if err == nil {
-					klog.Infof(volumeToMount.GenerateMsgDetailed("operationExecutor.VerifyControllerAttachedVolume started", ""))
-				}
+				//err := rc.operationExecutor.VerifyControllerAttachedVolume(
+				//	volumeToMount.VolumeToMount,
+				//	rc.nodeName,
+				//	rc.actualStateOfWorld)
+				//if err != nil &&
+				//	!nestedpendingoperations.IsAlreadyExists(err) &&
+				//	!exponentialbackoff.IsExponentialBackoff(err) {
+				//	// Ignore nestedpendingoperations.IsAlreadyExists and exponentialbackoff.IsExponentialBackoff errors, they are expected.
+				//	// Log all other errors.
+				//	klog.Errorf(volumeToMount.GenerateErrorDetailed(fmt.Sprintf("operationExecutor.VerifyControllerAttachedVolume failed (controllerAttachDetachEnabled %v)", rc.controllerAttachDetachEnabled), err).Error())
+				//}
+				//if err == nil {
+				//	klog.Infof(volumeToMount.GenerateMsgDetailed("operationExecutor.VerifyControllerAttachedVolume started", ""))
+				//}
 			} else {
 				klog.Infof("===>Volume is not attached to node, kubelet attach is enabled, volume implements an attacher, so attach it")
 				// Volume is not attached to node, kubelet attach is enabled, volume implements an attacher,
 				// so attach it
-				volumeToAttach := operationexecutor.VolumeToAttach{
-					VolumeName: volumeToMount.VolumeName,
-					VolumeSpec: volumeToMount.VolumeSpec,
-					NodeName:   rc.nodeName,
-				}
-				klog.Infof(volumeToAttach.GenerateMsgDetailed("Starting operationExecutor.AttachVolume", ""))
-				err := rc.operationExecutor.AttachVolume(volumeToAttach, rc.actualStateOfWorld)
-				if err != nil &&
-					!nestedpendingoperations.IsAlreadyExists(err) &&
-					!exponentialbackoff.IsExponentialBackoff(err) {
-					// Ignore nestedpendingoperations.IsAlreadyExists and exponentialbackoff.IsExponentialBackoff errors, they are expected.
-					// Log all other errors.
-					klog.Errorf(volumeToMount.GenerateErrorDetailed(fmt.Sprintf("operationExecutor.AttachVolume failed (controllerAttachDetachEnabled %v)", rc.controllerAttachDetachEnabled), err).Error())
-				}
-				if err == nil {
-					klog.Infof(volumeToMount.GenerateMsgDetailed("operationExecutor.AttachVolume started", ""))
-				}
+
+				//volumeToAttach := operationexecutor.VolumeToAttach{
+				//	VolumeName: volumeToMount.VolumeName,
+				//	VolumeSpec: volumeToMount.VolumeSpec,
+				//	NodeName:   rc.nodeName,
+				//}
+				//klog.Infof(volumeToAttach.GenerateMsgDetailed("Starting operationExecutor.AttachVolume", ""))
+				//err := rc.operationExecutor.AttachVolume(volumeToAttach, rc.actualStateOfWorld)
+				//if err != nil &&
+				//	!nestedpendingoperations.IsAlreadyExists(err) &&
+				//	!exponentialbackoff.IsExponentialBackoff(err) {
+				//	// Ignore nestedpendingoperations.IsAlreadyExists and exponentialbackoff.IsExponentialBackoff errors, they are expected.
+				//	// Log all other errors.
+				//	klog.Errorf(volumeToMount.GenerateErrorDetailed(fmt.Sprintf("operationExecutor.AttachVolume failed (controllerAttachDetachEnabled %v)", rc.controllerAttachDetachEnabled), err).Error())
+				//}
+				//if err == nil {
+				//	klog.Infof(volumeToMount.GenerateMsgDetailed("operationExecutor.AttachVolume started", ""))
+				//}
 			}
 		} else if !volMounted || cache.IsRemountRequiredError(err) {
 			// Volume is not mounted, or is already mounted, but requires remounting
 			klog.Infof("===>Volume is not mounted, or is already mounted, but requires remounting")
-			remountingLogStr := ""
-			isRemount := cache.IsRemountRequiredError(err)
-			if isRemount {
-				remountingLogStr = "Volume is already mounted to pod, but remount was requested."
-			}
-
-			klog.Infof(volumeToMount.GenerateMsgDetailed("Starting operationExecutor.MountVolume", remountingLogStr))
-
-			err := rc.operationExecutor.MountVolume(rc.waitForAttachTimeout, volumeToMount.VolumeToMount, rc.actualStateOfWorld, isRemount)
-			if err != nil &&
-				!nestedpendingoperations.IsAlreadyExists(err) &&
-				!exponentialbackoff.IsExponentialBackoff(err) {
-				// Ignore nestedpendingoperations.IsAlreadyExists and exponentialbackoff.IsExponentialBackoff errors, they are expected.
-				// Log all other errors.
-				klog.Errorf(volumeToMount.GenerateErrorDetailed(fmt.Sprintf("operationExecutor.MountVolume failed (controllerAttachDetachEnabled %v)", rc.controllerAttachDetachEnabled), err).Error())
-			}
-			if err == nil {
-				if remountingLogStr == "" {
-					klog.Infof(volumeToMount.GenerateMsgDetailed("operationExecutor.MountVolume started", remountingLogStr))
-				} else {
-					klog.Infof(volumeToMount.GenerateMsgDetailed("operationExecutor.MountVolume started", remountingLogStr))
-				}
-			}
+			//remountingLogStr := ""
+			//isRemount := cache.IsRemountRequiredError(err)
+			//if isRemount {
+			//	remountingLogStr = "Volume is already mounted to pod, but remount was requested."
+			//}
+			//
+			//klog.Infof(volumeToMount.GenerateMsgDetailed("Starting operationExecutor.MountVolume", remountingLogStr))
+			//
+			//err := rc.operationExecutor.MountVolume(rc.waitForAttachTimeout, volumeToMount.VolumeToMount, rc.actualStateOfWorld, isRemount)
+			//if err != nil &&
+			//	!nestedpendingoperations.IsAlreadyExists(err) &&
+			//	!exponentialbackoff.IsExponentialBackoff(err) {
+			//	// Ignore nestedpendingoperations.IsAlreadyExists and exponentialbackoff.IsExponentialBackoff errors, they are expected.
+			//	// Log all other errors.
+			//	klog.Errorf(volumeToMount.GenerateErrorDetailed(fmt.Sprintf("operationExecutor.MountVolume failed (controllerAttachDetachEnabled %v)", rc.controllerAttachDetachEnabled), err).Error())
+			//}
+			//if err == nil {
+			//	if remountingLogStr == "" {
+			//		klog.Infof(volumeToMount.GenerateMsgDetailed("operationExecutor.MountVolume started", remountingLogStr))
+			//	} else {
+			//		klog.Infof(volumeToMount.GenerateMsgDetailed("operationExecutor.MountVolume started", remountingLogStr))
+			//	}
+			//}
 		} else if cache.IsFSResizeRequiredError(err) &&
 			utilfeature.DefaultFeatureGate.Enabled(features.ExpandInUsePersistentVolumes) {
 			klog.Infof("===>IsFSResizeRequiredError and utilfeature.DefaultFeatureGate.Enabled(features.ExpandInUsePersistentVolumes)")
 			klog.Infof(volumeToMount.GenerateMsgDetailed("Starting operationExecutor.ExpandInUseVolume", ""))
-			err := rc.operationExecutor.ExpandInUseVolume(
-				volumeToMount.VolumeToMount,
-				rc.actualStateOfWorld)
-			if err != nil &&
-				!nestedpendingoperations.IsAlreadyExists(err) &&
-				!exponentialbackoff.IsExponentialBackoff(err) {
-				// Ignore nestedpendingoperations.IsAlreadyExists and exponentialbackoff.IsExponentialBackoff errors, they are expected.
-				// Log all other errors.
-				klog.Errorf(volumeToMount.GenerateErrorDetailed("operationExecutor.ExpandInUseVolume failed", err).Error())
-			}
-			if err == nil {
-				klog.V(4).Infof(volumeToMount.GenerateMsgDetailed("operationExecutor.ExpandInUseVolume started", ""))
-			}
+			//err := rc.operationExecutor.ExpandInUseVolume(
+			//	volumeToMount.VolumeToMount,
+			//	rc.actualStateOfWorld)
+			//if err != nil &&
+			//	!nestedpendingoperations.IsAlreadyExists(err) &&
+			//	!exponentialbackoff.IsExponentialBackoff(err) {
+			//	// Ignore nestedpendingoperations.IsAlreadyExists and exponentialbackoff.IsExponentialBackoff errors, they are expected.
+			//	// Log all other errors.
+			//	klog.Errorf(volumeToMount.GenerateErrorDetailed("operationExecutor.ExpandInUseVolume failed", err).Error())
+			//}
+			//if err == nil {
+			//	klog.V(4).Infof(volumeToMount.GenerateMsgDetailed("operationExecutor.ExpandInUseVolume started", ""))
+			//}
 		}
 	}
 }
