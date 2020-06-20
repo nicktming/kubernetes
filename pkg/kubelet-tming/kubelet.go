@@ -1222,7 +1222,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	}
 
 	klet.containerRuntime = runtime
-	klet.runner = runtime
+	//klet.runner = runtime
 
 	imageGCPolicy := images.ImageGCPolicy{
 		MinAge:               kubeCfg.ImageMinimumGCAge.Duration,
