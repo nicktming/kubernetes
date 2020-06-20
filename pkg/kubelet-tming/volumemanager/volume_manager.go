@@ -17,6 +17,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-tming/volumemanager/populator"
 	"k8s.io/kubernetes/pkg/volume/util/volumepathhandler"
 	"k8s.io/kubernetes/pkg/volume/util/operationexecutor"
+	"k8s.io/kubernetes/pkg/kubelet-tming/volumemanager/reconciler"
 )
 
 const (
@@ -159,19 +160,19 @@ func NewVolumeManager(
 		vm.actualStateOfWorld,
 		kubeContainerRuntime,
 		keepTerminatedPodVolumes)
-	//vm.reconciler = reconciler.NewReconciler(
-	//	kubeClient,
-	//	controllerAttachDetachEnabled,
-	//	reconcilerLoopSleepPeriod,
-	//	waitForAttachTimeout,
-	//	nodeName,
-	//	vm.desiredStateOfWorld,
-	//	vm.actualStateOfWorld,
-	//	vm.desiredStateOfWorldPopulator.HasAddedPods,
-	//	vm.operationExecutor,
-	//	mounter,
-	//	volumePluginMgr,
-	//	kubeletPodsDir)
+	vm.reconciler = reconciler.NewReconciler(
+		kubeClient,
+		controllerAttachDetachEnabled,
+		reconcilerLoopSleepPeriod,
+		waitForAttachTimeout,
+		nodeName,
+		vm.desiredStateOfWorld,
+		vm.actualStateOfWorld,
+		vm.desiredStateOfWorldPopulator.HasAddedPods,
+		vm.operationExecutor,
+		mounter,
+		volumePluginMgr,
+		kubeletPodsDir)
 
 	return vm
 }
@@ -210,7 +211,7 @@ type volumeManager struct {
 	// desiredStateOfWorld with the actualStateOfWorld by triggering attach,
 	// detach, mount, and unmount operations using the operationExecutor.
 
-	//reconciler reconciler.Reconciler
+	reconciler reconciler.Reconciler
 
 	// desiredStateOfWorldPopulator runs an asynchronous periodic loop to
 	// populate the desiredStateOfWorld using the kubelet PodManager.
@@ -229,7 +230,7 @@ func (vm *volumeManager) Run(sourcesReady config.SourcesReady, stopCh <-chan str
 	//klog.V(2).Infof("The desired_state_of_world populator starts")
 	//
 	//klog.Infof("Starting Kubelet Volume Manager")
-	//go vm.reconciler.Run(stopCh)
+	go vm.reconciler.Run(stopCh)
 	//
 	//metrics.Register(vm.actualStateOfWorld, vm.desiredStateOfWorld, vm.volumePluginMgr)
 

@@ -29,6 +29,11 @@ type DesiredStateOfWorld interface {
 	// volume, this is a no-op.
 	AddPodToVolume(podName types.UniquePodName, pod *v1.Pod, volumeSpec *volume.Spec, outerVolumeSpecName string, volumeGidValue string) (v1.UniqueVolumeName, error)
 
+
+	// GetVolumesToMount generates and returns a list of volumes that should be
+	// attached to this node and the pods they should be mounted to based on the
+	// current desired state of the world.
+	GetVolumesToMount() []VolumeToMount
 }
 
 type VolumeToMount struct {
@@ -189,6 +194,33 @@ func (dsw *desiredStateOfWorld) AddPodToVolume(
 		outerVolumeSpecName: outerVolumeSpecName,
 	}
 	return volumeName, nil
+}
+
+
+func (dsw *desiredStateOfWorld) GetVolumesToMount() []VolumeToMount {
+	dsw.RLock()
+	defer dsw.RUnlock()
+
+	volumesToMount := make([]VolumeToMount, 0, len(dsw.volumesToMount))
+	for volumeName, volumeObj := range dsw.volumesToMount {
+		for podName, podObj := range volumeObj.podsToMount {
+			volumesToMount = append(volumesToMount,
+				VolumeToMount{
+					VolumeToMount: operationexecutor.VolumeToMount{
+						VolumeName: 			volumeName,
+						PodName: 			podName,
+						Pod:				podObj.pod,
+						VolumeSpec:			podObj.volumeSpec,
+						PluginIsAttachable:      	volumeObj.pluginIsAttachable,
+						PluginIsDeviceMountable: 	volumeObj.pluginIsDeviceMountable,
+						OuterVolumeSpecName:     	podObj.outerVolumeSpecName,
+						VolumeGidValue:          	volumeObj.volumeGidValue,
+						ReportedInUse:           	volumeObj.reportedInUse,
+						DesiredSizeLimit:        	volumeObj.desiredSizeLimit,
+					},
+				})
+		}
+	}
 }
 
 func (dsw *desiredStateOfWorld) isAttachableVolume(volumeSpec *volume.Spec) bool {

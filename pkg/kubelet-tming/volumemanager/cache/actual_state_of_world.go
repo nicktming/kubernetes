@@ -5,10 +5,13 @@ import (
 
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/klog"
+	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/volume"
 	"k8s.io/kubernetes/pkg/volume/util/operationexecutor"
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
+	"fmt"
 )
 
 
@@ -19,6 +22,39 @@ type ActualStateOfWorld interface {
 	// updating volumes depend on this to update the contents of the volume on
 	// pod update.
 	MarkRemountRequired(podName volumetypes.UniquePodName)
+
+	// PodExistsInVolume returns true if the given pod exists in the list of
+	// mountedPods for the given volume in the cache, indicating that the volume
+	// is attached to this node and the pod has successfully mounted it.
+	// If a pod with the same unique name does not exist under the specified
+	// volume, false is returned.
+	// If a volume with the name volumeName does not exist in the list of
+	// attached volumes, a volumeNotAttachedError is returned indicating the
+	// given volume is not yet attached.
+	// If the given volumeName/podName combo exists but the value of
+	// remountRequired is true, a remountRequiredError is returned indicating
+	// the given volume has been successfully mounted to this pod but should be
+	// remounted to reflect changes in the referencing pod. Atomically updating
+	// volumes, depend on this to update the contents of the volume.
+	// All volume mounting calls should be idempotent so a second mount call for
+	// volumes that do not need to update contents should not fail.
+	PodExistsInVolume(podName volumetypes.UniquePodName, volumeName v1.UniqueVolumeName) (bool, string, error)
+
+}
+
+
+// IsVolumeNotAttachedError returns true if the specified error is a
+// volumeNotAttachedError.
+func IsVolumeNotAttachedError(err error) bool {
+	_, ok := err.(volumeNotAttachedError)
+	return ok
+}
+
+// IsRemountRequiredError returns true if the specified error is a
+// remountRequiredError.
+func IsRemountRequiredError(err error) bool {
+	_, ok := err.(remountRequiredError)
+	return ok
 }
 
 
@@ -145,6 +181,104 @@ type mountedPod struct {
 	// fsResizeRequired indicates the underlying volume has been successfully
 	// mounted to this pod but its size has been expanded after that.
 	fsResizeRequired bool
+}
+
+// volumeNotAttachedError is an error returned when PodExistsInVolume() fails to
+// find specified volume in the list of attached volumes.
+type volumeNotAttachedError struct {
+	volumeName v1.UniqueVolumeName
+}
+
+func (err volumeNotAttachedError) Error() string {
+	return fmt.Sprintf(
+		"volumeName %q does not exist in the list of attached volumes",
+		err.volumeName)
+}
+
+func newVolumeNotAttachedError(volumeName v1.UniqueVolumeName) error {
+	return volumeNotAttachedError{
+		volumeName: volumeName,
+	}
+}
+
+// remountRequiredError is an error returned when PodExistsInVolume() found
+// volume/pod attached/mounted but remountRequired was true, indicating the
+// given volume should be remounted to the pod to reflect changes in the
+// referencing pod.
+type remountRequiredError struct {
+	volumeName v1.UniqueVolumeName
+	podName    volumetypes.UniquePodName
+}
+
+func (err remountRequiredError) Error() string {
+	return fmt.Sprintf(
+		"volumeName %q is mounted to %q but should be remounted",
+		err.volumeName, err.podName)
+}
+
+func newRemountRequiredError(
+volumeName v1.UniqueVolumeName, podName volumetypes.UniquePodName) error {
+	return remountRequiredError{
+		volumeName: volumeName,
+		podName:    podName,
+	}
+}
+
+// fsResizeRequiredError is an error returned when PodExistsInVolume() found
+// volume/pod attached/mounted but fsResizeRequired was true, indicating the
+// given volume receives an resize request after attached/mounted.
+type fsResizeRequiredError struct {
+	volumeName v1.UniqueVolumeName
+	podName    volumetypes.UniquePodName
+}
+
+func (err fsResizeRequiredError) Error() string {
+	return fmt.Sprintf(
+		"volumeName %q mounted to %q needs to resize file system",
+		err.volumeName, err.podName)
+}
+
+func newFsResizeRequiredError(
+volumeName v1.UniqueVolumeName, podName volumetypes.UniquePodName) error {
+	return fsResizeRequiredError{
+		volumeName: volumeName,
+		podName:    podName,
+	}
+}
+
+// IsFSResizeRequiredError returns true if the specified error is a
+// fsResizeRequiredError.
+func IsFSResizeRequiredError(err error) bool {
+	_, ok := err.(fsResizeRequiredError)
+	return ok
+}
+
+
+func (asw *actualStateOfWorld) PodExistsInVolume(
+	podName 		volumetypes.UniquePodName,
+	volumeName 		v1.UniqueVolumeName) (bool, string, error) {
+
+	asw.RLock()
+	defer asw.RUnlock()
+
+	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
+	if !volumeExists {
+		return false, "", newVolumeNotAttachedError(volumeName)
+	}
+
+	podObj, podExists := volumeObj.mountedPods[podName]
+	if podExists {
+		if podObj.remountRequired {
+			return true, volumeObj.devicePath, newRemountRequiredError(volumeObj.volumeName, podObj.podName)
+		}
+
+		if podObj.fsResizeRequired &&
+			utilfeature.DefaultFeatureGate.Enabled(features.ExpandInUsePersistentVolumes) {
+			return true, volumeObj.devicePath, newFsResizeRequiredError(volumeObj.volumeName, podObj.podName)
+		}
+	}
+
+	return podExists, volumeObj.devicePath, nil
 }
 
 func (asw *actualStateOfWorld) MarkRemountRequired(

@@ -22,6 +22,15 @@ import (
 )
 type DesiredStateOfWorldPopulator interface {
 	Run(sourcesReady config.SourcesReady, stopCh <-chan struct{})
+
+
+	// HasAddedPods returns whether the populator has looped through the list
+	// of active pods and added them to the desired state of the world cache,
+	// at a time after sources are all ready, at least once. It does not
+	// return true before sources are all ready because before then, there is
+	// a chance many or all pods are missing from the list of active pods and
+	// so few to none will have been added.
+	HasAddedPods() bool
 }
 
 // NewDesiredStateOfWorldPopulator returns a new instance of
@@ -80,6 +89,13 @@ type processedPods struct {
 	processedPods map[volumetypes.UniquePodName]bool
 	sync.RWMutex
 }
+
+func (dswp *desiredStateOfWorldPopulator) HasAddedPods() bool {
+	dswp.hasAddedPodsLock.RLock()
+	defer dswp.hasAddedPodsLock.RUnlock()
+	return dswp.hasAddedPods
+}
+
 
 func (dswp *desiredStateOfWorldPopulator) Run(sourcesReady config.SourcesReady, stopCh <- chan struct{}) {
 	// Wait for the completion of a loop that started after sources are all ready, then set hasAddedPods accordingly
@@ -276,6 +292,7 @@ func (dswp *desiredStateOfWorldPopulator) processPodVolumes(pod *v1.Pod,
 	}
 	// some of the volume additions may have failed, should not mark this pod as fully processed
 	if allVolumesAdded {
+		klog.Infof("desiredStateOfWorldPopulator processPodVolumes allVolumesAdd pod: %v/%v", pod.Namespace, pod.Name)
 		dswp.markPodProcessed(uniquePodName)
 		// New pod has been synced. Re-mount all volumes that need it (e.g. DownwardAPI)
 		dswp.actualStateOfWorld.MarkRemountRequired(uniquePodName)
