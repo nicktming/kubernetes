@@ -278,7 +278,7 @@ func (dswp *desiredStateOfWorldPopulator) processPodVolumes(pod *v1.Pod,
 	if allVolumesAdded {
 		dswp.markPodProcessed(uniquePodName)
 		// New pod has been synced. Re-mount all volumes that need it (e.g. DownwardAPI)
-		dswp.actualStateOfWorld
+		dswp.actualStateOfWorld.MarkRemountRequired(uniquePodName)
 	}
 
 }
