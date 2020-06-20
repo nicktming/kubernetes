@@ -74,6 +74,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 
 	"k8s.io/kubernetes/pkg/volume/util/subpath"
+	"k8s.io/kubernetes/pkg/kubelet-tming/volumemanager"
 )
 
 const (
@@ -300,6 +301,16 @@ type Kubelet struct {
 	// os is a facade for various syscalls that need to be mocked during testing.
 	os kubecontainer.OSInterface
 
+
+
+	// Volume plugins.
+	volumePluginMgr *volume.VolumePluginMgr
+
+	// VolumeManager runs a set of asynchronous loops that figure out which
+	// volumes need to be attached/mounted/unmounted/detached based on the pods
+	// scheduled on this node and makes it so.
+	volumeManager volumemanager.VolumeManager
+
 }
 
 
@@ -357,6 +368,10 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	//klog.Infof("kubelet run")
 
 	kl.initializeModules()
+
+
+	// Start volume manager
+	go kl.volumeManager.Run(kl.sourcesReady, wait.NeverStop)
 
 	if kl.kubeClient != nil {
 
@@ -1221,9 +1236,29 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	klet.podWorkers = newPodWorkers(klet.syncPod, kubeDeps.Recorder, klet.workQueue, klet.resyncInterval, backOffPeriod, klet.podCache)
 
+	klog.Infof("kubeDeps.VolumePlugins: %v", kubeDeps.VolumePlugins)
+
+	klet.volumePluginMgr, err =
+		NewInitializedVolumePluginMgr(klet, secretManager, configMapManager, nil, kubeDeps.VolumePlugins, kubeDeps.DynamicPluginProber)
+
+
+	klet.volumeManager = volumemanager.NewVolumeManager(
+		kubeCfg.EnableControllerAttachDetach,
+		nodeName,
+		klet.podManager,
+		klet.statusManager,
+		klet.kubeClient,
+		klet.volumePluginMgr,
+		klet.containerRuntime,
+		kubeDeps.Mounter,
+		klet.getPodsDir(),
+		kubeDeps.Recorder,
+		experimentalCheckNodeCapabilitiesBeforeMount,
+		keepTerminatedPodVolumes)
+
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
 
-	klog.Infof("kubeDeps.VolumePlugins: %v", kubeDeps.VolumePlugins)
+
 
 	return klet, nil
 
