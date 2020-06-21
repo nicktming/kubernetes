@@ -17,6 +17,15 @@ import (
 
 
 type ActualStateOfWorld interface {
+
+	// ActualStateOfWorld must implement the methods required to allow
+	// operationexecutor to interact with it.
+	operationexecutor.ActualStateOfWorldMounterUpdater
+
+	// ActualStateOfWorld must implement the methods required to allow
+	// operationexecutor to interact with it.
+	operationexecutor.ActualStateOfWorldAttacherUpdater
+
 	// MarkRemountRequired marks each volume that is successfully attached and
 	// mounted for the specified pod as requiring remount (if the plugin for the
 	// volume indicates it requires remounting on pod updates). Atomically
