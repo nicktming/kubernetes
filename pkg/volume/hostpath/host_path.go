@@ -119,7 +119,7 @@ func (plugin *hostPathPlugin) NewMounter(spec *volume.Spec, pod *v1.Pod, opts vo
 	} else {
 		pathType = hostPathVolumeSource.Type
 	}
-	klog.Infof("===>hostPathPlugin path: %v, pathType: %v", path, pathType)
+	klog.Infof("===>hostPathPlugin path: %v, pathType: %v", path, string(*pathType))
 	return &hostPathMounter{
 		hostPath: &hostPath{path: path, pathType: pathType},
 		readOnly: readOnly,

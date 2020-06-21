@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"k8s.io/kubernetes/pkg/util/selinux"
 )
 
 var (
@@ -199,6 +200,57 @@ func (m *kubeGenericRuntimeManager) removeContainerLog(containerID string) error
 	}
 	return nil
 }
+// makeMounts generates container volume mounts for kubelet runtime v1.
+func (m *kubeGenericRuntimeManager) makeMounts(opts *kubecontainer.RunContainerOptions, container *v1.Container) []*runtimeapi.Mount {
+	volumeMounts := []*runtimeapi.Mount{}
+
+	for idx := range opts.Mounts {
+		v := opts.Mounts[idx]
+		selinuxRelabel := v.SELinuxRelabel && selinux.SELinuxEnabled()
+		mount := &runtimeapi.Mount{
+			HostPath: 		v.HostPath,
+			ContainerPath: 		v.ContainerPath,
+			Readonly: 		v.ReadOnly,
+			SelinuxRelabel: 	selinuxRelabel,
+			Propagation: 		v.Propagation,
+		}
+		volumeMounts = append(volumeMounts, mount)
+	}
+
+	// The reason we create and mount the log file in here (not in kubelet) is because
+	// the file's location depends on the ID of the container, and we need to create and
+	// mount the file before actually starting the container.
+	if opts.PodContainerDir != "" && len(container.TerminationMessagePath) != 0 {
+		// Because the PodContainerDir contains pod uid and container name which is unique enough,
+		// here we just add a random id to make the path unique for different instances
+		// of the same container.
+
+		cid := makeUID()
+		containerLogPath := filepath.Join(opts.PodContainerDir, cid)
+		klog.Infof("=======>containerLogPath: %v", containerLogPath)
+		fs, err := m.osInterface.Create(containerLogPath)
+		if err != nil {
+			utilruntime.HandleError(fmt.Errorf("error on creating termination-log file %q: %v", containerLogPath, err))
+		} else {
+			fs.Close()
+			// Chmod is needed because ioutil.WriteFile() ends up calling
+			// open(2) to create the file, so the final mode used is "mode &
+			// ~umask". But we want to make sure the specified mode is used
+			// in the file no matter what the umask is.
+			if err := m.osInterface.Chmod(containerLogPath, 0666); err != nil {
+				utilruntime.HandleError(fmt.Errorf("unable to set termination-log file permissions %q: %v", containerLogPath, err))
+			}
+
+			selinuxRelabel := selinux.SELinuxEnabled()
+			volumeMounts = append(volumeMounts, &runtimeapi.Mount{
+				HostPath:		containerLogPath,
+				ContainerPath: 		container.TerminationMessagePath,
+				SelinuxRelabel: 	selinuxRelabel,
+			})
+		}
+	}
+	return volumeMounts
+}
 
 // generateContainerConfig generates container config for kubelet runtime v1.
 func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Container, pod *v1.Pod, restartCount int, podIP, imageRef string) (*runtimeapi.ContainerConfig, func(), error) {
@@ -241,7 +293,7 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Contai
 		Labels:      newContainerLabels(container, pod),
 		Annotations: newContainerAnnotations(container, pod, restartCount, opts),
 		//Devices:     makeDevices(opts),
-		//Mounts:      m.makeMounts(opts, container),
+		Mounts:      m.makeMounts(opts, container),
 		LogPath:     containerLogsPath,
 		Stdin:       container.Stdin,
 		StdinOnce:   container.StdinOnce,

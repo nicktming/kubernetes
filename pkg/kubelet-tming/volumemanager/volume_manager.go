@@ -89,7 +89,7 @@ type VolumeManager interface {
 	// pod.Spec.Volumes[x].Name). It returns an empty VolumeMap if pod has no
 	// volumes.
 
-	// GetMountedVolumesForPod(podName types.UniquePodName) container.VolumeMap
+	 GetMountedVolumesForPod(podName types.UniquePodName) container.VolumeMap
 
 	// GetExtraSupplementalGroupsForPod returns a list of the extra
 	// supplemental groups for the Pod. These extra supplemental groups come
@@ -352,14 +352,18 @@ func getExpectedVolumes(pod *v1.Pod) []string {
 
 
 
-
-
-
-
-
-
-
-
+func (vm *volumeManager) GetMountedVolumesForPod(podName types.UniquePodName) container.VolumeMap {
+	podVolumes := make(container.VolumeMap)
+	for _, mountedVolume := range vm.actualStateOfWorld.GetMountedVolumesForPod(podName) {
+		podVolumes[mountedVolume.OuterVolumeSpecName] = container.VolumeInfo{
+			Mounter:             mountedVolume.Mounter,
+			BlockVolumeMapper:   mountedVolume.BlockVolumeMapper,
+			ReadOnly:            mountedVolume.VolumeSpec.ReadOnly,
+			InnerVolumeSpecName: mountedVolume.InnerVolumeSpecName,
+		}
+	}
+	return podVolumes
+}
 
 
 

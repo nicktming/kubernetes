@@ -15,9 +15,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	//"path/filepath"
-	//volumeutil "k8s.io/kubernetes/pkg/volume/util"
+	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 	"encoding/json"
 	"fmt"
+	"strings"
+	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/kubernetes/pkg/volume/util/subpath"
+	mountutil "k8s.io/kubernetes/pkg/util/mount"
+	"runtime"
+	"path/filepath"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
 // findContainer finds and returns the container with the given pod ID, full name, and container name.
@@ -55,6 +62,55 @@ func (kl *Kubelet) GetPodCgroupParent(pod *v1.Pod) string {
 	return cgroupParent
 }
 
+// truncatePodHostnameIfNeeded truncates the pod hostname if it's longer than 63 chars.
+func truncatePodHostnameIfNeeded(podName, hostname string) (string, error) {
+	// Cap hostname at 63 chars (specification is 64bytes which is 63 chars and the null terminating char).
+	const hostnameMaxLen = 63
+	if len(hostname) <= hostnameMaxLen {
+		return hostname, nil
+	}
+	truncated := hostname[:hostnameMaxLen]
+	klog.Errorf("hostname for pod:%q was longer than %d. Truncated hostname to :%q", podName, hostnameMaxLen, truncated)
+	// hostname should not end with '-' or '.'
+	truncated = strings.TrimRight(truncated, "-.")
+	if len(truncated) == 0 {
+		// This should never happen.
+		return "", fmt.Errorf("hostname for pod %q was invalid: %q", podName, hostname)
+	}
+	return truncated, nil
+}
+
+
+// GeneratePodHostNameAndDomain creates a hostname and domain name for a pod,
+// given that pod's spec and annotations or returns an error.
+func (kl *Kubelet) GeneratePodHostNameAndDomain(pod *v1.Pod) (string, string, error) {
+	//clusterDomain := kl.dnsConfigurer.ClusterDomain
+
+	clusterDomain := "cluster.local"
+	hostname := pod.Name
+	if len(pod.Spec.Hostname) > 0 {
+		if msgs := utilvalidation.IsDNS1123Label(pod.Spec.Hostname); len(msgs) != 0 {
+			return "", "", fmt.Errorf("Pod Hostname %q is not a valid DNS label: %s", pod.Spec.Hostname, strings.Join(msgs, ";"))
+		}
+		hostname = pod.Spec.Hostname
+	}
+
+	hostname, err := truncatePodHostnameIfNeeded(pod.Name, hostname)
+	if err != nil {
+		return "", "", err
+	}
+
+	hostDomain := ""
+	if len(pod.Spec.Subdomain) > 0 {
+		if msgs := utilvalidation.IsDNS1123Label(pod.Spec.Subdomain); len(msgs) != 0 {
+			return "", "", fmt.Errorf("Pod Subdomain %q is not a valid DNS label: %s", pod.Spec.Subdomain, strings.Join(msgs, ";"))
+		}
+		hostDomain = fmt.Sprintf("%s.%s.svc.%s", pod.Spec.Subdomain, pod.Namespace, clusterDomain)
+	}
+
+	return hostname, hostDomain, nil
+}
+
 // GenerateRunContainerOptions generates the RunContainerOptions, which can be used by
 // the container runtime to set parameters for launching a container.
 
@@ -63,13 +119,13 @@ func (kl *Kubelet) GenerateRunContainerOptions(pod *v1.Pod, container *v1.Contai
 	if err != nil {
 		return nil, nil, err
 	}
-	//hostname, hostDomainName, err := kl.GeneratePodHostNameAndDomain(pod)
-	//if err != nil {
-	//	return nil, nil, err
-	//}
-	//opts.Hostname = hostname
-	//podName := volumeutil.GetUniquePodName(pod)
-	//volumes := kl.volumeManager.GetMountedVolumesForPod(podName)
+	hostname, hostDomainName, err := kl.GeneratePodHostNameAndDomain(pod)
+	if err != nil {
+		return nil, nil, err
+	}
+	opts.Hostname = hostname
+	podName := volumeutil.GetUniquePodName(pod)
+	volumes := kl.volumeManager.GetMountedVolumesForPod(podName)
 
 	opts.PortMappings = kubecontainer.MakePortMappings(container)
 
@@ -92,61 +148,197 @@ func (kl *Kubelet) GenerateRunContainerOptions(pod *v1.Pod, container *v1.Contai
 
 	// TODO mount
 
-	//mounts, cleanupAction, err := makeMounts(pod, kl.getPodDir(pod.UID), container, hostname, hostDomainName, podIP, volumes, kl.mounter, kl.subpather, opts.Envs)
-	//if err != nil {
-	//	return nil, cleanupAction, err
-	//}
-	//opts.Mounts = append(opts.Mounts, mounts...)
+	mounts, cleanupAction, err := makeMounts(pod, kl.getPodDir(pod.UID), container, hostname, hostDomainName, podIP, volumes, kl.mounter, kl.subpather, opts.Envs)
+	if err != nil {
+		return nil, cleanupAction, err
+	}
+	opts.Mounts = append(opts.Mounts, mounts...)
 
-	//if len(container.TerminationMessagePath) != 0 && runtime.GOOS != "windows" {
-	//	p := kl.getPodContainerDir(pod.UID, container.Name)
-	//	if err := os.MkdirAll(p, 0750); err != nil {
-	//		klog.Errorf("Error on creating %q: %v", p, err)
-	//	} else {
-	//		opts.PodContainerDir = p
-	//	}
-	//}
+	klog.Infof("==========>GenerateRunContainerOptions container.TerminationMessagePath:%v!", container.TerminationMessagePath)
+
+	if len(container.TerminationMessagePath) != 0 && runtime.GOOS != "windows" {
+		p := kl.getPodContainerDir(pod.UID, container.Name)
+		if err := os.MkdirAll(p, 0750); err != nil {
+			klog.Errorf("Error on creating %q: %v", p, err)
+		} else {
+			opts.PodContainerDir = p
+		}
+	}
 
 	// only do this check if the experimental behavior is enabled, otherwise allow it to default to false
 	//if kl.experimentalHostUserNamespaceDefaulting {
 	//	opts.EnableHostUserNamespace = kl.enableHostUserNamespace(pod)
 	//}
 
-	//return opts, cleanupAction, nil
+	return opts, cleanupAction, nil
+}
 
-	return opts, nil, nil
+// makeMounts determines the mount points for the given container.
+func makeMounts(pod *v1.Pod, podDir string, container *v1.Container, hostName, hostDomain, podIP string, podVolumes kubecontainer.VolumeMap, mounter mountutil.Interface, subpather subpath.Interface, expandEnvs []kubecontainer.EnvVar) ([]kubecontainer.Mount, func(), error) {
+	// Kubernetes only mounts on /etc/hosts if:
+	// - container is not an infrastructure (pause) container
+	// - container is not already mounting on /etc/hosts
+	// - OS is not Windows
+	// Kubernetes will not mount /etc/hosts if:
+	// - when the Pod sandbox is being created, its IP is still unknown. Hence, PodIP will not have been set.
+	mountEtcHostsFile := len(podIP) > 0 && runtime.GOOS != "windows"
+	klog.Infof("container: %v/%v/%v podIP: %q creating hosts mount: %v", pod.Namespace, pod.Name, container.Name, podIP, mountEtcHostsFile)
+	mounts := []kubecontainer.Mount{}
+	var cleanupAction func()
+	for i, mount := range container.VolumeMounts {
+		// do not mount /etc/hosts if container is already mounting on the path
+		mountEtcHostsFile = mountEtcHostsFile && (mount.MountPath != etcHostsPath)
+		vol, ok := podVolumes[mount.Name]
+		if !ok || vol.Mounter == nil {
+			klog.Errorf("Mount cannot be satisfied for container %q, because the volume is missing or the volume mounter is nil: %+v", container.Name, mount)
+			return nil, cleanupAction, fmt.Errorf("cannot find volume %q to mount into container %q", mount.Name, container.Name)
+		}
+		relabelVolume := false
+		// If the volume supports SELinux and it has not been
+		// relabeled already and it is not a read-only volume,
+		// relabel it and mark it as labeled
+		if vol.Mounter.GetAttributes().Managed && vol.Mounter.GetAttributes().SupportsSELinux && !vol.SELinuxLabeled {
+			vol.SELinuxLabeled = true
+			relabelVolume = true
+		}
+		hostPath, err := volumeutil.GetPath(vol.Mounter)
+		if err != nil {
+			return nil, cleanupAction, err
+		}
+
+		// TODO subpath
+		//subPath := mount.SubPath
+		//if mount.SubPathExpr != "" {
+		//	if !utilfeature.DefaultFeatureGate.Enabled(features.VolumeSubpath) {
+		//		return nil, cleanupAction, fmt.Errorf("volume subpaths are disabled")
+		//	}
+		//
+		//	if !utilfeature.DefaultFeatureGate.Enabled(features.VolumeSubpathEnvExpansion) {
+		//		return nil, cleanupAction, fmt.Errorf("volume subpath expansion is disabled")
+		//	}
+		//
+		//	subPath, err = kubecontainer.ExpandContainerVolumeMounts(mount, expandEnvs)
+		//
+		//	if err != nil {
+		//		return nil, cleanupAction, err
+		//	}
+		//}
+		//
+		//if subPath != "" {
+		//	if !utilfeature.DefaultFeatureGate.Enabled(features.VolumeSubpath) {
+		//		return nil, cleanupAction, fmt.Errorf("volume subpaths are disabled")
+		//	}
+		//
+		//	if filepath.IsAbs(subPath) {
+		//		return nil, cleanupAction, fmt.Errorf("error SubPath `%s` must not be an absolute path", subPath)
+		//	}
+		//
+		//	err = volumevalidation.ValidatePathNoBacksteps(subPath)
+		//	if err != nil {
+		//		return nil, cleanupAction, fmt.Errorf("unable to provision SubPath `%s`: %v", subPath, err)
+		//	}
+		//
+		//	volumePath := hostPath
+		//	hostPath = filepath.Join(volumePath, subPath)
+		//
+		//	if subPathExists, err := mounter.ExistsPath(hostPath); err != nil {
+		//		klog.Errorf("Could not determine if subPath %s exists; will not attempt to change its permissions", hostPath)
+		//	} else if !subPathExists {
+		//		// Create the sub path now because if it's auto-created later when referenced, it may have an
+		//		// incorrect ownership and mode. For example, the sub path directory must have at least g+rwx
+		//		// when the pod specifies an fsGroup, and if the directory is not created here, Docker will
+		//		// later auto-create it with the incorrect mode 0750
+		//		// Make extra care not to escape the volume!
+		//		perm, err := mounter.GetMode(volumePath)
+		//		if err != nil {
+		//			return nil, cleanupAction, err
+		//		}
+		//		if err := subpather.SafeMakeDir(subPath, volumePath, perm); err != nil {
+		//			// Don't pass detailed error back to the user because it could give information about host filesystem
+		//			klog.Errorf("failed to create subPath directory for volumeMount %q of container %q: %v", mount.Name, container.Name, err)
+		//			return nil, cleanupAction, fmt.Errorf("failed to create subPath directory for volumeMount %q of container %q", mount.Name, container.Name)
+		//		}
+		//	}
+		//	hostPath, cleanupAction, err = subpather.PrepareSafeSubpath(subpath.Subpath{
+		//		VolumeMountIndex: i,
+		//		Path:             hostPath,
+		//		VolumeName:       vol.InnerVolumeSpecName,
+		//		VolumePath:       volumePath,
+		//		PodDir:           podDir,
+		//		ContainerName:    container.Name,
+		//	})
+		//	if err != nil {
+		//		// Don't pass detailed error back to the user because it could give information about host filesystem
+		//		klog.Errorf("failed to prepare subPath for volumeMount %q of container %q: %v", mount.Name, container.Name, err)
+		//		return nil, cleanupAction, fmt.Errorf("failed to prepare subPath for volumeMount %q of container %q", mount.Name, container.Name)
+		//	}
+		//}
+
+		// Docker Volume Mounts fail on Windows if it is not of the form C:/
+		if volumeutil.IsWindowsLocalPath(runtime.GOOS, hostPath) {
+			hostPath = volumeutil.MakeAbsolutePath(runtime.GOOS, hostPath)
+		}
+
+		containerPath := mount.MountPath
+		// IsAbs returns false for UNC path/SMB shares/named pipes in Windows. So check for those specifically and skip MakeAbsolutePath
+		if !volumeutil.IsWindowsUNCPath(runtime.GOOS, containerPath) && !filepath.IsAbs(containerPath) {
+			containerPath = volumeutil.MakeAbsolutePath(runtime.GOOS, containerPath)
+		}
+
+		// TODO propagation
+		propagation, err := translateMountPropagation(mount.MountPropagation)
+		if err != nil {
+			return nil, cleanupAction, err
+		}
+		klog.Infof("Pod %q container %q mount %q has propagation %q", format.Pod(pod), container.Name, mount.Name, propagation)
+
+		mustMountRO := vol.Mounter.GetAttributes().ReadOnly
+
+		mounts = append(mounts, kubecontainer.Mount{
+			Name:           mount.Name,
+			ContainerPath:  containerPath,
+			HostPath:       hostPath,
+			ReadOnly:       mount.ReadOnly || mustMountRO,
+			SELinuxRelabel: relabelVolume,
+			Propagation:    propagation,
+		})
+	}
+	// TODO etc/hosts mount
+	//if mountEtcHostsFile {
+	//	hostAliases := pod.Spec.HostAliases
+	//	hostsMount, err := makeHostsMount(podDir, podIP, hostName, hostDomain, hostAliases, pod.Spec.HostNetwork)
+	//	if err != nil {
+	//		return nil, cleanupAction, err
+	//	}
+	//	mounts = append(mounts, *hostsMount)
+	//}
+	return mounts, cleanupAction, nil
 
 }
 
-// GeneratePodHostNameAndDomain creates a hostname and domain name for a pod,
-// given that pod's spec and annotations or returns an error.
-//func (kl *Kubelet) GeneratePodHostNameAndDomain(pod *v1.Pod) (string, string, error) {
-//	clusterDomain := kl.dnsConfigurer.ClusterDomain
-//
-//	hostname := pod.Name
-//	if len(pod.Spec.Hostname) > 0 {
-//		if msgs := utilvalidation.IsDNS1123Label(pod.Spec.Hostname); len(msgs) != 0 {
-//			return "", "", fmt.Errorf("Pod Hostname %q is not a valid DNS label: %s", pod.Spec.Hostname, strings.Join(msgs, ";"))
-//		}
-//		hostname = pod.Spec.Hostname
-//	}
-//
-//	hostname, err := truncatePodHostnameIfNeeded(pod.Name, hostname)
-//	if err != nil {
-//		return "", "", err
-//	}
-//
-//	hostDomain := ""
-//	if len(pod.Spec.Subdomain) > 0 {
-//		if msgs := utilvalidation.IsDNS1123Label(pod.Spec.Subdomain); len(msgs) != 0 {
-//			return "", "", fmt.Errorf("Pod Subdomain %q is not a valid DNS label: %s", pod.Spec.Subdomain, strings.Join(msgs, ";"))
-//		}
-//		hostDomain = fmt.Sprintf("%s.%s.svc.%s", pod.Spec.Subdomain, pod.Namespace, clusterDomain)
-//	}
-//
-//	return hostname, hostDomain, nil
-//}
+// translateMountPropagation transforms v1.MountPropagationMode to
+// runtimeapi.MountPropagation.
+func translateMountPropagation(mountMode *v1.MountPropagationMode) (runtimeapi.MountPropagation, error) {
+	if runtime.GOOS == "windows" {
+		// Windows containers doesn't support mount propagation, use private for it.
+		// Refer https://docs.docker.com/storage/bind-mounts/#configure-bind-propagation.
+		return runtimeapi.MountPropagation_PROPAGATION_PRIVATE, nil
+	}
 
+	switch {
+	case mountMode == nil:
+		// PRIVATE is the default
+		return runtimeapi.MountPropagation_PROPAGATION_PRIVATE, nil
+	case *mountMode == v1.MountPropagationHostToContainer:
+		return runtimeapi.MountPropagation_PROPAGATION_HOST_TO_CONTAINER, nil
+	case *mountMode == v1.MountPropagationBidirectional:
+		return runtimeapi.MountPropagation_PROPAGATION_BIDIRECTIONAL, nil
+	case *mountMode == v1.MountPropagationNone:
+		return runtimeapi.MountPropagation_PROPAGATION_PRIVATE, nil
+	default:
+		return 0, fmt.Errorf("invalid MountPropagation mode: %q", *mountMode)
+	}
+}
 
 func notRunning(statuses []v1.ContainerStatus) bool {
 	for _, status := range statuses {

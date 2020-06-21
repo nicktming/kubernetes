@@ -32,3 +32,4 @@ config="$config --kubeconfig=$homepath/ssl_keys/node/kubelet_kubeconfig"
 // 13. hugepage
 // 14. PodDisruptionBudget
 // 15. dswp.podStatusProvider.GetPodStatus(pod.UID)
+// 16. Propagation

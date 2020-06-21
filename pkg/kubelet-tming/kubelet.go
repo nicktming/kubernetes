@@ -98,6 +98,9 @@ const (
 
 	// MaxContainerBackOff is the max backoff period, exported for the e2e test
 	MaxContainerBackOff = 300 * time.Second
+
+	// The path in containers' filesystems where the hosts file is mounted.
+	etcHostsPath = "/etc/hosts"
 )
 
 type Dependencies struct {
@@ -796,6 +799,7 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 			klog.Errorf("Unable to mount volumes for pod %q: %v; skipping pod", format.Pod(pod), err)
 			return err
 		}
+		klog.Infof("===>Finish waiting for volumes to attach/mount")
 	}
 
 	pullSecrets := kl.getPullSecretsForPod(pod)

@@ -30,6 +30,13 @@ func (kl *Kubelet) getPodsDir() string {
 	return filepath.Join(kl.getRootDir(), config.DefaultKubeletPodsDirName)
 }
 
+// getPodContainerDir returns the full path to the per-pod data directory under
+// which container data is held for the specified pod.  This directory may not
+// exist if the pod or container does not exist.
+func (kl *Kubelet) getPodContainerDir(podUID types.UID, ctrName string) string {
+	return filepath.Join(kl.getPodDir(podUID), config.DefaultKubeletContainersDirName, ctrName)
+}
+
 // getPodDir returns the full path to the per-pod directory for the pod with
 // the given UID.
 func (kl *Kubelet) getPodDir(podUID types.UID) string {

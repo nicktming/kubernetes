@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"k8s.io/client-go/util/flowcontrol"
+	"k8s.io/kubernetes/pkg/volume"
 )
 
 type Version interface {
@@ -153,6 +154,24 @@ const (
 	ContainerStateUnknown 	ContainerState 	= 	"unknown"
 )
 
+// VolumeInfo contains information about the volume.
+type VolumeInfo struct {
+	// Mounter is the volume's mounter
+	Mounter volume.Mounter
+	// BlockVolumeMapper is the Block volume's mapper
+	BlockVolumeMapper volume.BlockVolumeMapper
+	// SELinuxLabeled indicates whether this volume has had the
+	// pod's SELinux label applied to it or not
+	SELinuxLabeled bool
+	// Whether the volume permission is set to read-only or not
+	// This value is passed from volume.spec
+	ReadOnly bool
+	// Inner volume spec name, which is the PV name if used, otherwise
+	// it is the same as the outer volume spec name.
+	InnerVolumeSpecName string
+}
+
+type VolumeMap map[string]VolumeInfo
 
 func GetPodFullName(pod *v1.Pod) string {
 	return pod.Name + "_" + pod.Namespace
