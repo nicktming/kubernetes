@@ -201,8 +201,10 @@ func (kvh *kubeletVolumeHost) GetMounter(pluginName string) mount.Interface {
 		exec = nil
 	}
 	if exec == nil {
+		klog.Infof("exec = nil and using kvh.kubelet.mounter")
 		return kvh.kubelet.mounter
 	}
+	klog.Infof("execmnt.NewExecMounter(exec, kvh.kubelet.mounter)")
 	return execmnt.NewExecMounter(exec, kvh.kubelet.mounter)
 }
 
@@ -272,7 +274,7 @@ func (kvh *kubeletVolumeHost) GetExec(pluginName string) mount.Exec {
 // os.Exec should be used.
 func (kvh *kubeletVolumeHost) getMountExec(pluginName string) (mount.Exec, error) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.MountContainers) {
-		klog.V(5).Infof("using default mounter/exec for %s", pluginName)
+		klog.Infof("using default mounter/exec for %s", pluginName)
 		return nil, nil
 	}
 
@@ -282,10 +284,10 @@ func (kvh *kubeletVolumeHost) getMountExec(pluginName string) (mount.Exec, error
 	}
 	if pod == nil {
 		// Use default mounter/exec for this plugin
-		klog.V(5).Infof("using default mounter/exec for %s", pluginName)
+		klog.Infof("using default mounter/exec for %s", pluginName)
 		return nil, nil
 	}
-	klog.V(5).Infof("using container %s/%s/%s to execute mount utilities for %s", pod.Namespace, pod.Name, container, pluginName)
+	klog.Infof("using container %s/%s/%s to execute mount utilities for %s", pod.Namespace, pod.Name, container, pluginName)
 	return &containerExec{
 		pod:           pod,
 		containerName: container,

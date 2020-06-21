@@ -24,6 +24,12 @@ type DesiredStateOfWorldPopulator interface {
 	Run(sourcesReady config.SourcesReady, stopCh <-chan struct{})
 
 
+	// ReprocessPod removes the specified pod from the list of processedPods
+	// (if it exists) forcing it to be reprocessed. This is required to enable
+	// remounting volumes on pod updates (volumes like Downward API volumes
+	// depend on this behavior to ensure volume content is updated).
+	ReprocessPod(podName volumetypes.UniquePodName)
+
 	// HasAddedPods returns whether the populator has looped through the list
 	// of active pods and added them to the desired state of the world cache,
 	// at a time after sources are all ready, at least once. It does not
@@ -96,6 +102,10 @@ func (dswp *desiredStateOfWorldPopulator) HasAddedPods() bool {
 	return dswp.hasAddedPods
 }
 
+func (dswp *desiredStateOfWorldPopulator) ReprocessPod(
+	podName volumetypes.UniquePodName) {
+	dswp.deleteProcessedPod(podName)
+}
 
 func (dswp *desiredStateOfWorldPopulator) Run(sourcesReady config.SourcesReady, stopCh <- chan struct{}) {
 	// Wait for the completion of a loop that started after sources are all ready, then set hasAddedPods accordingly

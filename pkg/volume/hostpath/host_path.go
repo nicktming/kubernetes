@@ -30,6 +30,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 	"k8s.io/kubernetes/pkg/volume/util/recyclerclient"
 	"k8s.io/kubernetes/pkg/volume/validation"
+	"k8s.io/klog"
 )
 
 // ProbeVolumePlugins is the primary entrypoint for volume plugins.
@@ -118,6 +119,7 @@ func (plugin *hostPathPlugin) NewMounter(spec *volume.Spec, pod *v1.Pod, opts vo
 	} else {
 		pathType = hostPathVolumeSource.Type
 	}
+	klog.Infof("===>hostPathPlugin path: %v, pathType: %v", path, pathType)
 	return &hostPathMounter{
 		hostPath: &hostPath{path: path, pathType: pathType},
 		readOnly: readOnly,

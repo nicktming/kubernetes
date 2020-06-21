@@ -50,6 +50,59 @@ type ActualStateOfWorld interface {
 	// volumes that do not need to update contents should not fail.
 	PodExistsInVolume(podName volumetypes.UniquePodName, volumeName v1.UniqueVolumeName) (bool, string, error)
 
+	// GetMountedVolumesForPod generates and returns a list of volumes that are
+	// successfully attached and mounted for the specified pod based on the
+	// current actual state of the world.
+	GetMountedVolumesForPod(podName volumetypes.UniquePodName) []MountedVolume
+
+	// VolumeExists returns true if the given volume exists in the list of
+	// attached volumes in the cache, indicating the volume is attached to this
+	// node.
+	VolumeExists(volumeName v1.UniqueVolumeName) bool
+
+}
+
+func (asw *actualStateOfWorld) VolumeExists(
+	volumeName v1.UniqueVolumeName) bool {
+	asw.RLock()
+	defer asw.RUnlock()
+
+	_, volumeExists := asw.attachedVolumes[volumeName]
+	return volumeExists
+}
+
+func (asw *actualStateOfWorld) GetMountedVolumesForPod(podName volumetypes.UniquePodName) []MountedVolume {
+	asw.RLock()
+	defer asw.RUnlock()
+	mountedVolume := make([]MountedVolume, 0, len(asw.attachedVolumes))
+	for _, volumeObj := range asw.attachedVolumes {
+		for mountedPodName, podObj := range volumeObj.mountedPods {
+			if mountedPodName == podName {
+				mountedVolume = append(mountedVolume,
+					getMountedVolume(&podObj, &volumeObj))
+			}
+		}
+	}
+	return mountedVolume
+}
+
+// getMountedVolume constructs and returns a MountedVolume object from the given
+// mountedPod and attachedVolume objects.
+func getMountedVolume(
+mountedPod *mountedPod, attachedVolume *attachedVolume) MountedVolume {
+	return MountedVolume{
+		MountedVolume: operationexecutor.MountedVolume{
+			PodName:             mountedPod.podName,
+			VolumeName:          attachedVolume.volumeName,
+			InnerVolumeSpecName: mountedPod.volumeSpec.Name(),
+			OuterVolumeSpecName: mountedPod.outerVolumeSpecName,
+			PluginName:          attachedVolume.pluginName,
+			PodUID:              mountedPod.podUID,
+			Mounter:             mountedPod.mounter,
+			BlockVolumeMapper:   mountedPod.blockVolumeMapper,
+			VolumeGidValue:      mountedPod.volumeGidValue,
+			VolumeSpec:          mountedPod.volumeSpec,
+			DeviceMountPath:     attachedVolume.deviceMountPath}}
 }
 
 

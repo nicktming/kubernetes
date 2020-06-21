@@ -705,6 +705,8 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 			return volumeToMount.GenerateError("MountVolume.SetUp failed", mountErr)
 		}
 
+		klog.Infof("==============>MountVolume.SetUp succeeded")
+
 		_, detailedMsg := volumeToMount.GenerateMsg("MountVolume.SetUp succeeded", "")
 		verbosity := klog.Level(1)
 		if isRemount {

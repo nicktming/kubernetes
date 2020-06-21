@@ -140,7 +140,7 @@ func (dswp *desiredStateOfWorldPopulator) Run(sourcesReady config.SourcesReady, 
 }
 
 func (dswp *desiredStateOfWorldPopulator) ReprocessPod(
-	podName volumetypes.UniquePodName) {
+podName volumetypes.UniquePodName) {
 	dswp.deleteProcessedPod(podName)
 }
 

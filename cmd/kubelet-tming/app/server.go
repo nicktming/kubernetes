@@ -379,7 +379,7 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 	subpather := subpath.New(mounter)
 	var pluginRunner = exec.New()
 
-	klog.Infof("===>s.Containerized: %v, s.VolumePluginDir: %v", s.Containerized, s.VolumePluginDir)
+	klog.Infof("===>s.Containerized: %v, s.VolumePluginDir: %v, s.ExperimentalMounterPath: %v", s.Containerized, s.VolumePluginDir, s.ExperimentalMounterPath)
 
 	if s.Containerized {
 		klog.V(2).Info("Running kubelet in containerized mode")
