@@ -185,7 +185,8 @@ func makeMounts(pod *v1.Pod, podDir string, container *v1.Container, hostName, h
 	klog.Infof("container: %v/%v/%v podIP: %q creating hosts mount: %v", pod.Namespace, pod.Name, container.Name, podIP, mountEtcHostsFile)
 	mounts := []kubecontainer.Mount{}
 	var cleanupAction func()
-	for i, mount := range container.VolumeMounts {
+	//for i, mount := range container.VolumeMounts {
+	for _, mount := range container.VolumeMounts {
 		// do not mount /etc/hosts if container is already mounting on the path
 		mountEtcHostsFile = mountEtcHostsFile && (mount.MountPath != etcHostsPath)
 		vol, ok := podVolumes[mount.Name]
