@@ -12,6 +12,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/operationexecutor"
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 	"fmt"
+	"k8s.io/kubernetes/pkg/volume/util"
 )
 
 
@@ -251,6 +252,253 @@ volumeName v1.UniqueVolumeName, podName volumetypes.UniquePodName) error {
 func IsFSResizeRequiredError(err error) bool {
 	_, ok := err.(fsResizeRequiredError)
 	return ok
+}
+
+func (asw *actualStateOfWorld) MarkVolumeAsResized(
+	podName volumetypes.UniquePodName,
+	volumeName v1.UniqueVolumeName) error {
+	asw.Lock()
+	defer asw.Unlock()
+
+	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
+	if !volumeExists {
+		return fmt.Errorf(
+			"no volume with the name %q exists in the list of attached volumes",
+			volumeName)
+	}
+
+	podObj, podExists := volumeObj.mountedPods[podName]
+	if !podExists {
+		return fmt.Errorf(
+			"no pod with the name %q exists in the mounted pods list of volume %s",
+			podName,
+			volumeName)
+	}
+
+	klog.Infof("Volume %s(OuterVolumeSpecName %s) of pod %s has been resized",
+		volumeName, podObj.outerVolumeSpecName, podName)
+	podObj.fsResizeRequired = false
+	asw.attachedVolumes[volumeName].mountedPods[podName] = podObj
+	return nil
+}
+
+func (asw *actualStateOfWorld) MarkDeviceAsUnmounted(
+	volumeName v1.UniqueVolumeName) error {
+	return asw.SetVolumeGloballyMounted(volumeName, false /* globallyMounted */, "", "")
+}
+
+
+func (asw *actualStateOfWorld) MarkDeviceAsMounted(
+	volumeName v1.UniqueVolumeName, devicePath, deviceMountPath string) error {
+	return asw.SetVolumeGloballyMounted(volumeName, true /* globallyMounted */, devicePath, deviceMountPath)
+}
+
+func (asw *actualStateOfWorld) SetVolumeGloballyMounted(
+	volumeName v1.UniqueVolumeName, globallyMounted bool, devicePath, deviceMountPath string) error {
+	asw.Lock()
+	defer asw.Unlock()
+
+	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
+	if !volumeExists {
+		return fmt.Errorf(
+			"no volume with the name %q exists in the list of attached volumes",
+			volumeName)
+	}
+
+	volumeObj.globallyMounted = globallyMounted
+	volumeObj.deviceMountPath = deviceMountPath
+	if devicePath != "" {
+		volumeObj.devicePath = devicePath
+	}
+	asw.attachedVolumes[volumeName] = volumeObj
+	return nil
+}
+
+
+func (asw *actualStateOfWorld) MarkVolumeAsUnmounted(
+	podName volumetypes.UniquePodName, volumeName v1.UniqueVolumeName) error {
+	return asw.DeletePodFromVolume(podName, volumeName)
+}
+
+func (asw *actualStateOfWorld) DeletePodFromVolume(
+	podName volumetypes.UniquePodName, volumeName v1.UniqueVolumeName) error {
+	asw.Lock()
+	defer asw.Unlock()
+
+	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
+	if !volumeExists {
+		return fmt.Errorf(
+			"no volume with the name %q exists in the list of attached volumes",
+			volumeName)
+	}
+
+	_, podExists := volumeObj.mountedPods[podName]
+	if podExists {
+		delete(asw.attachedVolumes[volumeName].mountedPods, podName)
+	}
+
+	return nil
+}
+
+
+func (asw *actualStateOfWorld) MarkVolumeAsMounted(
+	podName volumetypes.UniquePodName,
+	podUID types.UID,
+	volumeName v1.UniqueVolumeName,
+	mounter volume.Mounter,
+	blockVolumeMapper volume.BlockVolumeMapper,
+	outerVolumeSpecName string,
+	volumeGidValue string,
+	volumeSpec *volume.Spec) error {
+	return asw.AddPodToVolume(
+		podName,
+		podUID,
+		volumeName,
+		mounter,
+		blockVolumeMapper,
+		outerVolumeSpecName,
+		volumeGidValue,
+		volumeSpec)
+}
+
+func (asw *actualStateOfWorld) AddPodToVolume(
+	podName volumetypes.UniquePodName,
+	podUID types.UID,
+	volumeName v1.UniqueVolumeName,
+	mounter volume.Mounter,
+	blockVolumeMapper volume.BlockVolumeMapper,
+	outerVolumeSpecName string,
+	volumeGidValue string,
+	volumeSpec *volume.Spec) error {
+	asw.Lock()
+	defer asw.Unlock()
+
+	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
+	if !volumeExists {
+		return fmt.Errorf(
+			"no volume with the name %q exists in the list of attached volumes",
+			volumeName)
+	}
+
+	podObj, podExists := volumeObj.mountedPods[podName]
+	if !podExists {
+		podObj = mountedPod{
+			podName:             podName,
+			podUID:              podUID,
+			mounter:             mounter,
+			blockVolumeMapper:   blockVolumeMapper,
+			outerVolumeSpecName: outerVolumeSpecName,
+			volumeGidValue:      volumeGidValue,
+			volumeSpec:          volumeSpec,
+		}
+	}
+
+	// If pod exists, reset remountRequired value
+	podObj.remountRequired = false
+	asw.attachedVolumes[volumeName].mountedPods[podName] = podObj
+
+	return nil
+}
+
+
+func (asw *actualStateOfWorld) AddVolumeToReportAsAttached(volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
+	// no operation for kubelet side
+}
+
+func (asw *actualStateOfWorld) RemoveVolumeFromReportAsAttached(volumeName v1.UniqueVolumeName, nodeName types.NodeName) error {
+	// no operation for kubelet side
+	return nil
+}
+
+
+func (asw *actualStateOfWorld) MarkVolumeAsAttached(
+		volumeName v1.UniqueVolumeName, volumeSpec *volume.Spec, _ types.NodeName, devicePath string) error {
+	return asw.addVolume(volumeName, volumeSpec, devicePath)
+}
+
+func (asw *actualStateOfWorld) MarkVolumeAsUncertain(
+	volumeName v1.UniqueVolumeName, volumeSpec *volume.Spec, _ types.NodeName) error {
+	return nil
+}
+
+func (asw *actualStateOfWorld) MarkVolumeAsDetached(
+	volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
+	asw.DeleteVolume(volumeName)
+}
+
+
+func (asw *actualStateOfWorld) DeleteVolume(volumeName v1.UniqueVolumeName) error {
+	asw.Lock()
+	defer asw.Unlock()
+
+	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
+	if !volumeExists {
+		return nil
+	}
+
+	if len(volumeObj.mountedPods) != 0 {
+		return fmt.Errorf(
+			"failed to DeleteVolume %q, it still has %v mountedPods",
+			volumeName,
+			len(volumeObj.mountedPods))
+	}
+
+	delete(asw.attachedVolumes, volumeName)
+	return nil
+}
+
+// addVolume adds the given volume to the cache indicating the specified
+// volume is attached to this node. If no volume name is supplied, a unique
+// volume name is generated from the volumeSpec and returned on success. If a
+// volume with the same generated name already exists, this is a noop. If no
+// volume plugin can support the given volumeSpec or more than one plugin can
+// support it, an error is returned.
+func (asw *actualStateOfWorld) addVolume(volumeName v1.UniqueVolumeName, volumeSpec *volume.Spec, devicePath string) error {
+	asw.Lock()
+	defer asw.Unlock()
+
+	volumePlugin, err := asw.volumePluginMgr.FindPluginBySpec(volumeSpec)
+	if err != nil || volumePlugin == nil {
+		return fmt.Errorf(
+			"failed to get Plugin from volumeSpec for volume %q err=%v",
+			volumeSpec.Name(), err)
+	}
+
+	if len(volumeName) == 0 {
+		volumeName, err = util.GetUniqueVolumeNameFromSpec(volumePlugin, volumeSpec)
+		if err != nil {
+			return fmt.Errorf(
+				"failed to GetUniqueVolumeNameFromSpec for volumeSpec %q using volume plugin %q err=%v",
+				volumeSpec.Name(),
+				volumePlugin.GetPluginName(),
+				err)
+		}
+	}
+
+	pluginIsAttachable := false
+	if _, ok := volumePlugin.(volume.AttachableVolumePlugin); ok {
+		pluginIsAttachable = true
+	}
+
+	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
+	if !volumeExists {
+		volumeObj = attachedVolume{
+			volumeName: 		volumeName,
+			spec: 			volumeSpec,
+			mountedPods: 		make(map[volumetypes.UniquePodName]mountedPod),
+			pluginIsAttachable: 	pluginIsAttachable,
+			globallyMounted: 	false,
+			devicePath: 		devicePath,
+		}
+	} else {
+		// If volume object already exists, update the fields such as device path
+		volumeObj.devicePath = devicePath
+		klog.V(2).Infof("Volume %q is already added to attachedVolume list, update device path %q",
+			volumeName,
+			devicePath)
+	}
+	asw.attachedVolumes[volumeName] = volumeObj
+	return nil
 }
 
 
