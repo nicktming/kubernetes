@@ -33,3 +33,5 @@ config="$config --kubeconfig=$homepath/ssl_keys/node/kubelet_kubeconfig"
 // 14. PodDisruptionBudget
 // 15. dswp.podStatusProvider.GetPodStatus(pod.UID)
 // 16. Propagation
+// 17. fsGroup = volumeToMount.Pod.Spec.SecurityContext.FSGroup (operation_generator.go)
+// 18. BlockVolume

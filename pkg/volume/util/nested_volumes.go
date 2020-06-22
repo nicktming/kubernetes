@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"k8s.io/api/core/v1"
+	"k8s.io/klog"
 )
 
 // getNestedMountpoints returns a list of mountpoint directories that should be created
@@ -89,6 +90,7 @@ func MakeNestedMountpoints(name, baseDir string, pod v1.Pod) error {
 	if err != nil {
 		return err
 	}
+	klog.Infof("===>MakeNestedMountpoints baseDir: %v, dirs: %v, podName: %s/%s", baseDir, dirs, pod.Namespace, pod.Name)
 	for _, dir := range dirs {
 		err := os.MkdirAll(filepath.Join(baseDir, dir), 0755)
 		if err != nil {
