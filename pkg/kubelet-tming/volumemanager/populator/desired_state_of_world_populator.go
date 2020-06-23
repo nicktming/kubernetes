@@ -19,7 +19,14 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"fmt"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/kubernetes/pkg/features"
+	"k8s.io/apimachinery/pkg/types"
 )
+
+
 type DesiredStateOfWorldPopulator interface {
 	Run(sourcesReady config.SourcesReady, stopCh <-chan struct{})
 
@@ -232,11 +239,153 @@ func (dswp *desiredStateOfWorldPopulator) makeVolumeMap(containers []v1.Containe
 	return volumeMountsMap, volumeDevicesMap
 }
 
+// getPVCExtractPV fetches the PVC object with the given namespace and name from
+// the API server, checks whether PVC is being deleted, extracts the name of the PV
+// it is pointing to and returns it.
+// An error is returned if the PVC object's phase is not "Bound".
+func (dswp *desiredStateOfWorldPopulator) getPVCExtractPV(namespace string, claimName string) (*v1.PersistentVolumeClaim, error) {
+	pvc, err :=
+		dswp.kubeClient.CoreV1().PersistentVolumeClaims(namespace).Get(claimName, metav1.GetOptions{})
+
+	if err != nil || pvc == nil {
+		return nil, fmt.Errorf(
+			"failed to fetch PVC %s/%s from API server. err=%v",
+			namespace,
+			claimName,
+			err)
+	}
+	if utilfeature.DefaultFeatureGate.Enabled(features.StorageObjectInUseProtection) {
+		// Pods that uses a PVC that is being deleted must not be started.
+		//
+		// In case an old kubelet is running without this check or some kubelets
+		// have this feature disabled, the worst that can happen is that such
+		// pod is scheduled. This was the default behavior in 1.8 and earlier
+		// and users should not be that surprised.
+		// It should happen only in very rare case when scheduler schedules
+		// a pod and user deletes a PVC that's used by it at the same time.
+		if pvc.ObjectMeta.DeletionTimestamp != nil {
+			return nil, fmt.Errorf(
+				"can't start pod because PVC %s/%s is being deleted",
+				namespace,
+				claimName)
+		}
+	}
+
+	if pvc.Status.Phase != v1.ClaimBound || pvc.Spec.VolumeName == "" {
+		return nil, fmt.Errorf(
+			"PVC %s/%s has non-bound phase (%q) or empty pvc.Spec.VolumeName (%q)",
+			namespace,
+			claimName,
+			pvc.Status.Phase,
+			pvc.Spec.VolumeName)
+	}
+
+	return pvc, nil
+}
+
+// getPVSpec fetches the PV object with the given name from the API server
+// and returns a volume.Spec representing it.
+// An error is returned if the call to fetch the PV object fails.
+func (dswp *desiredStateOfWorldPopulator) getPVSpec(name string, pvcReadOnly bool, expectedClaimUID types.UID) (*volume.Spec, string, error) {
+	pv, err := dswp.kubeClient.CoreV1().PersistentVolumes().Get(name, metav1.GetOptions{})
+	if err != nil || pv == nil {
+		return nil, "", fmt.Errorf(
+			"failed to fetch PV %q from API server. err=%v", name, err)
+	}
+
+	if pv.Spec.ClaimRef == nil {
+		return nil, "", fmt.Errorf(
+			"found PV object %q but it has a nil pv.Spec.ClaimRef indicating it is not yet bound to the claim",
+			name)
+	}
+
+	if pv.Spec.ClaimRef.UID != expectedClaimUID {
+		return nil, "", fmt.Errorf(
+			"found PV object %q but its pv.Spec.ClaimRef.UID (%q) does not point to claim.UID (%q)",
+			name,
+			pv.Spec.ClaimRef.UID,
+			expectedClaimUID)
+	}
+
+	volumeGidValue := getPVVolumeGidAnnotationValue(pv)
+	return volume.NewSpecFromPersistentVolume(pv, pvcReadOnly), volumeGidValue, nil
+}
+
+func getPVVolumeGidAnnotationValue(pv *v1.PersistentVolume) string {
+	if volumeGid, ok := pv.Annotations[util.VolumeGidAnnotationKey]; ok {
+		return volumeGid
+	}
+	return ""
+}
+
 
 func (dswp *desiredStateOfWorldPopulator) createVolumeSpec(
 	podVolume v1.Volume, podName string, podNamespace string, mountsMap map[string]bool, devicesMap map[string]bool) (*v1.PersistentVolumeClaim, *volume.Spec, string, error) {
 	if pvcSource := podVolume.VolumeSource.PersistentVolumeClaim; pvcSource != nil {
+		klog.Infof("Found PVC, ClaimName: %q/%q", podNamespace, pvcSource.ClaimName)
 
+		// If podVolume is a PVC, fetch the real PV behind the claim
+		pvc, err := dswp.getPVCExtractPV(podNamespace, pvcSource.ClaimName)
+		if err != nil {
+			return nil, nil, "", fmt.Errorf(
+				"error processing PVC %q/%q: %v",
+				podNamespace,
+				pvcSource.ClaimName,
+				err)
+		}
+		pvName, pvcUID := pvc.Spec.VolumeName, pvc.UID
+
+		klog.Infof(
+			"Found bound PV for PVC (ClaimName %q/%q pvcUID %v): pvName=%q",
+			podNamespace,
+			pvcSource.ClaimName,
+			pvcUID,
+			pvName)
+
+		volumeSpec, volumeGidValue, err := dswp.getPVSpec(pvName, pvcSource.ReadOnly, pvcUID)
+		if err != nil {
+			return nil, nil, "", fmt.Errorf(
+				"error processing PVC %q/%q: %v",
+				podNamespace,
+				pvcSource.ClaimName,
+				err)
+		}
+
+		klog.Infof(
+			"Extracted volumeSpec (%v) from bound PV (pvName %q) and PVC (ClaimName %q/%q pvcUID %v)",
+			volumeSpec.Name(),
+			pvName,
+			podNamespace,
+			pvcSource.ClaimName,
+			pvcUID)
+
+
+		// TODO: remove feature gate check after no longer needed
+		if utilfeature.DefaultFeatureGate.Enabled(features.BlockVolume) {
+			volumeMode, err := util.GetVolumeMode(volumeSpec)
+			if err != nil {
+				return nil, nil, "", err
+			}
+			// Error if a container has volumeMounts but the volumeMode of PVC isn't Filesystem
+			if mountsMap[podVolume.Name] && volumeMode != v1.PersistentVolumeFilesystem {
+				return nil, nil, "", fmt.Errorf(
+					"Volume %q has volumeMode %q, but is specified in volumeMounts for pod %q/%q",
+					podVolume.Name,
+					volumeMode,
+					podNamespace,
+					podName)
+			}
+			// Error if a container has volumeDevices but the volumeMode of PVC isn't Block
+			if devicesMap[podVolume.Name] && volumeMode != v1.PersistentVolumeBlock {
+				return nil, nil, "", fmt.Errorf(
+					"Volume %q has volumeMode %q, but is specified in volumeDevices for pod %q/%q",
+					podVolume.Name,
+					volumeMode,
+					podNamespace,
+					podName)
+			}
+		}
+		return pvc, volumeSpec, volumeGidValue, nil
 	}
 
 	// Do not return the original volume object, since the source could mutate it
