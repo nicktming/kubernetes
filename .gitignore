@@ -1,5 +1,6 @@
 # OSX leaves these everywhere on SMB shares
 ._*
+*.czrc
 
 # OSX trash
 .DS_Store
