@@ -121,7 +121,7 @@ type VolumeManager interface {
 	// Marks the specified volume as having successfully been reported as "in
 	// use" in the nodes's volume status.
 
-	// MarkVolumesAsReportedInUse(volumesReportedAsInUse []v1.UniqueVolumeName)
+	 MarkVolumesAsReportedInUse(volumesReportedAsInUse []v1.UniqueVolumeName)
 }
 
 // NewVolumeManager returns a new concrete instance implementing the
@@ -365,7 +365,9 @@ func (vm *volumeManager) GetMountedVolumesForPod(podName types.UniquePodName) co
 	return podVolumes
 }
 
-
+func (vm *volumeManager) MarkVolumesAsReportedInUse(volumesReportedAsInUse []v1.UniqueVolumeName) {
+	vm.desiredStateOfWorld.MarkVolumesReportedInUse(volumesReportedAsInUse)
+}
 
 
 

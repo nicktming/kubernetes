@@ -34,6 +34,17 @@ type DesiredStateOfWorld interface {
 	// attached to this node and the pods they should be mounted to based on the
 	// current desired state of the world.
 	GetVolumesToMount() []VolumeToMount
+
+	// MarkVolumesReportedInUse sets the ReportedInUse value to true for the
+	// reportedVolumes. For volumes not in the reportedVolumes list, the
+	// ReportedInUse value is reset to false. The default ReportedInUse value
+	// for a newly created volume is false.
+	// When set to true this value indicates that the volume was successfully
+	// added to the VolumesInUse field in the node's status. Mount operation needs
+	// to check this value before issuing the operation.
+	// If a volume in the reportedVolumes list does not exist in the list of
+	// volumes that should be attached to this node, it is skipped without error.
+	MarkVolumesReportedInUse(reportedVolumes []v1.UniqueVolumeName)
 }
 
 type VolumeToMount struct {
@@ -248,4 +259,75 @@ func (dsw *desiredStateOfWorld) isDeviceMountableVolume(volumeSpec *volume.Spec)
 
 	return false
 }
+
+func (dsw *desiredStateOfWorld) MarkVolumesReportedInUse(
+		reportedVolumes		[]v1.UniqueVolumeName) {
+	dsw.Lock()
+	defer dsw.Unlock()
+
+	reportedVolumesMap := make(map[v1.UniqueVolumeName]bool, len(reportedVolumes))
+
+	for _, reportedVolume := range reportedVolumes {
+		reportedVolumesMap[reportedVolume] = true
+	}
+
+	for volumeName, volumeObj := range dsw.volumesToMount {
+		_, volumeReported := reportedVolumesMap[volumeName]
+		volumeObj.reportedInUse = volumeReported
+		dsw.volumesToMount[volumeName] = volumeObj
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

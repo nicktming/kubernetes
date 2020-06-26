@@ -160,7 +160,8 @@ func (rc *reconciler) reconcile() {
 		if cache.IsVolumeNotAttachedError(err) {
 			if rc.controllerAttachDetachEnabled || !volumeToMount.PluginIsAttachable {
 
-				klog.Infof("===>reconcile Volume is not attached (or doesn't implement attacher), kubelet attach is disabled, wait for controller to finish attaching volume.")
+				klog.Infof("===>rc.controllerAttachDetachEnabled:%v, volumeToMount.PluginIsAttachable:%v, reconcile Volume is not attached " +
+					"(or doesn't implement attacher), kubelet attach is disabled, wait for controller to finish attaching volume.", rc.controllerAttachDetachEnabled, volumeToMount.PluginIsAttachable)
 
 				// Volume is not attached (or doesn't implement attacher), kubelet attach is disabled, wait
 				// for controller to finish attaching volume.

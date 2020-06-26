@@ -1392,6 +1392,9 @@ func (og *operationGenerator) GenerateVerifyControllerAttachedVolumeFunc(
 		return volumetypes.GeneratedOperations{}, volumeToMount.GenerateErrorDetailed("VerifyControllerAttachedVolume.FindPluginBySpec failed", err)
 	}
 
+	klog.Infof("========>GenerateVerifyControllerAttachedVolumeFunc Found volumePlugin: %v, PluginIsAttachable: %v, ReportedInUse: %v",
+			volumePlugin.GetPluginName(), volumeToMount.PluginIsAttachable, volumeToMount.ReportedInUse)
+
 	verifyControllerAttachedVolumeFunc := func() (error, error) {
 		if !volumeToMount.PluginIsAttachable {
 			// If the volume does not implement the attacher interface, it is

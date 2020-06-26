@@ -145,7 +145,7 @@ func (kl *Kubelet) tryUpdateNodeStatus(tryNumber int) error {
 	kl.lastStatusReportTime = now
 
 	kl.setLastObservedNodeAddresses(updatedNode.Status.Addresses)
-
+	kl.volumeManager.MarkVolumesAsReportedInUse(updatedNode.Status.VolumesInUse)
 	return nil
 }
 
