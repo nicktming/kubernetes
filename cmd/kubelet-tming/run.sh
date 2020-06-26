@@ -35,3 +35,4 @@ config="$config --kubeconfig=$homepath/ssl_keys/node/kubelet_kubeconfig"
 // 16. Propagation
 // 17. fsGroup = volumeToMount.Pod.Spec.SecurityContext.FSGroup (operation_generator.go)
 // 18. BlockVolume
+// 19. configmap热更新

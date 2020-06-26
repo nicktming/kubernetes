@@ -1433,6 +1433,7 @@ func (og *operationGenerator) GenerateVerifyControllerAttachedVolumeFunc(
 		}
 
 		for _, attachedVolume := range node.Status.VolumesAttached {
+			klog.Infof("========>node attatedVolume: %v, volumeToMount.VolumeName: %v", attachedVolume.Name, volumeToMount.VolumeName)
 			if attachedVolume.Name == volumeToMount.VolumeName {
 				addVolumeNodeErr := actualStateOfWorld.MarkVolumeAsAttached(
 					v1.UniqueVolumeName(""), volumeToMount.VolumeSpec, nodeName, attachedVolume.DevicePath)
