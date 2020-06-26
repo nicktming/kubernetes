@@ -60,6 +60,11 @@ type ActualStateOfWorld interface {
 	// node.
 	VolumeExists(volumeName v1.UniqueVolumeName) bool
 
+	// GetAttachedVolumes returns a list of volumes that is known to be attached
+	// to the node. This list can be used to determine volumes that are either in-use
+	// or have a mount/unmount operation pending.
+	GetAttachedVolumes() []AttachedVolume
+
 }
 
 func (asw *actualStateOfWorld) VolumeExists(
@@ -621,3 +626,88 @@ func (asw *actualStateOfWorld) MarkRemountRequired(
 		}
 	}
 }
+
+func (asw *actualStateOfWorld) GetAttachedVolumes() []AttachedVolume {
+	asw.RLock()
+	defer asw.RUnlock()
+
+	allAttachedVolumes := make([]AttachedVolume, 0, len(asw.attachedVolumes))
+
+	for _, volumeObj := range asw.attachedVolumes {
+		allAttachedVolumes = append(allAttachedVolumes, asw.newAttachedVolume(&volumeObj))
+	}
+	return allAttachedVolumes
+}
+
+
+func (asw *actualStateOfWorld) newAttachedVolume(
+	attachedVolume *attachedVolume) AttachedVolume {
+	return AttachedVolume{
+		AttachedVolume: operationexecutor.AttachedVolume{
+			VolumeName:         attachedVolume.volumeName,
+			VolumeSpec:         attachedVolume.spec,
+			NodeName:           asw.nodeName,
+			PluginIsAttachable: attachedVolume.pluginIsAttachable,
+			DevicePath:         attachedVolume.devicePath,
+			DeviceMountPath:    attachedVolume.deviceMountPath,
+			PluginName:         attachedVolume.pluginName},
+		GloballyMounted: attachedVolume.globallyMounted,
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

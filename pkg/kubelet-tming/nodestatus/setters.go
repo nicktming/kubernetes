@@ -34,6 +34,19 @@ const (
 type Setter func(node *v1.Node) error
 
 
+// VolumesInUse returns a Setter that updates the volumes in use on the node.
+func VolumesInUse(syncedFunc func() bool, // typically Kubelet.volumeManager.ReconcilerStatesHasBeenSynced
+	volumesInUseFunc func() []v1.UniqueVolumeName, // typically Kubelet.volumeManager.GetVolumesInUse
+) Setter {
+	return func(node *v1.Node) error {
+		// Make sure to only update node status after reconciler starts syncing up states
+		//if syncedFunc() {
+			node.Status.VolumesInUse = volumesInUseFunc()
+		//}
+		return nil
+	}
+}
+
 // ReadyCondition returns a Setter that updates the v1.NodeReady condition on the node.
 func ReadyCondition(
 	nowFunc func() time.Time, // typically Kubelet.clock.Now

@@ -58,7 +58,7 @@ type Reconciler interface {
 	// StatesHasBeenSynced returns true only after syncStates process starts to sync
 	// states at least once after kubelet starts
 
-	//StatesHasBeenSynced() bool
+	StatesHasBeenSynced() bool
 }
 
 
@@ -128,6 +128,11 @@ type reconciler struct {
 	volumePluginMgr               *volumepkg.VolumePluginMgr
 	kubeletPodsDir                string
 	timeOfLastSync                time.Time
+}
+
+
+func (rc *reconciler) StatesHasBeenSynced() bool {
+	return !rc.timeOfLastSync.IsZero()
 }
 
 

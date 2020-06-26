@@ -52,10 +52,12 @@ func (kl *Kubelet) defaultNodeStatusFuncs() []func(*v1.Node) error {
 		nodestatus.DiskPressureCondition(kl.clock.Now, kl.evictionManager.IsUnderDiskPressure, kl.recordNodeStatusEvent),
 		nodestatus.PIDPressureCondition(kl.clock.Now, kl.evictionManager.IsUnderPIDPressure, kl.recordNodeStatusEvent),
 		nodestatus.ReadyCondition(kl.clock.Now, kl.recordNodeStatusEvent),
+		nodestatus.VolumesInUse(kl.volumeManager.ReconcilerStatesHasBeenSynced, kl.volumeManager.GetVolumesInUse),
 		)
 
 	return setters
 }
+
 
 // Validate given node IP belongs to the current host
 func validateNodeIP(nodeIP net.IP) error {

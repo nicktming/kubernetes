@@ -2,6 +2,7 @@ package volumemanager
 
 import (
 	"time"
+	"sort"
 	"k8s.io/api/core/v1"
 
 	clientset "k8s.io/client-go/kubernetes"
@@ -105,7 +106,7 @@ type VolumeManager interface {
 	// the desired state of the world and the actual state of the world, or it
 	// has been unmounted (as indicated in actual state of world).
 
-	// GetVolumesInUse() []v1.UniqueVolumeName
+	 GetVolumesInUse() []v1.UniqueVolumeName
 
 	// ReconcilerStatesHasBeenSynced returns true only after the actual states in reconciler
 	// has been synced at least once after kubelet starts so that it is safe to update mounted
@@ -122,6 +123,12 @@ type VolumeManager interface {
 	// use" in the nodes's volume status.
 
 	 MarkVolumesAsReportedInUse(volumesReportedAsInUse []v1.UniqueVolumeName)
+
+
+	// ReconcilerStatesHasBeenSynced returns true only after the actual states in reconciler
+	// has been synced at least once after kubelet starts so that it is safe to update mounted
+	// volume list retrieved from actual state.
+	ReconcilerStatesHasBeenSynced() bool
 }
 
 // NewVolumeManager returns a new concrete instance implementing the
@@ -226,6 +233,10 @@ type volumeManager struct {
 
 	desiredStateOfWorldPopulator populator.DesiredStateOfWorldPopulator
 
+}
+
+func (vm *volumeManager) ReconcilerStatesHasBeenSynced() bool {
+	return vm.reconciler.StatesHasBeenSynced()
 }
 
 
@@ -368,6 +379,89 @@ func (vm *volumeManager) GetMountedVolumesForPod(podName types.UniquePodName) co
 func (vm *volumeManager) MarkVolumesAsReportedInUse(volumesReportedAsInUse []v1.UniqueVolumeName) {
 	vm.desiredStateOfWorld.MarkVolumesReportedInUse(volumesReportedAsInUse)
 }
+
+
+func (vm *volumeManager) GetVolumesInUse() []v1.UniqueVolumeName {
+	// Report volumes in desired state of world and actual state of world so
+	// that volumes are marked in use as soon as the decision is made that the
+	// volume *should* be attached to this node until it is safely unmounted.
+
+	desiredVolumes := vm.desiredStateOfWorld.GetVolumesToMount()
+	allAttachedVolumes := vm.actualStateOfWorld.GetAttachedVolumes()
+
+	volumesToReportInUse := make([]v1.UniqueVolumeName, 0, len(desiredVolumes) + len(allAttachedVolumes))
+	desiredVolumesMap := make(map[v1.UniqueVolumeName]bool, len(desiredVolumes) + len(allAttachedVolumes))
+
+	for _, volume := range desiredVolumes {
+		if volume.PluginIsAttachable {
+			if _, exists := desiredVolumesMap[volume.VolumeName]; !exists {
+				desiredVolumesMap[volume.VolumeName] = true
+				volumesToReportInUse = append(volumesToReportInUse, volume.VolumeName)
+			}
+		}
+	}
+
+	for _, volume := range allAttachedVolumes {
+		if volume.PluginIsAttachable {
+			if _, exists := desiredVolumesMap[volume.VolumeName]; !exists {
+				volumesToReportInUse = append(volumesToReportInUse, volume.VolumeName)
+			}
+		}
+	}
+
+	sort.Slice(volumesToReportInUse, func(i, j int) bool {
+		return string(volumesToReportInUse[i]) < string(volumesToReportInUse[j])
+	})
+	return volumesToReportInUse
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
