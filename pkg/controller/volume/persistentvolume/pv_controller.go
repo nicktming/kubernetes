@@ -1634,6 +1634,7 @@ func (ctrl *PersistentVolumeController) rescheduleProvisioning(claim *v1.Persist
 	// The claim from method args can be pointing to watcher cache. We must not
 	// modify these, therefore create a copy.
 	newClaim := claim.DeepCopy()
+	klog.V(4).Infof("=============================>Try to remove volume.kubernetes.io/selected-node annotation.")
 	delete(newClaim.Annotations, pvutil.AnnSelectedNode)
 	// Try to update the PVC object
 	if _, err := ctrl.kubeClient.CoreV1().PersistentVolumeClaims(newClaim.Namespace).Update(newClaim); err != nil {
