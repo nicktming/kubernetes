@@ -427,7 +427,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		// Do not provide kubeCfg.EnforceNodeAllocatable to eviction threshold parsing if we are not enforcing Evictions
 		enforceNodeAllocatable = []string{}
 	}
-	klog.Infof("enforceNodeAllocatable:%v,kubeCfg.EvictionHard:%v,kubeCfg.EvictionSoft:%v,kubeCfg.EvictionMinimumReclaim:%v\n",
+	klog.Infof("=====>enforceNodeAllocatable:%v,kubeCfg.EvictionHard:%v,kubeCfg.EvictionSoft:%v,kubeCfg.EvictionMinimumReclaim:%v\n",
 		enforceNodeAllocatable, kubeCfg.EvictionHard, kubeCfg.EvictionSoft, kubeCfg.EvictionMinimumReclaim)
 	thresholds, err := eviction.ParseThresholdConfig(enforceNodeAllocatable, kubeCfg.EvictionHard, kubeCfg.EvictionSoft, kubeCfg.EvictionSoftGracePeriod, kubeCfg.EvictionMinimumReclaim)
 	if err != nil {
