@@ -37,4 +37,5 @@ config="$config --kubeconfig=$homepath/ssl_keys/node/kubelet_kubeconfig"
 // 18. BlockVolume
 // 19. configmap热更新
 // 20. Kubelet should mark VolumeInUse before checking if it is Attached #28095 (https://github.com/kubernetes/kubernetes/pull/28095)
+// 21. 为什么要设置swap为false
 
