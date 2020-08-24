@@ -800,6 +800,9 @@ func thresholdsMet(thresholds []evictionapi.Threshold, observations signalObserv
 		if thresholdMet {
 			results = append(results, threshold)
 		}
+		if threshold.Signal == evictionapi.SignalNodeFsAvailable {
+			klog.Infof("observed:%v, threshold: %v, thresholdMet: %v\n", observed, threshold, thresholdMet)
+		}
 	}
 	return results
 }
