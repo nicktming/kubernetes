@@ -802,11 +802,11 @@ func thresholdsMet(thresholds []evictionapi.Threshold, observations signalObserv
 		}
 		if threshold.Signal == evictionapi.SignalNodeFsAvailable {
 			if threshold.Value.Quantity != nil {
-				klog.Infof("++++++++++node.fs observed [capacity: %v, available: %v], threshold [quantity: %v, thresholdMet: %v]\n",
-					observed.capacity.String(), observed.available.String(), threshold.Value.Quantity.String(), thresholdMet)
+				klog.Infof("++++++++++node.fs observed [capacity: %v, available: %v], threshold [quantity: %v(=%v), thresholdMet: %v]\n",
+					observed.capacity.String(), observed.available.String(), threshold.Value.Quantity.String(), quantity.String(), thresholdMet)
 			} else {
-				klog.Infof("++++++++++node.fs observed [capacity: %v, available: %v], threshold [percentage: %v, thresholdMet: %v]\n",
-					observed.capacity.String(), observed.available.String(), threshold.Value.Percentage, thresholdMet)
+				klog.Infof("++++++++++node.fs observed [capacity: %v, available: %v], threshold [percentage: %v(=%v), thresholdMet: %v]\n",
+					observed.capacity.String(), observed.available.String(), threshold.Value.Percentage, quantity.String(), thresholdMet)
 			}
 
 		}
