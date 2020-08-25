@@ -237,6 +237,7 @@ func (m *managerImpl) synchronize(diskInfoProvider DiskInfoProvider, podFunc Act
 		}
 		m.dedicatedImageFs = &hasImageFs
 		m.signalToRankFunc = buildSignalToRankFunc(hasImageFs)
+		klog.Infof("+++++++++++++++eviction signalToNodeReclaimFuncs hasImageFs: %v\n", hasImageFs)
 		m.signalToNodeReclaimFuncs = buildSignalToNodeReclaimFuncs(m.imageGC, m.containerGC, hasImageFs)
 	}
 
