@@ -410,6 +410,8 @@ func isAnnotationMapEqual(existingMap, candidateMap map[string]string) bool {
 // recordFirstSeenTime records the first seen time of this pod.
 func recordFirstSeenTime(pod *v1.Pod) {
 	klog.V(4).Infof("Receiving a new pod %q", format.Pod(pod))
+	klog.Infof("++++++++Receiving a new pod %q", format.Pod(pod))
+	klog.Infof("++++++++Receiving a new pod %v/%v, phase:%v", pod.Namespace, pod.Name, pod.Status.Phase)
 	pod.Annotations[kubetypes.ConfigFirstSeenAnnotationKey] = kubetypes.NewTimestamp().GetString()
 }
 
