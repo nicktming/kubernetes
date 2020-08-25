@@ -597,12 +597,16 @@ func (rsc *ReplicaSetController) syncReplicaSet(key string) error {
 	// Ignore inactive pods.
 	filteredPods := controller.FilterActivePods(allPods)
 
+	klog.Infof("++++++++got FilterActivePods filteredPods: %v", len(filteredPods))
+
 	// NOTE: filteredPods are pointing to objects from cache - if you need to
 	// modify them, you need to copy it first.
 	filteredPods, err = rsc.claimPods(rs, selector, filteredPods)
 	if err != nil {
 		return err
 	}
+
+	klog.Infof("++++++++got claimPods filteredPods: %v", len(filteredPods))
 
 	var manageReplicasErr error
 	if rsNeedsSync && rs.DeletionTimestamp == nil {
