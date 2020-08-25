@@ -463,6 +463,7 @@ func (rsc *ReplicaSetController) manageReplicas(filteredPods []*v1.Pod, rs *apps
 		utilruntime.HandleError(fmt.Errorf("Couldn't get key for %v %#v: %v", rsc.Kind, rs, err))
 		return nil
 	}
+	klog.Infof("ReplicaSetController diff: %v", diff)
 	if diff < 0 {
 		diff *= -1
 		if diff > rsc.burstReplicas {
@@ -597,7 +598,7 @@ func (rsc *ReplicaSetController) syncReplicaSet(key string) error {
 	// Ignore inactive pods.
 	filteredPods := controller.FilterActivePods(allPods)
 
-	klog.Infof("++++++++got FilterActivePods filteredPods: %v", len(filteredPods))
+	klog.Infof("++++++++got FilterActivePods allPods: %v, filteredPods: %v", len(allPods), len(filteredPods))
 
 	// NOTE: filteredPods are pointing to objects from cache - if you need to
 	// modify them, you need to copy it first.
@@ -607,6 +608,10 @@ func (rsc *ReplicaSetController) syncReplicaSet(key string) error {
 	}
 
 	klog.Infof("++++++++got claimPods filteredPods: %v", len(filteredPods))
+
+	for _, fp := range filteredPods {
+		klog.Infof("+++++++++++got final pod: %v/%v status: %v", fp.Namespace, fp.Name, fp.Status.Phase)
+	}
 
 	var manageReplicasErr error
 	if rsNeedsSync && rs.DeletionTimestamp == nil {
