@@ -228,7 +228,8 @@ func (m *managerImpl) synchronize(diskInfoProvider DiskInfoProvider, podFunc Act
 	}
 
 	klog.V(3).Infof("eviction manager: synchronize housekeeping")
-	klog.Infof("+++++++++++++++eviction manager: synchronize housekeeping: %v\n", m.dedicatedImageFs)
+	klog.Infof("+++++++++++++++eviction manager: synchronize housekeeping: %v, enable localstorageCapacityIsolation: %v\n",
+		m.dedicatedImageFs, utilfeature.DefaultFeatureGate.Enabled(features.LocalStorageCapacityIsolation))
 	// build the ranking functions (if not yet known)
 	// TODO: have a function in cadvisor that lets us know if global housekeeping has completed
 	if m.dedicatedImageFs == nil {
@@ -451,6 +452,11 @@ func (m *managerImpl) localStorageEviction(summary *statsapi.Summary, pods []*v1
 	evicted := []*v1.Pod{}
 	for _, pod := range pods {
 		podStats, ok := statsFunc(pod)
+
+		if pod.Name == "teststorage" {
+			klog.Infof("+++++++++++podStats EphemeralStorage:%v", podStats.EphemeralStorage)
+		}
+
 		if !ok {
 			continue
 		}
