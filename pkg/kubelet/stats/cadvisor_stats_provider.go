@@ -85,6 +85,8 @@ func (p *cadvisorStatsProvider) ListPodStats() ([]statsapi.PodStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get container info from cadvisor: %v", err)
 	}
+
+	klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats infos : %v", len(infos))
 	// removeTerminatedContainerInfo will also remove pod level cgroups, so save the infos into allInfos first
 	allInfos := infos
 	infos = removeTerminatedContainerInfo(infos)
