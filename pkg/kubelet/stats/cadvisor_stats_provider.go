@@ -282,6 +282,8 @@ func isPodManagedContainer(cinfo *cadvisorapiv2.ContainerInfo) bool {
 	podName := kubetypes.GetPodName(cinfo.Spec.Labels)
 	podNamespace := kubetypes.GetPodNamespace(cinfo.Spec.Labels)
 	managed := podName != "" && podNamespace != ""
+	klog.Infof("++++++++++++++isPodManagedContainer podName: %v, podNamespace: %v, managed: %v",
+				podName, podNamespace, managed)
 	if !managed && podName != podNamespace {
 		klog.Warningf(
 			"Expect container to have either both podName (%s) and podNamespace (%s) labels, or neither.",
