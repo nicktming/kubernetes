@@ -504,7 +504,9 @@ func (m *managerImpl) emptyDirLimitEviction(podStats statsapi.PodStats, pod *v1.
 func (m *managerImpl) podEphemeralStorageLimitEviction(podStats statsapi.PodStats, pod *v1.Pod) bool {
 	_, podLimits := apiv1resource.PodRequestsAndLimits(pod)
 	_, found := podLimits[v1.ResourceEphemeralStorage]
-	klog.Infof("++++++++podEphemeralStorageLimitEviction found:%v\n", found)
+	if pod.Name == "teststorage" {
+		klog.Infof("++++++++podEphemeralStorageLimitEviction %v/%v found:%v\n", pod.Namespace, pod.Name, found)
+	}
 	if !found {
 		return false
 	}
@@ -524,8 +526,10 @@ func (m *managerImpl) podEphemeralStorageLimitEviction(podStats statsapi.PodStat
 
 	podEphemeralStorageTotalUsage.Add(podEphemeralUsage[v1.ResourceEphemeralStorage])
 	podEphemeralStorageLimit := podLimits[v1.ResourceEphemeralStorage]
-	klog.Infof("++++++++podEphemeralStorageLimitEviction podEphemeralStorageTotalUsage:%v, podEphemeralStorageLimit:%v\n",
-		podEphemeralStorageTotalUsage.String(), podEphemeralStorageLimit.String())
+	if pod.Name == "teststorage" {
+		klog.Infof("++++++++podEphemeralStorageLimitEviction %v/%v podEphemeralStorageTotalUsage:%v, podEphemeralStorageLimit:%v\n",
+			pod.Namespace, pod.Name, podEphemeralStorageTotalUsage.String(), podEphemeralStorageLimit.String())
+	}
 	if podEphemeralStorageTotalUsage.Cmp(podEphemeralStorageLimit) > 0 {
 		// the total usage of pod exceeds the total size limit of containers, evict the pod
 		return m.evictPod(pod, 0, fmt.Sprintf(podEphemeralStorageMessageFmt, podEphemeralStorageLimit.String()), nil)
