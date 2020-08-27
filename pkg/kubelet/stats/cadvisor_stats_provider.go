@@ -92,6 +92,9 @@ func (p *cadvisorStatsProvider) ListPodStats() ([]statsapi.PodStats, error) {
 	infos = removeTerminatedContainerInfo(infos)
 	// Map each container to a pod and update the PodStats with container data.
 	podToStats := map[statsapi.PodReference]*statsapi.PodStats{}
+
+	klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats removeTerminatedContainerInfo infos : %v", len(infos))
+
 	for key, cinfo := range infos {
 		// On systemd using devicemapper each mount into the container has an
 		// associated cgroup. We ignore them to ensure we do not get duplicate
@@ -313,7 +316,9 @@ func getCadvisorPodInfoFromPodUID(podUID types.UID, infos map[string]cadvisorapi
 func removeTerminatedContainerInfo(containerInfo map[string]cadvisorapiv2.ContainerInfo) map[string]cadvisorapiv2.ContainerInfo {
 	cinfoMap := make(map[containerID][]containerInfoWithCgroup)
 	for key, cinfo := range containerInfo {
+		klog.Infof("+++++++++++removeTerminatedContainerInfo key: %v", key)
 		if !isPodManagedContainer(&cinfo) {
+			klog.Infof("+++++++++++removeTerminatedContainerInfo key: %v skiped by isPodManagedContainer", key)
 			continue
 		}
 		cinfoID := containerID{
@@ -328,6 +333,7 @@ func removeTerminatedContainerInfo(containerInfo map[string]cadvisorapiv2.Contai
 	result := make(map[string]cadvisorapiv2.ContainerInfo)
 	for _, refs := range cinfoMap {
 		if len(refs) == 1 {
+			klog.Infof("+++++++++++removeTerminatedContainerInfo refs = 1 key: %v", refs[0].cgroup)
 			result[refs[0].cgroup] = refs[0].cinfo
 			continue
 		}
@@ -341,6 +347,7 @@ func removeTerminatedContainerInfo(containerInfo map[string]cadvisorapiv2.Contai
 			}
 		}
 		for ; i < len(refs); i++ {
+			klog.Infof("+++++++++++removeTerminatedContainerInfo refs = %d, key: %v", i, refs[0].cgroup)
 			result[refs[i].cgroup] = refs[i].cinfo
 		}
 	}
