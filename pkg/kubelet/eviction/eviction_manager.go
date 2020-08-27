@@ -246,6 +246,11 @@ func (m *managerImpl) synchronize(diskInfoProvider DiskInfoProvider, podFunc Act
 	activePods := podFunc()
 	updateStats := true
 	summary, err := m.summaryProvider.Get(updateStats)
+
+	for _, sp := range summary.Pods {
+		klog.Infof("++++++++=======>found summary pod: %v/%v", sp.PodRef.Namespace, sp.PodRef.Name)
+	}
+
 	if err != nil {
 		klog.Errorf("eviction manager: failed to get summary stats: %v", err)
 		return nil
