@@ -247,6 +247,7 @@ func (m *managerImpl) synchronize(diskInfoProvider DiskInfoProvider, podFunc Act
 	updateStats := true
 	summary, err := m.summaryProvider.Get(updateStats)
 
+	klog.Infof("++++++++=======>found summary pod: %v", len(summary.Pods))
 	for _, sp := range summary.Pods {
 		klog.Infof("++++++++=======>found summary pod: %v/%v", sp.PodRef.Namespace, sp.PodRef.Name)
 	}
