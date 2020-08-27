@@ -454,23 +454,25 @@ func (m *managerImpl) localStorageEviction(summary *statsapi.Summary, pods []*v1
 		podStats, ok := statsFunc(pod)
 
 		if pod.Name == "teststorage" {
-			klog.Infof("+++++++++++podStats EphemeralStorage:%v", podStats.EphemeralStorage)
+			klog.Infof("+++++++++++podStats EphemeralStorage:%v, ok: %v\n",
+				podStats.EphemeralStorage, ok)
 		}
 
 		if !ok {
 			continue
 		}
 
+		klog.Infof("+++++++++++emptyDirLimitEviction")
 		if m.emptyDirLimitEviction(podStats, pod) {
 			evicted = append(evicted, pod)
 			continue
 		}
-
+		klog.Infof("+++++++++++podEphemeralStorageLimitEviction")
 		if m.podEphemeralStorageLimitEviction(podStats, pod) {
 			evicted = append(evicted, pod)
 			continue
 		}
-
+		klog.Infof("+++++++++++containerEphemeralStorageLimitEviction")
 		if m.containerEphemeralStorageLimitEviction(podStats, pod) {
 			evicted = append(evicted, pod)
 		}
@@ -502,6 +504,7 @@ func (m *managerImpl) emptyDirLimitEviction(podStats statsapi.PodStats, pod *v1.
 func (m *managerImpl) podEphemeralStorageLimitEviction(podStats statsapi.PodStats, pod *v1.Pod) bool {
 	_, podLimits := apiv1resource.PodRequestsAndLimits(pod)
 	_, found := podLimits[v1.ResourceEphemeralStorage]
+	klog.Infof("++++++++podEphemeralStorageLimitEviction found:%v\n", found)
 	if !found {
 		return false
 	}
