@@ -97,6 +97,7 @@ func (p *cadvisorStatsProvider) ListPodStats() ([]statsapi.PodStats, error) {
 		// associated cgroup. We ignore them to ensure we do not get duplicate
 		// entries in our summary. For details on .mount units:
 		// http://man7.org/linux/man-pages/man5/systemd.mount.5.html
+		klog.Infof("+++++++++++++++cadvisorStatsProvider key: %v, infos(namespace) : %v", key, cinfo.Spec.Namespace)
 		if strings.HasSuffix(key, ".mount") {
 			continue
 		}
