@@ -125,7 +125,7 @@ func (p *cadvisorStatsProvider) ListPodStats() ([]statsapi.PodStats, error) {
 			podStats.Containers = append(podStats.Containers, *cadvisorInfoToContainerStats(containerName, &cinfo, &rootFsInfo, &imageFsInfo))
 		}
 	}
-
+	klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats podStats : %v", len(podToStats))
 	// Add each PodStats to the result.
 	result := make([]statsapi.PodStats, 0, len(podToStats))
 	for _, podStats := range podToStats {
@@ -153,7 +153,7 @@ func (p *cadvisorStatsProvider) ListPodStats() ([]statsapi.PodStats, error) {
 			result = append(result, *podStats)
 		}
 	}
-
+	klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats result : %v", len(result))
 	return result, nil
 }
 
