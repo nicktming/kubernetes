@@ -644,6 +644,8 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 	}
 
 	if kubeDeps.CAdvisorInterface == nil {
+		klog.Infof("+++++++++kubeDeps.CAdvisorInterface s.ContainerRuntime: %v, s.RemoteRuntimeEndpoint: %v, s.RootDirectory: %v, cgroupRoots: %v, s.ContainerRuntime: %v, s.RemoteRuntimeEndpoint: %v",
+			s.ContainerRuntime, s.RemoteRuntimeEndpoint, s.RootDirectory, cgroupRoots, s.ContainerRuntime, s.RemoteRuntimeEndpoint)
 		imageFsInfoProvider := cadvisor.NewImageFsInfoProvider(s.ContainerRuntime, s.RemoteRuntimeEndpoint)
 		kubeDeps.CAdvisorInterface, err = cadvisor.New(imageFsInfoProvider, s.RootDirectory, cgroupRoots, cadvisor.UsingLegacyCadvisorStats(s.ContainerRuntime, s.RemoteRuntimeEndpoint))
 		if err != nil {
