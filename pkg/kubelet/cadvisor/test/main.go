@@ -18,6 +18,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	client.Start()
+
 	maps, err := getCadvisorContainerInfo(client)
 	if err != nil {
 		panic(err)
@@ -28,7 +31,6 @@ func main() {
 		fmt.Printf("value: %v\n", string(pretty_v))
 		fmt.Println("====================")
 	}
-
 }
 
 
