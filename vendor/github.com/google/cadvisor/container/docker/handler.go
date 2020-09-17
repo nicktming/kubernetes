@@ -190,6 +190,11 @@ func newDockerContainerHandler(
 		return nil, fmt.Errorf("failed to inspect container %q: %v", id, err)
 	}
 
+	fmt.Println("=======================ctnr labels=======================")
+	for k, v := range ctnr.Config.Labels {
+		fmt.Printf("========>%v:%v\n", k, v)
+	}
+	
 	// TODO: extract object mother method
 	handler := &dockerContainerHandler{
 		machineInfoFactory: machineInfoFactory,
