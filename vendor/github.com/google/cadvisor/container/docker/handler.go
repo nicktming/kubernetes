@@ -194,7 +194,7 @@ func newDockerContainerHandler(
 	for k, v := range ctnr.Config.Labels {
 		fmt.Printf("========>%v:%v\n", k, v)
 	}
-	
+
 	// TODO: extract object mother method
 	handler := &dockerContainerHandler{
 		machineInfoFactory: machineInfoFactory,

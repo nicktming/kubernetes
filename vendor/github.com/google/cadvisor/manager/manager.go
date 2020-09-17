@@ -138,6 +138,8 @@ func New(memoryCache *memory.InMemoryCache, sysfs sysfs.SysFs, maxHousekeepingIn
 		return nil, fmt.Errorf("manager requires memory storage")
 	}
 
+	klog.Infof("+++++++++++++Manager New++++++++++++++++++++++")
+
 	// Detect the container we are running on.
 	selfContainer, err := cgroups.GetOwnCgroupPath("cpu")
 	if err != nil {
