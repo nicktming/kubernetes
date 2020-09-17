@@ -26,10 +26,9 @@ func main() {
 		panic(err)
 	}
 	for k, v := range maps {
-		fmt.Printf("======key: %v=======\n", k)
+		fmt.Printf("key: %v\n", k)
 		pretty_v, _ := json.MarshalIndent(v, "", "\t")
 		fmt.Printf("value: %v\n", string(pretty_v))
-		fmt.Println("====================")
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 
 	dclient "github.com/docker/docker/client"
 	"github.com/docker/go-connections/tlsconfig"
+	"log"
 )
 
 var (
@@ -35,6 +36,8 @@ var (
 func Client() (*dclient.Client, error) {
 	dockerClientOnce.Do(func() {
 		var client *http.Client
+		log.Printf("======>ArgDockerTLS: %v, ArgDockerCA: %v, ArgDockerCert: %v, ArgDockerKey: %v\n",
+			ArgDockerTLS, ArgDockerCA, ArgDockerCert, ArgDockerKey)
 		if *ArgDockerTLS {
 			client = &http.Client{}
 			options := tlsconfig.Options{
