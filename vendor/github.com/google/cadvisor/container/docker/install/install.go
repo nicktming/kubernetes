@@ -19,9 +19,11 @@ import (
 	"github.com/google/cadvisor/container"
 	"github.com/google/cadvisor/container/docker"
 	"k8s.io/klog"
+	"fmt"
 )
 
 func init() {
+	fmt.Println("======== docker plugin registration =====")
 	err := container.RegisterPlugin("docker", docker.NewPlugin())
 	if err != nil {
 		klog.Fatalf("Failed to register docker plugin: %v", err)
