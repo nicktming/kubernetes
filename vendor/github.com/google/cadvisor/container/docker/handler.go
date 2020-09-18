@@ -190,7 +190,7 @@ func newDockerContainerHandler(
 		return nil, fmt.Errorf("failed to inspect container %q: %v", id, err)
 	}
 
-	fmt.Println("=======================ctnr labels=======================")
+	fmt.Printf("=======================ctnr labels for name: %v=======================\n", name)
 	for k, v := range ctnr.Config.Labels {
 		fmt.Printf("========>%v:%v\n", k, v)
 	}

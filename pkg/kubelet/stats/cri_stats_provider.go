@@ -39,6 +39,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/kuberuntime"
 	"k8s.io/kubernetes/pkg/kubelet/server/stats"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
+	"encoding/json"
 )
 
 var (
@@ -162,6 +163,14 @@ func (p *criStatsProvider) listPodStats(updateCPUNanoCoreUsage bool) ([]statsapi
 	}
 
 	allInfos, err := getCadvisorContainerInfo(p.cadvisor)
+
+	for k, v := range allInfos {
+		klog.Infof("key: %v", k)
+		pretty_v, _ := json.MarshalIndent(v, "", "\t")
+		klog.Infof("value: %v", string(pretty_v))
+	}
+
+	klog.Infof("+++++++++++++++CRI cadvisorStatsProvider ListPodStats infos : %v", len(allInfos))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch cadvisor stats: %v", err)
 	}
