@@ -160,6 +160,10 @@ func NewContainerHandler(name string, watchType watcher.ContainerWatchSource, in
 	factoriesLock.RLock()
 	defer factoriesLock.RUnlock()
 
+	for _, factory := range factories[watchType] {
+		fmt.Printf("===========>factory %v for container %v\n", factory, name)
+	}
+
 	// Create the ContainerHandler with the first factory that supports it.
 	for _, factory := range factories[watchType] {
 		canHandle, canAccept, err := factory.CanHandleAndAccept(name)
