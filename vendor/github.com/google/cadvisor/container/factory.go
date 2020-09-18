@@ -141,8 +141,8 @@ var (
 func RegisterContainerHandlerFactory(factory ContainerHandlerFactory, watchTypes []watcher.ContainerWatchSource) {
 	factoriesLock.Lock()
 	defer factoriesLock.Unlock()
-
 	for _, watchType := range watchTypes {
+		fmt.Printf("========>RegisterContainerHandlerFactory for watchType: %v, factory: %v\n", watchType, factory)
 		factories[watchType] = append(factories[watchType], factory)
 	}
 }

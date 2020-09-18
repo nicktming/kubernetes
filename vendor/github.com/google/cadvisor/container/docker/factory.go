@@ -311,14 +311,17 @@ func ensureThinLsKernelVersion(kernelVersion string) error {
 // Register root container before running this function!
 func Register(factory info.MachineInfoFactory, fsInfo fs.FsInfo, includedMetrics container.MetricSet) error {
 	client, err := Client()
+	fmt.Println("========>Registering Docker factory plugin 11111111111")
 	if err != nil {
 		return fmt.Errorf("unable to communicate with docker daemon: %v", err)
 	}
+	fmt.Println("========>Registering Docker factory plugin 22222222222")
 
 	dockerInfo, err := ValidateInfo()
 	if err != nil {
 		return fmt.Errorf("failed to validate Docker info: %v", err)
 	}
+	fmt.Println("========>Registering Docker factory plugin 33333333333")
 
 	// Version already validated above, assume no error here.
 	dockerVersion, _ := parseVersion(dockerInfo.ServerVersion, version_re, 3)
@@ -329,6 +332,7 @@ func Register(factory info.MachineInfoFactory, fsInfo fs.FsInfo, includedMetrics
 	if err != nil {
 		return fmt.Errorf("failed to get cgroup subsystems: %v", err)
 	}
+	fmt.Println("========>Registering Docker factory plugin 444444444444")
 
 	var (
 		thinPoolWatcher *devicemapper.ThinPoolWatcher
@@ -344,6 +348,7 @@ func Register(factory info.MachineInfoFactory, fsInfo fs.FsInfo, includedMetrics
 		status, _ := StatusFromDockerInfo(*dockerInfo)
 		thinPoolName = status.DriverStatus[dockerutil.DriverStatusPoolName]
 	}
+	fmt.Println("========>Registering Docker factory plugin 555555555555")
 
 	var zfsWatcher *zfs.ZfsWatcher
 	if storageDriver(dockerInfo.Driver) == zfsStorageDriver {
@@ -353,7 +358,7 @@ func Register(factory info.MachineInfoFactory, fsInfo fs.FsInfo, includedMetrics
 		}
 	}
 
-	fmt.Println("========>Registering Docker factory plugin")
+	fmt.Println("========>Registering Docker factory plugin 6666666666666")
 
 	klog.V(1).Infof("Registering Docker factory")
 	f := &dockerFactory{
