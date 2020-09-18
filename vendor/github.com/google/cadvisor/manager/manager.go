@@ -241,9 +241,9 @@ type manager struct {
 func (self *manager) Start() error {
 
 	fmt.Println("======== docker plugin registration BY MYSELF =====")
-	err := container.RegisterPlugin("docker", docker.NewPlugin())
-	if err != nil {
-		klog.Fatalf("Failed to register docker plugin: %v", err)
+	err1 := container.RegisterPlugin("docker", docker.NewPlugin())
+	if err1 != nil {
+		klog.Fatalf("Failed to register docker plugin: %v", err1)
 	}
 
 	self.containerWatchers = container.InitializePlugins(self, self.fsInfo, self.includedMetrics)
