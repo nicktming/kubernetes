@@ -116,12 +116,15 @@ func Images() ([]v1.DockerImage, error) {
 // Checks whether the dockerInfo reflects a valid docker setup, and returns it if it does, or an
 // error otherwise.
 func ValidateInfo() (*dockertypes.Info, error) {
+
 	client, err := Client()
+	fmt.Printf("===========ValidateInfo 11111111111111== err: %v\n", err)
 	if err != nil {
 		return nil, fmt.Errorf("unable to communicate with docker daemon: %v", err)
 	}
 
 	dockerInfo, err := client.Info(defaultContext())
+	fmt.Printf("===========ValidateInfo 2222222222222== err: %v, dockerInfo: %v\n", err, dockerInfo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect Docker info: %v", err)
 	}
@@ -129,15 +132,18 @@ func ValidateInfo() (*dockertypes.Info, error) {
 	// Fall back to version API if ServerVersion is not set in info.
 	if dockerInfo.ServerVersion == "" {
 		version, err := client.ServerVersion(defaultContext())
+		fmt.Printf("===========ValidateInfo 333333333333== err: %v\n", err)
 		if err != nil {
 			return nil, fmt.Errorf("unable to get docker version: %v", err)
 		}
 		dockerInfo.ServerVersion = version.Version
 	}
 	version, err := parseVersion(dockerInfo.ServerVersion, version_re, 3)
+	fmt.Printf("===========ValidateInfo 44444444444444== err: %v\n", err)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("===========ValidateInfo 55555555== version[0]: %v, driver: %v\n", version[0], dockerInfo.Driver)
 
 	if version[0] < 1 {
 		return nil, fmt.Errorf("cAdvisor requires docker version %v or above but we have found version %v reported as %q", []int{1, 0, 0}, version, dockerInfo.ServerVersion)
