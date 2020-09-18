@@ -163,6 +163,8 @@ func NewContainerHandler(name string, watchType watcher.ContainerWatchSource, in
 	// Create the ContainerHandler with the first factory that supports it.
 	for _, factory := range factories[watchType] {
 		canHandle, canAccept, err := factory.CanHandleAndAccept(name)
+		fmt.Printf("===========>factory %q for container %q, canHandle: %v, canAccept: %v, err: %v\n",
+			factory, name, canHandle, canAccept, err)
 		if err != nil {
 			klog.V(4).Infof("Error trying to work out if we can handle %s: %v", name, err)
 		}
