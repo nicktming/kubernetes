@@ -91,9 +91,9 @@ func RegisterPlugin(name string, plugin Plugin) error {
 	pluginsLock.Lock()
 	defer pluginsLock.Unlock()
 	if _, found := plugins[name]; found {
-		return fmt.Errorf("Plugin %q was registered twice", name)
+		return fmt.Errorf("======>Plugin %q was registered twice", name)
 	}
-	klog.Infof("===========>Registered Plugin %q", name)
+	fmt.Printf("===========>Registered Plugin %q\n", name)
 	klog.V(4).Infof("Registered Plugin %q", name)
 	plugins[name] = plugin
 	return nil
@@ -171,7 +171,7 @@ func NewContainerHandler(name string, watchType watcher.ContainerWatchSource, in
 				klog.V(3).Infof("Factory %q can handle container %q, but ignoring.", factory, name)
 				return nil, false, nil
 			}
-			klog.Infof("===========>Using factory %q for container %q", factory, name)
+			fmt.Printf("===========>Using factory %q for container %q\n", factory, name)
 			klog.V(3).Infof("Using factory %q for container %q", factory, name)
 			handle, err := factory.NewContainerHandler(name, inHostNamespace)
 			return handle, canAccept, err
