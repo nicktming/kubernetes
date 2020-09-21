@@ -35,7 +35,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/server/stats"
 	"k8s.io/kubernetes/pkg/kubelet/status"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
-	"encoding/json"
+	//"encoding/json"
 )
 
 // cadvisorStatsProvider implements the containerStatsProvider interface by
@@ -87,11 +87,11 @@ func (p *cadvisorStatsProvider) ListPodStats() ([]statsapi.PodStats, error) {
 		return nil, fmt.Errorf("failed to get container info from cadvisor: %v", err)
 	}
 
-	for k, v := range infos {
-		klog.Infof("key: %v", k)
-		pretty_v, _ := json.MarshalIndent(v, "", "\t")
-		klog.Infof("value: %v", string(pretty_v))
-	}
+	//for k, v := range infos {
+	//	klog.Infof("key: %v", k)
+	//	pretty_v, _ := json.MarshalIndent(v, "", "\t")
+	//	klog.Infof("value: %v", string(pretty_v))
+	//}
 
 	klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats infos : %v", len(infos))
 	// removeTerminatedContainerInfo will also remove pod level cgroups, so save the infos into allInfos first

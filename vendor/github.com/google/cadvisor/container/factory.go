@@ -160,15 +160,15 @@ func NewContainerHandler(name string, watchType watcher.ContainerWatchSource, in
 	factoriesLock.RLock()
 	defer factoriesLock.RUnlock()
 
-	for _, factory := range factories[watchType] {
-		fmt.Printf("===========>factory %v for container %v\n", factory, name)
-	}
+	//for _, factory := range factories[watchType] {
+	//	fmt.Printf("===========>factory %v for container %v\n", factory, name)
+	//}
 
 	// Create the ContainerHandler with the first factory that supports it.
 	for _, factory := range factories[watchType] {
 		canHandle, canAccept, err := factory.CanHandleAndAccept(name)
-		fmt.Printf("===========>factory %q for container %q, canHandle: %v, canAccept: %v, err: %v\n",
-			factory, name, canHandle, canAccept, err)
+		//fmt.Printf("===========>factory %q for container %q, canHandle: %v, canAccept: %v, err: %v\n",
+		//	factory, name, canHandle, canAccept, err)
 		if err != nil {
 			klog.V(4).Infof("Error trying to work out if we can handle %s: %v", name, err)
 		}
@@ -177,7 +177,7 @@ func NewContainerHandler(name string, watchType watcher.ContainerWatchSource, in
 				klog.V(3).Infof("Factory %q can handle container %q, but ignoring.", factory, name)
 				return nil, false, nil
 			}
-			fmt.Printf("===========>Using factory %q for container %q\n", factory, name)
+			//fmt.Printf("===========>Using factory %q for container %q\n", factory, name)
 			klog.V(3).Infof("Using factory %q for container %q", factory, name)
 			handle, err := factory.NewContainerHandler(name, inHostNamespace)
 			return handle, canAccept, err

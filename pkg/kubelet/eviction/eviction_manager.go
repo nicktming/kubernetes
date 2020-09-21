@@ -42,6 +42,7 @@ import (
 	kubelettypes "k8s.io/kubernetes/pkg/kubelet/types"
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
+	"encoding/json"
 )
 
 const (
@@ -460,8 +461,9 @@ func (m *managerImpl) localStorageEviction(summary *statsapi.Summary, pods []*v1
 		podStats, ok := statsFunc(pod)
 
 		if pod.Name == "teststorage" {
-			klog.Infof("+++++++++++podStats EphemeralStorage:%v, ok: %v\n",
-				podStats.EphemeralStorage, ok)
+			pretty_v, _ := json.MarshalIndent(podStats, "", "\t")
+			klog.Infof("+++++++++++podStats:%v, ok: %v\n",
+				string(pretty_v), ok)
 		}
 
 		if !ok {
