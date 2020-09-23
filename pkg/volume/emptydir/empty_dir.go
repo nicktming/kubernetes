@@ -113,14 +113,20 @@ func (plugin *emptyDirPlugin) NewMounter(spec *volume.Spec, pod *v1.Pod, opts vo
 func (plugin *emptyDirPlugin) newMounterInternal(spec *volume.Spec, pod *v1.Pod, mounter mount.Interface, mountDetector mountDetector, opts volume.VolumeOptions) (volume.Mounter, error) {
 	medium := v1.StorageMediumDefault
 
+	sizeLimit := &resource.Quantity{}
+
 	if spec.Volume.EmptyDir != nil { // Support a non-specified source as EmptyDir.
 		medium = spec.Volume.EmptyDir.Medium
+		if spec.Volume.EmptyDir.SizeLimit != nil {
+			sizeLimit = spec.Volume.EmptyDir.SizeLimit
+		}
 	}
 
 	return &emptyDir{
 		pod:             pod,
 		volName:         spec.Name(),
 		medium:          medium,
+		sizeLimit: 	 sizeLimit,
 		mounter:         mounter,
 		mountDetector:   mountDetector,
 		plugin:          plugin,
@@ -172,6 +178,7 @@ type emptyDir struct {
 	pod           *v1.Pod
 	volName       string
 	medium        v1.StorageMedium
+	sizeLimit     *resource.Quantity
 	mounter       mount.Interface
 	mountDetector mountDetector
 	plugin        *emptyDirPlugin
@@ -274,9 +281,13 @@ func (ed *emptyDir) setupTmpfs(dir string) error {
 	if isMnt && medium == v1.StorageMediumMemory {
 		return nil
 	}
+	var options []string
+	if ed.sizeLimit != nil && ed.sizeLimit.Value() > 0 {
+		options = []string{fmt.Sprintf("size=%d", ed.sizeLimit.Value())}
+	}
 
 	klog.V(3).Infof("pod %v: mounting tmpfs for volume %v", ed.pod.UID, ed.volName)
-	return ed.mounter.Mount("tmpfs", dir, "tmpfs", nil /* options */)
+	return ed.mounter.Mount("tmpfs", dir, "tmpfs", options /* options */)
 }
 
 // setupHugepages creates a hugepage mount at the specified directory.
