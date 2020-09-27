@@ -118,6 +118,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/subpath"
 	utilexec "k8s.io/utils/exec"
 	"k8s.io/utils/integer"
+	"encoding/json"
 )
 
 const (
@@ -1675,6 +1676,9 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 		klog.Errorf("Unable to make pod data directories for pod %q: %v", format.Pod(pod), err)
 		return err
 	}
+
+	pretty_pod, _ := json.MarshalIndent(pod, "", "\t")
+	fmt.Printf("==============>ready to podIsTerminated pretty_pod: %v\n", string(pretty_pod))
 
 	// Volume manager will not mount volumes for terminated pods
 	if !kl.podIsTerminated(pod) {
