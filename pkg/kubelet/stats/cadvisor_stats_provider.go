@@ -93,21 +93,21 @@ func (p *cadvisorStatsProvider) ListPodStats() ([]statsapi.PodStats, error) {
 	//	klog.Infof("value: %v", string(pretty_v))
 	//}
 
-	klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats infos : %v", len(infos))
+	//klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats infos : %v", len(infos))
 	// removeTerminatedContainerInfo will also remove pod level cgroups, so save the infos into allInfos first
 	allInfos := infos
 	infos = removeTerminatedContainerInfo(infos)
 	// Map each container to a pod and update the PodStats with container data.
 	podToStats := map[statsapi.PodReference]*statsapi.PodStats{}
 
-	klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats removeTerminatedContainerInfo infos : %v", len(infos))
+	//klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats removeTerminatedContainerInfo infos : %v", len(infos))
 
 	for key, cinfo := range infos {
 		// On systemd using devicemapper each mount into the container has an
 		// associated cgroup. We ignore them to ensure we do not get duplicate
 		// entries in our summary. For details on .mount units:
 		// http://man7.org/linux/man-pages/man5/systemd.mount.5.html
-		klog.Infof("+++++++++++++++cadvisorStatsProvider key: %v, infos(namespace) : %v", key, cinfo.Spec.Namespace)
+		//klog.Infof("+++++++++++++++cadvisorStatsProvider key: %v, infos(namespace) : %v", key, cinfo.Spec.Namespace)
 		if strings.HasSuffix(key, ".mount") {
 			continue
 		}
@@ -136,7 +136,7 @@ func (p *cadvisorStatsProvider) ListPodStats() ([]statsapi.PodStats, error) {
 			podStats.Containers = append(podStats.Containers, *cadvisorInfoToContainerStats(containerName, &cinfo, &rootFsInfo, &imageFsInfo))
 		}
 	}
-	klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats podStats : %v", len(podToStats))
+	//klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats podStats : %v", len(podToStats))
 	// Add each PodStats to the result.
 	result := make([]statsapi.PodStats, 0, len(podToStats))
 	for _, podStats := range podToStats {
@@ -164,7 +164,7 @@ func (p *cadvisorStatsProvider) ListPodStats() ([]statsapi.PodStats, error) {
 			result = append(result, *podStats)
 		}
 	}
-	klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats result : %v", len(result))
+	//klog.Infof("+++++++++++++++cadvisorStatsProvider ListPodStats result : %v", len(result))
 	return result, nil
 }
 
@@ -289,8 +289,8 @@ func isPodManagedContainer(cinfo *cadvisorapiv2.ContainerInfo) bool {
 	podName := kubetypes.GetPodName(cinfo.Spec.Labels)
 	podNamespace := kubetypes.GetPodNamespace(cinfo.Spec.Labels)
 	managed := podName != "" && podNamespace != ""
-	klog.Infof("++++++++++++++isPodManagedContainer cinfo.Spec.Labels: %v, podName: %v, podNamespace: %v, managed: %v",
-				cinfo.Spec.Labels, podName, podNamespace, managed)
+	//klog.Infof("++++++++++++++isPodManagedContainer cinfo.Spec.Labels: %v, podName: %v, podNamespace: %v, managed: %v",
+	//			cinfo.Spec.Labels, podName, podNamespace, managed)
 	if !managed && podName != podNamespace {
 		klog.Warningf(
 			"Expect container to have either both podName (%s) and podNamespace (%s) labels, or neither.",
@@ -325,9 +325,9 @@ func getCadvisorPodInfoFromPodUID(podUID types.UID, infos map[string]cadvisorapi
 func removeTerminatedContainerInfo(containerInfo map[string]cadvisorapiv2.ContainerInfo) map[string]cadvisorapiv2.ContainerInfo {
 	cinfoMap := make(map[containerID][]containerInfoWithCgroup)
 	for key, cinfo := range containerInfo {
-		klog.Infof("+++++++++++removeTerminatedContainerInfo key: %v", key)
+		//klog.Infof("+++++++++++removeTerminatedContainerInfo key: %v", key)
 		if !isPodManagedContainer(&cinfo) {
-			klog.Infof("+++++++++++removeTerminatedContainerInfo key: %v skiped by isPodManagedContainer", key)
+			//klog.Infof("+++++++++++removeTerminatedContainerInfo key: %v skiped by isPodManagedContainer", key)
 			continue
 		}
 		cinfoID := containerID{
@@ -342,7 +342,7 @@ func removeTerminatedContainerInfo(containerInfo map[string]cadvisorapiv2.Contai
 	result := make(map[string]cadvisorapiv2.ContainerInfo)
 	for _, refs := range cinfoMap {
 		if len(refs) == 1 {
-			klog.Infof("+++++++++++removeTerminatedContainerInfo refs = 1 key: %v", refs[0].cgroup)
+			//klog.Infof("+++++++++++removeTerminatedContainerInfo refs = 1 key: %v", refs[0].cgroup)
 			result[refs[0].cgroup] = refs[0].cinfo
 			continue
 		}
@@ -356,7 +356,7 @@ func removeTerminatedContainerInfo(containerInfo map[string]cadvisorapiv2.Contai
 			}
 		}
 		for ; i < len(refs); i++ {
-			klog.Infof("+++++++++++removeTerminatedContainerInfo refs = %d, key: %v", i, refs[0].cgroup)
+			//klog.Infof("+++++++++++removeTerminatedContainerInfo refs = %d, key: %v", i, refs[0].cgroup)
 			result[refs[i].cgroup] = refs[i].cinfo
 		}
 	}

@@ -170,7 +170,7 @@ func (p *criStatsProvider) listPodStats(updateCPUNanoCoreUsage bool) ([]statsapi
 		klog.Infof("value: %v", string(pretty_v))
 	}
 
-	klog.Infof("+++++++++++++++CRI cadvisorStatsProvider ListPodStats infos : %v", len(allInfos))
+	//klog.Infof("+++++++++++++++CRI cadvisorStatsProvider ListPodStats infos : %v", len(allInfos))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch cadvisor stats: %v", err)
 	}

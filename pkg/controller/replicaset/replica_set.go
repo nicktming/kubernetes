@@ -607,11 +607,11 @@ func (rsc *ReplicaSetController) syncReplicaSet(key string) error {
 		return err
 	}
 
-	klog.Infof("++++++++got claimPods filteredPods: %v", len(filteredPods))
-
-	for _, fp := range filteredPods {
-		klog.Infof("+++++++++++got final pod: %v/%v status: %v", fp.Namespace, fp.Name, fp.Status.Phase)
-	}
+	//klog.Infof("++++++++got claimPods filteredPods: %v", len(filteredPods))
+	//
+	//for _, fp := range filteredPods {
+	//	klog.Infof("+++++++++++got final pod: %v/%v status: %v", fp.Namespace, fp.Name, fp.Status.Phase)
+	//}
 
 	var manageReplicasErr error
 	if rsNeedsSync && rs.DeletionTimestamp == nil {

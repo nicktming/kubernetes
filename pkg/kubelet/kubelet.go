@@ -703,8 +703,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	if cadvisor.UsingLegacyCadvisorStats(containerRuntime, remoteRuntimeEndpoint) {
 
-		klog.Infof("++++++++++++cadvisor.UsingLegacyCadvisorStats containerRuntime: %v, remoteRuntimeEndpoint: %v\n",
-			containerRuntime, remoteRuntimeEndpoint)
+		//klog.Infof("++++++++++++cadvisor.UsingLegacyCadvisorStats containerRuntime: %v, remoteRuntimeEndpoint: %v\n",
+		//	containerRuntime, remoteRuntimeEndpoint)
 
 		klet.StatsProvider = stats.NewCadvisorStatsProvider(
 			klet.cadvisor,
@@ -714,7 +714,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 			klet.containerRuntime,
 			klet.statusManager)
 	} else {
-		klog.Infof("++++++++++++not using cadvisor.UsingLegacyCadvisorStats And using NewCRIStatsProvider")
+		//klog.Infof("++++++++++++not using cadvisor.UsingLegacyCadvisorStats And using NewCRIStatsProvider")
 
 		klet.StatsProvider = stats.NewCRIStatsProvider(
 			klet.cadvisor,

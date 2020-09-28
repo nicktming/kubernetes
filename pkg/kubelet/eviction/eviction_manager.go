@@ -42,7 +42,7 @@ import (
 	kubelettypes "k8s.io/kubernetes/pkg/kubelet/types"
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
-	"encoding/json"
+	//"encoding/json"
 )
 
 const (
@@ -229,8 +229,8 @@ func (m *managerImpl) synchronize(diskInfoProvider DiskInfoProvider, podFunc Act
 	}
 
 	klog.V(3).Infof("eviction manager: synchronize housekeeping")
-	klog.Infof("+++++++++++++++eviction manager: synchronize housekeeping: %v, enable localstorageCapacityIsolation: %v\n",
-		m.dedicatedImageFs, utilfeature.DefaultFeatureGate.Enabled(features.LocalStorageCapacityIsolation))
+	//klog.Infof("+++++++++++++++eviction manager: synchronize housekeeping: %v, enable localstorageCapacityIsolation: %v\n",
+	//	m.dedicatedImageFs, utilfeature.DefaultFeatureGate.Enabled(features.LocalStorageCapacityIsolation))
 	// build the ranking functions (if not yet known)
 	// TODO: have a function in cadvisor that lets us know if global housekeeping has completed
 	if m.dedicatedImageFs == nil {
@@ -240,7 +240,7 @@ func (m *managerImpl) synchronize(diskInfoProvider DiskInfoProvider, podFunc Act
 		}
 		m.dedicatedImageFs = &hasImageFs
 		m.signalToRankFunc = buildSignalToRankFunc(hasImageFs)
-		klog.Infof("+++++++++++++++eviction signalToNodeReclaimFuncs hasImageFs: %v\n", hasImageFs)
+		//klog.Infof("+++++++++++++++eviction signalToNodeReclaimFuncs hasImageFs: %v\n", hasImageFs)
 		m.signalToNodeReclaimFuncs = buildSignalToNodeReclaimFuncs(m.imageGC, m.containerGC, hasImageFs)
 	}
 
@@ -248,10 +248,10 @@ func (m *managerImpl) synchronize(diskInfoProvider DiskInfoProvider, podFunc Act
 	updateStats := true
 	summary, err := m.summaryProvider.Get(updateStats)
 
-	klog.Infof("++++++++=======>found summary pod: %v", len(summary.Pods))
-	for _, sp := range summary.Pods {
-		klog.Infof("++++++++=======>found summary pod: %v/%v", sp.PodRef.Namespace, sp.PodRef.Name)
-	}
+	//klog.Infof("++++++++=======>found summary pod: %v", len(summary.Pods))
+	//for _, sp := range summary.Pods {
+	//	klog.Infof("++++++++=======>found summary pod: %v/%v", sp.PodRef.Namespace, sp.PodRef.Name)
+	//}
 
 	if err != nil {
 		klog.Errorf("eviction manager: failed to get summary stats: %v", err)
@@ -460,27 +460,27 @@ func (m *managerImpl) localStorageEviction(summary *statsapi.Summary, pods []*v1
 	for _, pod := range pods {
 		podStats, ok := statsFunc(pod)
 
-		if pod.Name == "teststorage" {
-			pretty_v, _ := json.MarshalIndent(podStats, "", "\t")
-			klog.Infof("+++++++++++podStats:%v, ok: %v\n",
-				string(pretty_v), ok)
-		}
+		//if pod.Name == "teststorage" {
+		//	pretty_v, _ := json.MarshalIndent(podStats, "", "\t")
+		//	klog.Infof("+++++++++++podStats:%v, ok: %v\n",
+		//		string(pretty_v), ok)
+		//}
 
 		if !ok {
 			continue
 		}
 
-		klog.Infof("+++++++++++emptyDirLimitEviction")
+		//klog.Infof("+++++++++++emptyDirLimitEviction")
 		if m.emptyDirLimitEviction(podStats, pod) {
 			evicted = append(evicted, pod)
 			continue
 		}
-		klog.Infof("+++++++++++podEphemeralStorageLimitEviction")
+		//klog.Infof("+++++++++++podEphemeralStorageLimitEviction")
 		if m.podEphemeralStorageLimitEviction(podStats, pod) {
 			evicted = append(evicted, pod)
 			continue
 		}
-		klog.Infof("+++++++++++containerEphemeralStorageLimitEviction")
+		//klog.Infof("+++++++++++containerEphemeralStorageLimitEviction")
 		if m.containerEphemeralStorageLimitEviction(podStats, pod) {
 			evicted = append(evicted, pod)
 		}
