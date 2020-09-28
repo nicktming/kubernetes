@@ -184,6 +184,7 @@ func (b *secretVolumeMounter) SetUp(mounterArgs volume.MounterArgs) error {
 
 func (b *secretVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 	klog.V(3).Infof("Setting up volume %v for pod %v at %v", b.volName, b.pod.UID, dir)
+	klog.Infof("===========>Setting up volume %v for pod %v at %v", b.volName, b.pod.UID, dir)
 
 	// Wrap EmptyDir, let it do the setup.
 	wrapped, err := b.plugin.host.NewWrapperMounter(b.volName, wrappedVolumeSpec(), &b.pod, *b.opts)
@@ -218,6 +219,7 @@ func (b *secretVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs
 		return err
 	}
 
+	klog.Infof("=====>secret volume dir: %v, mounterArgs: %v", dir, mounterArgs)
 	setupSuccess := false
 	if err := wrapped.SetUpAt(dir, mounterArgs); err != nil {
 		return err
