@@ -428,7 +428,7 @@ func checkType(path string, pathType *v1.HostPathType, mounter mount.Interface) 
 }
 
 func checkTypeInternal(ftc hostPathTypeChecker, pathType *v1.HostPathType) error {
-	fmt.Printf("==========================>pathType: %v, ftc: %v\n", pathType, ftc.GetPath())
+	fmt.Printf("==========================>pathType: %v, ftc: %v\n", string(*pathType), ftc.GetPath())
 	switch *pathType {
 	case v1.HostPathDirectoryOrCreate:
 		if !ftc.Exists() {
