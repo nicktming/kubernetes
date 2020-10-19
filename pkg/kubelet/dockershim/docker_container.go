@@ -115,6 +115,7 @@ func (ds *dockerService) CreateContainer(_ context.Context, r *runtimeapi.Create
 		image = iSpec.Image
 	}
 	containerName := makeContainerName(sandboxConfig, config)
+	klog.Infof("+++++++++========>for containerName: [%s]", containerName)
 	createConfig := dockertypes.ContainerCreateConfig{
 		Name: containerName,
 		Config: &dockercontainer.Config{

@@ -57,6 +57,7 @@ var (
 func generateEnvList(envs []*runtimeapi.KeyValue) (result []string) {
 	for _, env := range envs {
 		result = append(result, fmt.Sprintf("%s=%s", env.Key, env.Value))
+		klog.Infof("+++++++++========>add env: [%s]", fmt.Sprintf("%s=%s", env.Key, env.Value))
 	}
 	return
 }
