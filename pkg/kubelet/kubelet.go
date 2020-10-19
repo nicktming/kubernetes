@@ -118,7 +118,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/subpath"
 	utilexec "k8s.io/utils/exec"
 	"k8s.io/utils/integer"
-	"encoding/json"
+	//"encoding/json"
 )
 
 const (
