@@ -1677,8 +1677,8 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 		return err
 	}
 
-	pretty_pod, _ := json.MarshalIndent(pod, "", "\t")
-	fmt.Printf("==============>ready to podIsTerminated pretty_pod: %v\n", string(pretty_pod))
+	//pretty_pod, _ := json.MarshalIndent(pod, "", "\t")
+	//fmt.Printf("==============>ready to podIsTerminated pretty_pod: %v\n", string(pretty_pod))
 
 	// Volume manager will not mount volumes for terminated pods
 	if !kl.podIsTerminated(pod) {
