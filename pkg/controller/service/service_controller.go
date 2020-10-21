@@ -46,7 +46,7 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 	kubefeatures "k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/util/metrics"
-	"github.com/opentracing/opentracing-go"
+	//"github.com/opentracing/opentracing-go"
 )
 
 const (
