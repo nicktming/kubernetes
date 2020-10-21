@@ -21,7 +21,7 @@ limitations under the License.
 package deployment
 
 import (
-	"context"
+	//"context"
 	"fmt"
 	//"github.com/opentracing/opentracing-go"
 	//"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
@@ -51,7 +51,7 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 	"k8s.io/kubernetes/pkg/controller/deployment/util"
 	"k8s.io/kubernetes/pkg/util/metrics"
-	"github.com/opentracing/opentracing-go"
+	//"github.com/opentracing/opentracing-go"
 )
 
 const (
