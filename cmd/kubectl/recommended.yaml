@@ -41,12 +41,12 @@ spec:
   ports:
     - port: 443
       targetPort: 8443
-      nodePort: 29998
       name: https
+      nodePort: 29998
     - port: 9090
+      name: http
       targetPort: 9090
       nodePort: 29999
-      name: http
   selector:
     k8s-app: kubernetes-dashboard
 
@@ -284,8 +284,8 @@ spec:
             initialDelaySeconds: 30
             timeoutSeconds: 30
           volumeMounts:
-            - mountPath: /tmp
-              name: tmp-volume
+          - mountPath: /tmp
+            name: tmp-volume
       serviceAccountName: kubernetes-dashboard
       # Comment the following tolerations if Dashboard must not be deployed on master
       tolerations:

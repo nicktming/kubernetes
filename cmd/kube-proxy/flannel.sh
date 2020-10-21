@@ -6,7 +6,9 @@ tar -zxvf flannel-v0.11.0-linux-amd64.tar.gz
 cp flanneld mk-docker-opts.sh /usr/local/bin/
 
 
-etcdctl --endpoints http://127.0.0.1:2379 set /coreos.com/network/config '{"Network": "10.0.0.0/16", "SubnetLen": 24, "SubnetMin": "10.0.1.0","SubnetMax": "10.0.20.0", "Backend": {"Type": "vxlan"}}'
+etcdctl --endpoints http://127.0.0.1:2379 set /coreos.com/network/config '{"Network": "172.16.0.0/16", "SubnetLen": 24, "SubnetMin": "172.16.1.0","SubnetMax": "172.16.20.0", "Backend": {"Type": "vxlan"}}'
+
+#etcdctl --endpoints http://127.0.0.1:2379 set /coreos.com/network/config '{"Network": "10.0.0.0/16", "SubnetLen": 24, "SubnetMin": "10.0.1.0","SubnetMax": "10.0.20.0", "Backend": {"Type": "vxlan"}}'
 
 etcdctl get /coreos.com/network/config
 
