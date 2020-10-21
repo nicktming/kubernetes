@@ -18,8 +18,8 @@ package scheduler
 
 import (
 	"fmt"
-	"github.com/opentracing/opentracing-go"
-	"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
+	//"github.com/opentracing/opentracing-go"
+	//"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
 	"io/ioutil"
 	"os"
 	"time"
@@ -565,13 +565,13 @@ func (sched *Scheduler) bind(assumed *v1.Pod, b *v1.Binding) error {
 func (sched *Scheduler) scheduleOne() {
 	pod := sched.config.NextPod()
 
-	tracer, closer := tracing.Init("k8s")
-	defer closer.Close()
-	opentracing.SetGlobalTracer(tracer)
-
-	spanTotal := tracer.StartSpan("kube-scheduler")
-	spanTotal.SetTag("podId", pod.UID)
-	ctx := opentracing.ContextWithSpan(context.Background(), spanTotal)
+	//tracer, closer := tracing.Init("k8s")
+	//defer closer.Close()
+	//opentracing.SetGlobalTracer(tracer)
+	//
+	//spanTotal := tracer.StartSpan("kube-scheduler")
+	//spanTotal.SetTag("podId", pod.UID)
+	//ctx := opentracing.ContextWithSpan(context.Background(), spanTotal)
 
 	// pod could be nil when schedulerQueue is closed
 	// 代表schedulerQueue已经关闭了 所以pod为nil
@@ -595,8 +595,8 @@ func (sched *Scheduler) scheduleOne() {
 	// 如果成功 会返回一个节点名称 err为nil
 	// 如果失败 会返回错误err
 
-	spanScheduler, _ := opentracing.StartSpanFromContext(ctx, "scheduler")
-	spanScheduler.SetTag("podId", pod.UID)
+	//spanScheduler, _ := opentracing.StartSpanFromContext(ctx, "scheduler")
+	//spanScheduler.SetTag("podId", pod.UID)
 
 	suggestedHost, err := sched.schedule(pod)
 
@@ -636,8 +636,8 @@ func (sched *Scheduler) scheduleOne() {
 	//
 	// This function modifies 'assumedPod' if volume binding is required.
 
-	spanAssume, _ := opentracing.StartSpanFromContext(ctx, "assume")
-	spanAssume.SetTag("podId", pod.UID)
+	//spanAssume, _ := opentracing.StartSpanFromContext(ctx, "assume")
+	//spanAssume.SetTag("podId", pod.UID)
 
 
 	allBound, err := sched.assumeVolumes(assumedPod, suggestedHost)
@@ -656,10 +656,10 @@ func (sched *Scheduler) scheduleOne() {
 		metrics.PodScheduleErrors.Inc()
 		return
 	}
-	spanAssume.Finish()
+	//spanAssume.Finish()
 
-	spanBind, _ := opentracing.StartSpanFromContext(ctx, "bind")
-	spanBind.SetTag("podId", pod.UID)
+	//spanBind, _ := opentracing.StartSpanFromContext(ctx, "bind")
+	//spanBind.SetTag("podId", pod.UID)
 
 	// bind the pod to its host asynchronously (we can do this b/c of the assumption step above).
 	// 异步bind操作
@@ -689,6 +689,6 @@ func (sched *Scheduler) scheduleOne() {
 			metrics.PodScheduleSuccesses.Inc()
 		}
 	}()
-	spanBind.Finish()
-	spanTotal.Finish()
+	//spanBind.Finish()
+	//spanTotal.Finish()
 }

@@ -19,8 +19,8 @@ package service
 import (
 	"context"
 	"fmt"
-	"github.com/opentracing/opentracing-go"
-	"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
+	//"github.com/opentracing/opentracing-go"
+	//"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
 	"sync"
 	"time"
 
@@ -46,6 +46,7 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 	kubefeatures "k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/util/metrics"
+	"github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -728,13 +729,13 @@ func (s *ServiceController) syncService(key string) error {
 	// service holds the latest service info from apiserver
 	service, err := s.serviceLister.Services(namespace).Get(name)
 
-	tracer, closer := tracing.Init("k8s")
-	defer closer.Close()
-	opentracing.SetGlobalTracer(tracer)
+	//tracer, closer := tracing.Init("k8s")
+	//defer closer.Close()
+	//opentracing.SetGlobalTracer(tracer)
 
-	spanSyncService := tracer.StartSpan("kube-service-controller-syncService")
-	spanSyncService.SetTag("service", key)
-	kcCtx := opentracing.ContextWithSpan(context.Background(), spanSyncService)
+	//spanSyncService := tracer.StartSpan("kube-service-controller-syncService")
+	//spanSyncService.SetTag("service", key)
+	//kcCtx := opentracing.ContextWithSpan(context.Background(), spanSyncService)
 
 
 	switch {
@@ -747,12 +748,12 @@ func (s *ServiceController) syncService(key string) error {
 	default:
 		cachedService = s.cache.getOrCreate(key)
 
-		spanCri, _ := opentracing.StartSpanFromContext(kcCtx, "call cri")
-		spanCri.SetTag("service", key)
+		//spanCri, _ := opentracing.StartSpanFromContext(kcCtx, "call cri")
+		//spanCri.SetTag("service", key)
 		err = s.processServiceUpdate(cachedService, service, key)
-		spanCri.Finish()
+		//spanCri.Finish()
 	}
-	spanSyncService.Finish()
+	//spanSyncService.Finish()
 	return err
 }
 

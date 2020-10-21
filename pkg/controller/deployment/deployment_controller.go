@@ -23,8 +23,8 @@ package deployment
 import (
 	"context"
 	"fmt"
-	"github.com/opentracing/opentracing-go"
-	"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
+	//"github.com/opentracing/opentracing-go"
+	//"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
 	"reflect"
 	"time"
 
@@ -51,6 +51,7 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 	"k8s.io/kubernetes/pkg/controller/deployment/util"
 	"k8s.io/kubernetes/pkg/util/metrics"
+	"github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -472,25 +473,25 @@ func (dc *DeploymentController) processNextWorkItem() bool {
 	}
 	defer dc.queue.Done(key)
 
-	tracer, closer := tracing.Init("k8s")
-	defer closer.Close()
-	opentracing.SetGlobalTracer(tracer)
-
-	spanSyncDeployment := tracer.StartSpan("kube-controller-deployment")
-	spanSyncDeployment.SetTag("deployment", key)
-	kcCtx := opentracing.ContextWithSpan(context.Background(), spanSyncDeployment)
-
-	spanSD, _ := opentracing.StartSpanFromContext(kcCtx, "syncHandler")
-	spanSD.SetTag("deployment", key)
+	//tracer, closer := tracing.Init("k8s")
+	//defer closer.Close()
+	//opentracing.SetGlobalTracer(tracer)
+	//
+	//spanSyncDeployment := tracer.StartSpan("kube-controller-deployment")
+	//spanSyncDeployment.SetTag("deployment", key)
+	//kcCtx := opentracing.ContextWithSpan(context.Background(), spanSyncDeployment)
+	//
+	//spanSD, _ := opentracing.StartSpanFromContext(kcCtx, "syncHandler")
+	//spanSD.SetTag("deployment", key)
 	err := dc.syncHandler(key.(string))
-	spanSD.Finish()
+	//spanSD.Finish()
 
-	spanErr, _ := opentracing.StartSpanFromContext(kcCtx, "handlerErr")
-	spanErr.SetTag("deployment", key)
+	//spanErr, _ := opentracing.StartSpanFromContext(kcCtx, "handlerErr")
+	//spanErr.SetTag("deployment", key)
 	dc.handleErr(err, key)
-	spanErr.Finish()
+	//spanErr.Finish()
 
-	spanSyncDeployment.Finish()
+	//spanSyncDeployment.Finish()
 	return true
 }
 
