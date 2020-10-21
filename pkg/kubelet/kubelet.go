@@ -20,8 +20,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/opentracing/opentracing-go"
-	"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
+	//"github.com/opentracing/opentracing-go"
+	//"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
 
 	//"github.com/opentracing/opentracing-go"
 	//"github.com/yurishkuro/opentracing-tutorial/go/lib/tracing"
@@ -121,6 +121,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 	"k8s.io/kubernetes/pkg/volume/csi"
 	utilexec "k8s.io/utils/exec"
+	//"github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -1503,13 +1504,13 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	updateType := o.updateType
 
 
-	tracer, closer := tracing.Init("k8s")
-	defer closer.Close()
-	opentracing.SetGlobalTracer(tracer)
+	//tracer, closer := tracing.Init("k8s")
+	//defer closer.Close()
+	//opentracing.SetGlobalTracer(tracer)
 
-	spanSyncPod := tracer.StartSpan("kubelet-syncPod")
-	spanSyncPod.SetTag("podId", pod.UID)
-	kletCtx := opentracing.ContextWithSpan(context.Background(), spanSyncPod)
+	//spanSyncPod := tracer.StartSpan("kubelet-syncPod")
+	//spanSyncPod.SetTag("podId", pod.UID)
+	//kletCtx := opentracing.ContextWithSpan(context.Background(), spanSyncPod)
 
 	// if we want to kill a pod, do it now!
 	if updateType == kubetypes.SyncPodKill {
@@ -1691,8 +1692,8 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 		}
 	}
 
-	spanDir, _ := opentracing.StartSpanFromContext(kletCtx, "makePodDataDirs")
-	spanDir.SetTag("podId", pod.UID)
+	//spanDir, _ := opentracing.StartSpanFromContext(kletCtx, "makePodDataDirs")
+	//spanDir.SetTag("podId", pod.UID)
 
 	// Make data directories for the pod
 	if err := kl.makePodDataDirs(pod); err != nil {
@@ -1700,7 +1701,7 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 		klog.Errorf("Unable to make pod data directories for pod %q: %v", format.Pod(pod), err)
 		return err
 	}
-	spanDir.Finish()
+	//spanDir.Finish()
 
 	// Volume manager will not mount volumes for terminated pods
 	if !kl.podIsTerminated(pod) {
@@ -1712,19 +1713,19 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 		}
 	}
 
-	spanSec, _ := opentracing.StartSpanFromContext(kletCtx, "PullSecrets")
-	spanSec.SetTag("podId", pod.UID)
-	// Fetch the pull secrets for the pod
+	//spanSec, _ := opentracing.StartSpanFromContext(kletCtx, "PullSecrets")
+	//spanSec.SetTag("podId", pod.UID)
+	//// Fetch the pull secrets for the pod
 	pullSecrets := kl.getPullSecretsForPod(pod)
-	spanSec.Finish()
+	//spanSec.Finish()
 
 	// Call the container runtime's SyncPod callback
-	spanCri, _ := opentracing.StartSpanFromContext(kletCtx, "call cri")
-	spanCri.SetTag("podId", pod.UID)
+	//spanCri, _ := opentracing.StartSpanFromContext(kletCtx, "call cri")
+	//spanCri.SetTag("podId", pod.UID)
 
 	result := kl.containerRuntime.SyncPod(pod, apiPodStatus, podStatus, pullSecrets, kl.backOff)
 
-	spanCri.Finish()
+	//spanCri.Finish()
 
 	kl.reasonCache.Update(pod.UID, result)
 	if err := result.Error(); err != nil {
@@ -1739,7 +1740,7 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
 		return nil
 	}
-	spanSyncPod.Finish()
+	//spanSyncPod.Finish()
 
 	//test_end := time.Now()
 	//
