@@ -49,7 +49,7 @@ import (
 
 	"k8s.io/klog"
 
-	"context"
+	//"context"
 )
 
 const (
@@ -600,7 +600,7 @@ func (sched *Scheduler) scheduleOne() {
 
 	suggestedHost, err := sched.schedule(pod)
 
-	spanScheduler.Finish()
+	//spanScheduler.Finish()
 	if err != nil {
 		// schedule() may have failed because the pod would not fit on any host, so we try to
 		// preempt, with the expectation that the next time the pod is tried for scheduling it
