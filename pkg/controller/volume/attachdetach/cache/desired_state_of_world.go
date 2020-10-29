@@ -241,6 +241,8 @@ func (dsw *desiredStateOfWorld) AddPod(
 			err)
 	}
 
+	fmt.Printf("========>desiredStateOfWorld add volumeName:%v\n", volumeName)
+
 	volumeObj, volumeExists := nodeObj.volumesToAttach[volumeName]
 	if !volumeExists {
 		volumeObj = volumeToAttach{
