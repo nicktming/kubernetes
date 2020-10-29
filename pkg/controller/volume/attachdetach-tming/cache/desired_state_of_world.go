@@ -26,6 +26,8 @@ type DesiredStateOfWorld interface {
 
 	VolumeExists(volumeName v1.UniqueVolumeName, nodeName k8stypes.NodeName) bool
 
+	AddPod(podName types.UniquePodName, pod *v1.Pod, volumeSpec *volume.Spec, nodeName k8stypes.NodeName) (v1.UniqueVolumeName, error)
+
 }
 
 type desiredStateOfWorld struct {

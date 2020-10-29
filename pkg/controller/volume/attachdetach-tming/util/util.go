@@ -181,7 +181,24 @@ func ProcessPodVolumes(pod *v1.Pod, addVolumes bool, desiredStateOfWorld cache.D
 		}
 
 		uniquePodName := util.GetUniquePodName(pod)
-
+		if addVolumes {
+			_, err := desiredStateOfWorld.AddPod(uniquePodName, pod, volumeSpec, nodeName)
+			if err != nil {
+				klog.Infof(
+					"===========>Failed to add volume %q for pod %q/%q to desiredStateOfWorld. %v",
+					podVolume.Name,
+					pod.Namespace,
+					pod.Name,
+					err)
+			}
+		} else {
+			klog.Infof(
+				"===========>addVolumes: %v not implemented to delete volume %q for pod %q/%q to desiredStateOfWorld.",
+				addVolumes,
+				podVolume.Name,
+				pod.Namespace,
+				pod.Name)
+		}
 	}
 
 }
