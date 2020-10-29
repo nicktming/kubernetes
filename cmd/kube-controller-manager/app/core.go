@@ -216,8 +216,8 @@ func startAttachDetachController(ctx ControllerContext) (http.Handler, bool, err
 		//	attachdetach.DefaultTimerConfig,
 		//)
 		attachdetach.NewAttachDetachController(
-			//ctx.ClientBuilder.ClientOrDie("attachdetach-controller"),
-			csiclientset.NewForConfigOrDie(csiClientConfig),
+			ctx.ClientBuilder.ClientOrDie("attachdetach-controller"),
+			//csiclientset.NewForConfigOrDie(csiClientConfig),
 			ctx.InformerFactory.Core().V1().Pods(),
 			ctx.InformerFactory.Core().V1().Nodes(),
 			ctx.InformerFactory.Core().V1().PersistentVolumeClaims(),
