@@ -52,7 +52,8 @@ import (
 	serviceaccountcontroller "k8s.io/kubernetes/pkg/controller/serviceaccount"
 	ttlcontroller "k8s.io/kubernetes/pkg/controller/ttl"
 	"k8s.io/kubernetes/pkg/controller/ttlafterfinished"
-	"k8s.io/kubernetes/pkg/controller/volume/attachdetach"
+	//"k8s.io/kubernetes/pkg/controller/volume/attachdetach"
+	attachdetach "k8s.io/kubernetes/pkg/controller/volume/attachdetach-tming"
 	"k8s.io/kubernetes/pkg/controller/volume/expand"
 	persistentvolumecontroller "k8s.io/kubernetes/pkg/controller/volume/persistentvolume"
 	"k8s.io/kubernetes/pkg/controller/volume/pvcprotection"
@@ -200,19 +201,33 @@ func startAttachDetachController(ctx ControllerContext) (http.Handler, bool, err
 	csiClientConfig.ContentType = "application/json"
 
 	attachDetachController, attachDetachControllerErr :=
+		//attachdetach.NewAttachDetachController(
+		//	ctx.ClientBuilder.ClientOrDie("attachdetach-controller"),
+		//	csiclientset.NewForConfigOrDie(csiClientConfig),
+		//	ctx.InformerFactory.Core().V1().Pods(),
+		//	ctx.InformerFactory.Core().V1().Nodes(),
+		//	ctx.InformerFactory.Core().V1().PersistentVolumeClaims(),
+		//	ctx.InformerFactory.Core().V1().PersistentVolumes(),
+		//	ctx.Cloud,
+		//	ProbeAttachableVolumePlugins(),
+		//	GetDynamicPluginProber(ctx.ComponentConfig.PersistentVolumeBinderController.VolumeConfiguration),
+		//	ctx.ComponentConfig.AttachDetachController.DisableAttachDetachReconcilerSync,
+		//	ctx.ComponentConfig.AttachDetachController.ReconcilerSyncLoopPeriod.Duration,
+		//	attachdetach.DefaultTimerConfig,
+		//)
 		attachdetach.NewAttachDetachController(
-			ctx.ClientBuilder.ClientOrDie("attachdetach-controller"),
+			//ctx.ClientBuilder.ClientOrDie("attachdetach-controller"),
 			csiclientset.NewForConfigOrDie(csiClientConfig),
 			ctx.InformerFactory.Core().V1().Pods(),
 			ctx.InformerFactory.Core().V1().Nodes(),
 			ctx.InformerFactory.Core().V1().PersistentVolumeClaims(),
 			ctx.InformerFactory.Core().V1().PersistentVolumes(),
-			ctx.Cloud,
+			//ctx.Cloud,
 			ProbeAttachableVolumePlugins(),
-			GetDynamicPluginProber(ctx.ComponentConfig.PersistentVolumeBinderController.VolumeConfiguration),
-			ctx.ComponentConfig.AttachDetachController.DisableAttachDetachReconcilerSync,
-			ctx.ComponentConfig.AttachDetachController.ReconcilerSyncLoopPeriod.Duration,
-			attachdetach.DefaultTimerConfig,
+			//GetDynamicPluginProber(ctx.ComponentConfig.PersistentVolumeBinderController.VolumeConfiguration),
+			//ctx.ComponentConfig.AttachDetachController.DisableAttachDetachReconcilerSync,
+			//ctx.ComponentConfig.AttachDetachController.ReconcilerSyncLoopPeriod.Duration,
+			//attachdetach.DefaultTimerConfig,
 		)
 	if attachDetachControllerErr != nil {
 		return nil, true, fmt.Errorf("failed to start attach/detach controller: %v", attachDetachControllerErr)
