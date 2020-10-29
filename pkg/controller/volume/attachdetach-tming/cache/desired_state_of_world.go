@@ -65,6 +65,21 @@ type pod struct {
 	podObj 				*v1.Pod
 }
 
+func (dsw *desiredStateOfWorld) GetKeepTerminatedPodVolumesForNode(nodeName k8stypes.NodeName) bool {
+	dsw.Lock()
+	defer dsw.RUnlock()
+
+	if nodeName == "" {
+		return false
+	}
+
+	if node, ok := dsw.nodesManaged[nodeName]; ok {
+		return node.keepTerminatedPodVolumes
+	}
+
+	return false
+}
+
 func (dsw *desiredStateOfWorld) AddNode(nodeName k8stypes.NodeName, keepTerminatedPodVolumes bool) {
 	dsw.Lock()
 	defer dsw.Unlock()
