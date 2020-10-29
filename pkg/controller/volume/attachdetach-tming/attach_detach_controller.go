@@ -9,6 +9,7 @@ import (
 	"k8s.io/api/core/v1"
 	"log"
 	"k8s.io/klog"
+	"k8s.io/apimachinery/pkg/types"
 
 	// Volume plugins
 	"k8s.io/kubernetes/pkg/volume"
@@ -22,6 +23,12 @@ import (
 	"k8s.io/kubernetes/pkg/volume/rbd"
 	toolcache "k8s.io/client-go/tools/cache"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/tools/record"
+	cloudprovider "k8s.io/cloud-provider"
+	"k8s.io/kubernetes/pkg/util/mount"
+	"net"
+	csiclient "k8s.io/csi-api/pkg/client/clientset/versioned"
+	authenticationv1 "k8s.io/api/authentication/v1"
 )
 
 // TimerConfig contains configuration of internal attach/detach timers and
@@ -109,7 +116,7 @@ func NewAttachDetachController(
 		pvsSynced: 		pvInformer.Informer().HasSynced,
 
 		podLister: 		podInformer.Lister(),
-		podsSynced: 		podInformer.Informer().HasSynced(),
+		podsSynced: 		podInformer.Informer().HasSynced,
 		podIndexer: 		podInformer.Informer().GetIndexer(),
 		nodeLister: 		nodeInformer.Lister(),
 		nodesSynced: 		nodeInformer.Informer().HasSynced,
@@ -118,7 +125,7 @@ func NewAttachDetachController(
 	}
 
 	// TODO adc.volumePluginMgr.InitPlugins
-	if err := adc.volumePluginMgr.InitPlugins(ProbeAttachableVolumePlugins(), nil, adc); err != nil {
+	if err := adc.volumePluginMgr.InitPlugins(plugins, nil, adc); err != nil {
 		return nil, fmt.Errorf("Could not initialize volume plugins for Attach/Detach Controller: %+v", err)
 	}
 
@@ -297,11 +304,134 @@ func (adc *attachDetachController) podUpdate(oldObj, newObj interface{}) {
 	log.Printf("update pod : %v/%v\n", pod.Namespace, pod.Name)
 }
 
-func (adc *attachDetachController) podDelete(oldObj, newObj interface{}) {
-	pod, ok := newObj.(*v1.Pod)
+func (adc *attachDetachController) podDelete(obj interface{}) {
+	pod, ok := obj.(*v1.Pod)
 	if pod == nil || !ok {
 		return
 	}
 	log.Printf("delete pod : %v/%v\n", pod.Namespace, pod.Name)
+}
+
+// VolumeHost implementation
+// This is an unfortunate requirement of the current factoring of volume plugin
+// initializing code. It requires kubelet specific methods used by the mounting
+// code to be implemented by all initializers even if the initializer does not
+// do mounting (like this attach/detach controller).
+// Issue kubernetes/kubernetes/issues/14217 to fix this.
+func (adc *attachDetachController) GetPluginDir(podUID string) string {
+	return ""
+}
+
+func (adc *attachDetachController) GetVolumeDevicePluginDir(podUID string) string {
+	return ""
+}
+
+func (adc *attachDetachController) GetPodsDir() string {
+	return ""
+}
+
+func (adc *attachDetachController) GetPodVolumeDir(podUID types.UID, pluginName, volumeName string) string {
+	return ""
+}
+
+func (adc *attachDetachController) GetPodPluginDir(podUID types.UID, pluginName string) string {
+	return ""
+}
+
+func (adc *attachDetachController) GetPodVolumeDeviceDir(podUID types.UID, pluginName string) string {
+	return ""
+}
+
+func (adc *attachDetachController) GetKubeClient() clientset.Interface {
+	return adc.kubeClient
+}
+
+func (adc *attachDetachController) NewWrapperMounter(volName string, spec volume.Spec, pod *v1.Pod, opts volume.VolumeOptions) (volume.Mounter, error) {
+	return nil, fmt.Errorf("NewWrapperMounter not supported by Attach/Detach controller's VolumeHost implementation")
+}
+
+func (adc *attachDetachController) NewWrapperUnmounter(volName string, spec volume.Spec, podUID types.UID) (volume.Unmounter, error) {
+	return nil, fmt.Errorf("NewWrapperUnmounter not supported by Attach/Detach controller's VolumeHost implementation")
+}
+
+func (adc *attachDetachController) GetCloudProvider() cloudprovider.Interface {
+	//return adc.cloud
+	return nil
+}
+
+func (adc *attachDetachController) GetMounter(pluginName string) mount.Interface {
+	return nil
+}
+
+func (adc *attachDetachController) GetHostName() string {
+	return ""
+}
+
+func (adc *attachDetachController) GetHostIP() (net.IP, error) {
+	return nil, fmt.Errorf("GetHostIP() not supported by Attach/Detach controller's VolumeHost implementation")
+}
+
+func (adc *attachDetachController) GetNodeAllocatable() (v1.ResourceList, error) {
+	return v1.ResourceList{}, nil
+}
+
+func (adc *attachDetachController) GetSecretFunc() func(namespace, name string) (*v1.Secret, error) {
+	return func(_, _ string) (*v1.Secret, error) {
+		return nil, fmt.Errorf("GetSecret unsupported in attachDetachController")
+	}
+}
+
+func (adc *attachDetachController) GetConfigMapFunc() func(namespace, name string) (*v1.ConfigMap, error) {
+	return func(_, _ string) (*v1.ConfigMap, error) {
+		return nil, fmt.Errorf("GetConfigMap unsupported in attachDetachController")
+	}
+}
+
+func (adc *attachDetachController) GetServiceAccountTokenFunc() func(_, _ string, _ *authenticationv1.TokenRequest) (*authenticationv1.TokenRequest, error) {
+	return func(_, _ string, _ *authenticationv1.TokenRequest) (*authenticationv1.TokenRequest, error) {
+		return nil, fmt.Errorf("GetServiceAccountToken unsupported in attachDetachController")
+	}
+}
+
+func (adc *attachDetachController) DeleteServiceAccountTokenFunc() func(types.UID) {
+	return func(types.UID) {
+		klog.Errorf("DeleteServiceAccountToken unsupported in attachDetachController")
+	}
+}
+
+func (adc *attachDetachController) GetExec(pluginName string) mount.Exec {
+	return mount.NewOsExec()
+}
+
+func (adc *attachDetachController) addNodeToDswp(node *v1.Node, nodeName types.NodeName) {
+	if _, exists := node.Annotations[volumeutil.ControllerManagedAttachAnnotation]; exists {
+		keepTerminatedPodVolumes := false
+
+		if t, ok := node.Annotations[volumeutil.KeepTerminatedPodVolumesAnnotation]; ok {
+			keepTerminatedPodVolumes = (t == "true")
+		}
+
+		// Node specifies annotation indicating it should be managed by attach
+		// detach controller. Add it to desired state of world.
+		adc.desiredStateOfWorld.AddNode(nodeName, keepTerminatedPodVolumes)
+	}
+}
+
+func (adc *attachDetachController) GetNodeLabels() (map[string]string, error) {
+	return nil, fmt.Errorf("GetNodeLabels() unsupported in Attach/Detach controller")
+}
+
+func (adc *attachDetachController) GetNodeName() types.NodeName {
+	return ""
+}
+
+func (adc *attachDetachController) GetEventRecorder() record.EventRecorder {
+	//return adc.recorder
+	return nil
+}
+
+func (adc *attachDetachController) GetCSIClient() csiclient.Interface {
+	//return adc.csiClient
+	return nil
 }
 
