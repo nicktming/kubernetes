@@ -147,8 +147,8 @@ func NewAttachDetachController(
 		AddFunc: 	func(obj interface{}) {
 				adc.enqueuePVC(obj)
 		},
-		UpdateFunc: 	func(obj interface{}) {
-				adc.enqueuePVC(obj)
+		UpdateFunc: 	func(old, new interface{}) {
+				adc.enqueuePVC(new)
 		},
 	})
 
