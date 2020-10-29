@@ -1,7 +1,7 @@
 package util
 
 import (
-	"github.com/nicktming/go/controller/volume/attachdetach/cache"
+	"k8s.io/kubernetes/pkg/controller/volume/attachdetach-tming/cache"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/volume/util"
