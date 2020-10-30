@@ -275,12 +275,13 @@ func (adc *attachDetachController) syncPVCByKey(key string) error {
 		if !ok {
 			continue
 		}
-		klog.Infof("add pod %v/%v", pod.Namespace, pod.Name)
+
 		volumeActionFlag := util.DetermineVolumeAction(
 			pod,
 			adc.desiredStateOfWorld,
 			true)
-
+		klog.Infof("syncPVCByKey process pod %v/%v with action: %v (true represents addvolume, false represents deletevolume)",
+			pod.Namespace, pod.Name, volumeActionFlag)
 		util.ProcessPodVolumes(pod, volumeActionFlag, /* addVolumes */
 			adc.desiredStateOfWorld, &adc.volumePluginMgr, adc.pvcLister, adc.pvLister)
 	}
@@ -293,7 +294,15 @@ func (adc *attachDetachController) podAdd(obj interface{}) {
 	if pod == nil || !ok {
 		return
 	}
-	log.Printf("add pod : %v/%v\n", pod.Namespace, pod.Name)
+	klog.Infof("add pod : %v/%v\n", pod.Namespace, pod.Name)
+	volumeActionFlag := util.DetermineVolumeAction(
+		pod,
+		adc.desiredStateOfWorld,
+		true)
+	klog.Infof("podAdd process pod %v/%v with action: %v (true represents addvolume, false represents deletevolume)",
+		pod.Namespace, pod.Name, volumeActionFlag)
+	util.ProcessPodVolumes(pod, volumeActionFlag, /* addVolumes */
+		adc.desiredStateOfWorld, &adc.volumePluginMgr, adc.pvcLister, adc.pvLister)
 }
 
 func (adc *attachDetachController) podUpdate(oldObj, newObj interface{}) {
@@ -301,7 +310,15 @@ func (adc *attachDetachController) podUpdate(oldObj, newObj interface{}) {
 	if pod == nil || !ok {
 		return
 	}
-	log.Printf("update pod : %v/%v\n", pod.Namespace, pod.Name)
+	klog.Infof("podUpdate update pod : %v/%v\n", pod.Namespace, pod.Name)
+	volumeActionFlag := util.DetermineVolumeAction(
+		pod,
+		adc.desiredStateOfWorld,
+		true)
+	klog.Infof("podUpdate process pod %v/%v with action: %v (true represents addvolume, false represents deletevolume)",
+		pod.Namespace, pod.Name, volumeActionFlag)
+	util.ProcessPodVolumes(pod, volumeActionFlag, /* addVolumes */
+		adc.desiredStateOfWorld, &adc.volumePluginMgr, adc.pvcLister, adc.pvLister)
 }
 
 func (adc *attachDetachController) podDelete(obj interface{}) {
@@ -309,7 +326,15 @@ func (adc *attachDetachController) podDelete(obj interface{}) {
 	if pod == nil || !ok {
 		return
 	}
-	log.Printf("delete pod : %v/%v\n", pod.Namespace, pod.Name)
+	klog.Infof("podDelete delete pod : %v/%v\n", pod.Namespace, pod.Name)
+	volumeActionFlag := util.DetermineVolumeAction(
+		pod,
+		adc.desiredStateOfWorld,
+		false)
+	klog.Infof("podDelete process pod %v/%v with action: %v (true represents addvolume, false represents deletevolume)",
+		pod.Namespace, pod.Name, volumeActionFlag)
+	util.ProcessPodVolumes(pod, volumeActionFlag, /* addVolumes */
+		adc.desiredStateOfWorld, &adc.volumePluginMgr, adc.pvcLister, adc.pvLister)
 }
 
 // VolumeHost implementation
