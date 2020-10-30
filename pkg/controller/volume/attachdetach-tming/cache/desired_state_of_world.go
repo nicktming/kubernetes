@@ -126,7 +126,7 @@ func (dsw *desiredStateOfWorld) GetPodToAdd() map[types.UniquePodName]PodToAdd {
 		for volumeName, volToAtt := range nodeObj.volumesToAttach {
 			for podUID, pod := range volToAtt.scheduledPods {
 				pods[podUID] = PodToAdd{
-					Pod: 		pod,
+					Pod: 		pod.podObj,
 					VolumeName:  	volumeName,
 					NodeName: 	nodeName,
 				}
@@ -296,6 +296,8 @@ func (dsw *desiredStateOfWorld) GetVolumesToAttach() []VolumeToAttach {
 						}})
 		}
 	}
+
+	return volumesToAttach
 }
 
 func getPodsFromMap(podMap map[types.UniquePodName]pod) []*v1.Pod {

@@ -152,7 +152,7 @@ func (asw *actualStateOfWorld) getNodeAndVolume(
 
 	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
 	if volumeExists {
-		nodeObj, nodeExists := volumeObj.nodesAttachedTo[volumeName]
+		nodeObj, nodeExists := volumeObj.nodesAttachedTo[nodeName]
 		if nodeExists {
 			return volumeObj, nodeObj, nil
 		}
