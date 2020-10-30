@@ -7,7 +7,6 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/api/core/v1"
-	"log"
 	"k8s.io/klog"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -133,6 +132,11 @@ func NewAttachDetachController(
 		AddFunc: 	adc.podAdd,
 		UpdateFunc: 	adc.podUpdate,
 		DeleteFunc: 	adc.podDelete,
+	})
+
+	nodeInformer.Informer().AddEventHandler(kcache.ResourceEventHandlerFuncs{
+		AddFunc: 	adc.nodeAdd,
+		DeleteFunc:	adc.nodeDelete,
 	})
 
 	adc.desiredStateOfWorld = cache.NewDesiredStateOfWorld(&adc.volumePluginMgr)
@@ -288,13 +292,30 @@ func (adc *attachDetachController) syncPVCByKey(key string) error {
 	return nil
 }
 
+func (adc *attachDetachController) nodeAdd(obj interface{}) {
+	node, ok := obj.(*v1.Node)
+	if node == nil || !ok {
+		return
+	}
+	klog.Infof("nodeAdd add node: %v", node.Name)
+	adc.desiredStateOfWorld.AddNode(node.Name, false)
+}
+
+func (adc *attachDetachController) nodeDelete(obj interface{}) {
+	node, ok := obj.(*v1.Node)
+	if node == nil || !ok {
+		return
+	}
+	klog.Infof("nodeDelete delete node: %v", node.Name)
+	adc.desiredStateOfWorld.DeleteNode(node.Name)
+}
 
 func (adc *attachDetachController) podAdd(obj interface{}) {
 	pod, ok := obj.(*v1.Pod)
 	if pod == nil || !ok {
 		return
 	}
-	klog.Infof("add pod : %v/%v\n", pod.Namespace, pod.Name)
+	klog.Infof("podAdd add pod : %v/%v\n", pod.Namespace, pod.Name)
 	volumeActionFlag := util.DetermineVolumeAction(
 		pod,
 		adc.desiredStateOfWorld,
