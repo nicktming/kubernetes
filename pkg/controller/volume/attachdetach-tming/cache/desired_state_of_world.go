@@ -68,7 +68,7 @@ type pod struct {
 }
 
 func (dsw *desiredStateOfWorld) GetKeepTerminatedPodVolumesForNode(nodeName k8stypes.NodeName) bool {
-	dsw.Lock()
+	dsw.RLock()
 	defer dsw.RUnlock()
 
 	if nodeName == "" {
