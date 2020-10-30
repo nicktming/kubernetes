@@ -11,7 +11,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/controller/volume/attachdetach-tming/cache"
-	"k8s.io/kubernetes/pkg/controller/volume/attachdetach/statusupdater"
+	"k8s.io/kubernetes/pkg/controller/volume/attachdetach-tming/statusupdater"
 	//kevents "k8s.io/kubernetes/pkg/kubelet/events"
 	"k8s.io/kubernetes/pkg/util/goroutinemap/exponentialbackoff"
 	//"k8s.io/kubernetes/pkg/volume"
