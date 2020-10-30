@@ -298,7 +298,7 @@ func (adc *attachDetachController) nodeAdd(obj interface{}) {
 		return
 	}
 	klog.Infof("nodeAdd add node: %v", node.Name)
-	adc.desiredStateOfWorld.AddNode(node.Name, false)
+	adc.desiredStateOfWorld.AddNode(types.NodeName(node.Name), false)
 }
 
 func (adc *attachDetachController) nodeDelete(obj interface{}) {
@@ -307,7 +307,7 @@ func (adc *attachDetachController) nodeDelete(obj interface{}) {
 		return
 	}
 	klog.Infof("nodeDelete delete node: %v", node.Name)
-	adc.desiredStateOfWorld.DeleteNode(node.Name)
+	adc.desiredStateOfWorld.DeleteNode(types.NodeName(node.Name))
 }
 
 func (adc *attachDetachController) podAdd(obj interface{}) {
