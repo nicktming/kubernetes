@@ -225,9 +225,9 @@ func startAttachDetachController(ctx ControllerContext) (http.Handler, bool, err
 			//ctx.Cloud,
 			ProbeAttachableVolumePlugins(),
 			//GetDynamicPluginProber(ctx.ComponentConfig.PersistentVolumeBinderController.VolumeConfiguration),
-			//ctx.ComponentConfig.AttachDetachController.DisableAttachDetachReconcilerSync,
-			//ctx.ComponentConfig.AttachDetachController.ReconcilerSyncLoopPeriod.Duration,
-			//attachdetach.DefaultTimerConfig,
+			ctx.ComponentConfig.AttachDetachController.DisableAttachDetachReconcilerSync,
+			ctx.ComponentConfig.AttachDetachController.ReconcilerSyncLoopPeriod.Duration,
+			attachdetach.DefaultTimerConfig,
 		)
 	if attachDetachControllerErr != nil {
 		return nil, true, fmt.Errorf("failed to start attach/detach controller: %v", attachDetachControllerErr)

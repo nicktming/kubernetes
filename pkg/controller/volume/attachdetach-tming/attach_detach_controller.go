@@ -28,6 +28,13 @@ import (
 	"net"
 	csiclient "k8s.io/csi-api/pkg/client/clientset/versioned"
 	authenticationv1 "k8s.io/api/authentication/v1"
+	"k8s.io/kubernetes/pkg/controller/volume/attachdetach-tming/reconciler"
+	"k8s.io/kubernetes/pkg/controller/volume/attachdetach-tming/populator"
+	"k8s.io/kubernetes/pkg/volume/util/operationexecutor"
+	"k8s.io/kubernetes/pkg/controller/volume/attachdetach-tming/statusupdater"
+	"k8s.io/kubernetes/pkg/volume/util/volumepathhandler"
+	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/kubernetes/scheme"
 )
 
 // TimerConfig contains configuration of internal attach/detach timers and
@@ -89,6 +96,12 @@ type attachDetachController struct {
 	desiredStateOfWorld cache.DesiredStateOfWorld
 
 	volumePluginMgr volume.VolumePluginMgr
+
+	reconciler reconciler.Reconciler
+	actualStateOfWorld cache.ActualStateOfWorld
+	attacherDetacher operationexecutor.OperationExecutor
+	nodeStatusUpdater statusupdater.NodeStatusUpdater
+	desiredStateOfWorldPopulator populator.DesiredStateOfWorldPopulator
 }
 
 func ProbeAttachableVolumePlugins() []volume.VolumePlugin {
@@ -105,7 +118,10 @@ func NewAttachDetachController(
 	nodeInformer 	coreinformers.NodeInformer,
 	pvcInformer 	coreinformers.PersistentVolumeClaimInformer,
 	pvInformer 	coreinformers.PersistentVolumeInformer,
-	plugins 	[]volume.VolumePlugin) (AttachDetachController, error) {
+	plugins 	[]volume.VolumePlugin,
+	disableReconciliationSync bool,
+	reconcilerSyncDuration time.Duration,
+	timerConfig TimerConfig) (AttachDetachController, error) {
 
 	adc := &attachDetachController{
 		kubeClient: 		kubeClient,
@@ -128,6 +144,12 @@ func NewAttachDetachController(
 		return nil, fmt.Errorf("Could not initialize volume plugins for Attach/Detach Controller: %+v", err)
 	}
 
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(klog.Infof)
+	eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
+	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "attachdetach-controller"})
+	blkutil := volumepathhandler.NewBlockVolumePathHandler()
+
 	podInformer.Informer().AddEventHandler(kcache.ResourceEventHandlerFuncs{
 		AddFunc: 	adc.podAdd,
 		UpdateFunc: 	adc.podUpdate,
@@ -140,6 +162,37 @@ func NewAttachDetachController(
 	})
 
 	adc.desiredStateOfWorld = cache.NewDesiredStateOfWorld(&adc.volumePluginMgr)
+	adc.actualStateOfWorld = cache.NewActualStateOfWorld(&adc.volumePluginMgr)
+	adc.attacherDetacher =
+		operationexecutor.NewOperationExecutor(operationexecutor.NewOperationGenerator(
+			kubeClient,
+			&adc.volumePluginMgr,
+			recorder,
+			false, // flag for experimental binary check for volume mount
+			blkutil))
+	adc.nodeStatusUpdater = statusupdater.NewNodeStatusUpdater(
+		kubeClient, nodeInformer.Lister(), adc.actualStateOfWorld)
+
+	// Default these to values in options
+	adc.reconciler = reconciler.NewReconciler(
+		timerConfig.ReconcilerLoopPeriod,
+		timerConfig.ReconcilerMaxWaitForUnmountDuration,
+		reconcilerSyncDuration,
+		disableReconciliationSync,
+		adc.desiredStateOfWorld,
+		adc.actualStateOfWorld,
+		adc.attacherDetacher,
+		adc.nodeStatusUpdater,
+		recorder)
+
+	adc.desiredStateOfWorldPopulator = populator.NewDesiredStateOfWorldPopulator(
+		timerConfig.DesiredStateOfWorldPopulatorLoopSleepPeriod,
+		timerConfig.DesiredStateOfWorldPopulatorListPodsRetryDuration,
+		podInformer.Lister(),
+		adc.desiredStateOfWorld,
+		&adc.volumePluginMgr,
+		pvcInformer.Lister(),
+		pvInformer.Lister())
 
 	// This custom indexer will index pods by its PVC keys. Then we don't need
 	// to iterate all pods every time to find pods which reference given PVC.
@@ -181,8 +234,8 @@ func (adc *attachDetachController) Run(stopCh <-chan struct{}) {
 	//if err != nil {
 	//	klog.Errorf("Error populating the desired state of world: %v", err)
 	//}
-	//go adc.reconciler.Run(stopCh)
-	//go adc.desiredStateOfWorldPopulator.Run(stopCh)
+	go adc.reconciler.Run(stopCh)
+	go adc.desiredStateOfWorldPopulator.Run(stopCh)
 	go wait.Until(adc.pvcWorker, time.Second, stopCh)
 
 	<-stopCh
@@ -315,6 +368,10 @@ func (adc *attachDetachController) podAdd(obj interface{}) {
 	if pod == nil || !ok {
 		return
 	}
+
+	if pod.Spec.NodeName == "" {
+		return
+	}
 	klog.Infof("podAdd add pod : %v/%v\n", pod.Namespace, pod.Name)
 	volumeActionFlag := util.DetermineVolumeAction(
 		pod,
@@ -329,6 +386,9 @@ func (adc *attachDetachController) podAdd(obj interface{}) {
 func (adc *attachDetachController) podUpdate(oldObj, newObj interface{}) {
 	pod, ok := newObj.(*v1.Pod)
 	if pod == nil || !ok {
+		return
+	}
+	if pod.Spec.NodeName == "" {
 		return
 	}
 	klog.Infof("podUpdate update pod : %v/%v\n", pod.Namespace, pod.Name)
@@ -347,14 +407,14 @@ func (adc *attachDetachController) podDelete(obj interface{}) {
 	if pod == nil || !ok {
 		return
 	}
-	klog.Infof("podDelete delete pod : %v/%v\n", pod.Namespace, pod.Name)
-	volumeActionFlag := util.DetermineVolumeAction(
-		pod,
-		adc.desiredStateOfWorld,
-		false)
-	klog.Infof("podDelete process pod %v/%v with action: %v (true represents addvolume, false represents deletevolume)",
-		pod.Namespace, pod.Name, volumeActionFlag)
-	util.ProcessPodVolumes(pod, volumeActionFlag, /* addVolumes */
+	//klog.Infof("podDelete delete pod : %v/%v\n", pod.Namespace, pod.Name)
+	//volumeActionFlag := util.DetermineVolumeAction(
+	//	pod,
+	//	adc.desiredStateOfWorld,
+	//	false)
+	//klog.Infof("podDelete process pod %v/%v with action: %v (true represents addvolume, false represents deletevolume)",
+	//	pod.Namespace, pod.Name, volumeActionFlag)
+	util.ProcessPodVolumes(pod, false,
 		adc.desiredStateOfWorld, &adc.volumePluginMgr, adc.pvcLister, adc.pvLister)
 }
 

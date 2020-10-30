@@ -159,7 +159,7 @@ func ProcessPodVolumes(pod *v1.Pod, addVolumes bool, desiredStateOfWorld cache.D
 	for _, podVolume := range pod.Spec.Volumes {
 		volumeSpec, err := CreateVolumeSpec(podVolume, pod.Namespace, pvcLister, pvLister)
 		if err != nil {
-			klog.V(10).Infof(
+			klog.Infof(
 				"Error processing volume %q for pod %q/%q: %v",
 				podVolume.Name,
 				pod.Namespace,
@@ -171,7 +171,7 @@ func ProcessPodVolumes(pod *v1.Pod, addVolumes bool, desiredStateOfWorld cache.D
 		attachableVolumePlugin, err :=
 			volumePluginMgr.FindAttachablePluginBySpec(volumeSpec)
 		if err != nil || attachableVolumePlugin == nil {
-			klog.V(10).Infof(
+			klog.Infof(
 				"Skipping volume %q for pod %q/%q: it does not implement attacher interface. err=%v",
 				podVolume.Name,
 				pod.Namespace,

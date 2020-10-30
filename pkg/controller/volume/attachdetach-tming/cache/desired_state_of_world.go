@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"k8s.io/kubernetes/pkg/volume/util"
 	"k8s.io/klog"
+	"k8s.io/kubernetes/pkg/volume/util/operationexecutor"
 )
 
 type DesiredStateOfWorld interface {
@@ -28,6 +29,13 @@ type DesiredStateOfWorld interface {
 
 	AddPod(podName types.UniquePodName, pod *v1.Pod, volumeSpec *volume.Spec, nodeName k8stypes.NodeName) (v1.UniqueVolumeName, error)
 
+	GetPodToAdd() map[types.UniquePodName]PodToAdd
+
+	GetVolumesToAttach() []VolumeToAttach
+}
+
+type VolumeToAttach struct {
+	operationexecutor.VolumeToAttach
 }
 
 type desiredStateOfWorld struct {
@@ -67,6 +75,12 @@ type pod struct {
 	podObj 				*v1.Pod
 }
 
+type PodToAdd struct {
+	Pod 				*v1.Pod
+	VolumeName 			v1.UniqueVolumeName
+	NodeName 			k8stypes.NodeName
+}
+
 func (dsw *desiredStateOfWorld) GetKeepTerminatedPodVolumesForNode(nodeName k8stypes.NodeName) bool {
 	dsw.RLock()
 	defer dsw.RUnlock()
@@ -101,6 +115,25 @@ func NewDesiredStateOfWorld(volumePluginMgr *volume.VolumePluginMgr) DesiredStat
 		nodesManaged: 		make(map[k8stypes.NodeName]nodeManaged),
 		volumePluginMgr: 	volumePluginMgr,
 	}
+}
+
+func (dsw *desiredStateOfWorld) GetPodToAdd() map[types.UniquePodName]PodToAdd {
+	dsw.RLock()
+	defer dsw.RUnlock()
+
+	pods := make(map[types.UniquePodName]PodToAdd)
+	for nodeName, nodeObj := range dsw.nodesManaged {
+		for volumeName, volToAtt := range nodeObj.volumesToAttach {
+			for podUID, pod := range volToAtt.scheduledPods {
+				pods[podUID] = PodToAdd{
+					Pod: 		pod,
+					VolumeName:  	volumeName,
+					NodeName: 	nodeName,
+				}
+			}
+		}
+	}
+	return pods
 }
 
 func (dsw *desiredStateOfWorld) VolumeExists(
@@ -164,6 +197,10 @@ func (dsw *desiredStateOfWorld) AddPod(podName types.UniquePodName,
 
 	klog.Infof("desiredStateOfWorld AddPod volumeName: %v", volumeName)
 	//volumeName:kubernetes.io/rbd/kube:kubernetes-dynamic-pvc-795c5562-1996-11eb-b1a2-525400a3880b
+	// pluginName: kubernetes.io/rbd
+	// volumePlugin.GetVolumeName(volumeSpec)
+	// 针对rbd 会从pv的rbdimage来组装 rbdimage为: kubernetes-dynamic-pvc-795c5562-1996-11eb-b1a2-525400a3880b
+	// 所以使用的同一个image会有同一个volumeName
 
 	// 某一个节点中volume
 	// dsw.nodesManaged[node1]volumesToAttach[rbd/pvc-1]scheduledPods[podName]
@@ -240,6 +277,90 @@ nodeName k8stypes.NodeName) {
 			volumeName)
 	}
 }
+
+func (dsw *desiredStateOfWorld) GetVolumesToAttach() []VolumeToAttach {
+	dsw.RLock()
+	defer dsw.RUnlock()
+
+	volumesToAttach := make([]VolumeToAttach, 0, len(dsw.nodesManaged))
+	for nodeName, nodeObj := range dsw.nodesManaged {
+		for volumeName, volumeObj := range nodeObj.volumesToAttach {
+			volumesToAttach = append(volumesToAttach,
+					VolumeToAttach {
+						VolumeToAttach: operationexecutor.VolumeToAttach{
+							MultiAttachErrorReported: 	volumeObj.multiAttachErrorReported,
+							VolumeName: 			volumeName,
+							VolumeSpec: 			volumeObj.spec,
+							NodeName:			nodeName,
+							ScheduledPods: 			getPodsFromMap(volumeObj.scheduledPods),
+						}})
+		}
+	}
+}
+
+func getPodsFromMap(podMap map[types.UniquePodName]pod) []*v1.Pod {
+	pods := make([]*v1.Pod, 0, len(podMap))
+	for _, pod := range podMap {
+		pods = append(pods, pod.podObj)
+	}
+	return pods
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
