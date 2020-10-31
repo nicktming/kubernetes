@@ -518,24 +518,6 @@ func (asw *actualStateOfWorld) GetAttachedVolumesPerNode() map[types.NodeName][]
 	return attachedVolumesPerNode
 }
 
-func (asw *actualStateOfWorld) GetNodesForAttachedVolume(volumeName v1.UniqueVolumeName) []types.NodeName {
-	asw.RLock()
-	defer asw.RUnlock()
-
-	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
-	if !volumeExists || len(volumeObj.nodesAttachedTo) == 0 {
-		return []types.NodeName{}
-	}
-
-	nodes := []types.NodeName{}
-	for k, nodesAttached := range volumeObj.nodesAttachedTo {
-		if nodesAttached.attachedConfirmed {
-			nodes = append(nodes, k)
-		}
-	}
-	return nodes
-}
-
 func (asw *actualStateOfWorld) GetNodesToUpdateStatusFor() map[types.NodeName]nodeToUpdateStatusFor {
 	return asw.nodesToUpdateStatusFor
 }
