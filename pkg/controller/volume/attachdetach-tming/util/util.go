@@ -192,6 +192,7 @@ func ProcessPodVolumes(pod *v1.Pod, addVolumes bool, desiredStateOfWorld cache.D
 					err)
 			}
 		} else {
+			desiredStateOfWorld.DeletePod(uniquePodName, pod, nodeName)
 			klog.Infof(
 				"delete volume %q for pod %q/%q to desiredStateOfWorld.",
 				podVolume.Name,

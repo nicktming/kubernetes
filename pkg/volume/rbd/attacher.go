@@ -173,6 +173,7 @@ func (attacher *rbdAttacher) MountDevice(spec *volume.Spec, devicePath string, d
 		return fmt.Errorf("rbd: failed to mount device %s at %s (fstype: %s), error %v", devicePath, deviceMountPath, fstype, err)
 	}
 	klog.V(3).Infof("rbd: successfully mount device %s at %s (fstype: %s)", devicePath, deviceMountPath, fstype)
+	klog.Infof("============>rbd: successfully mount device %s at %s (fstype: %s)", devicePath, deviceMountPath, fstype)
 	return nil
 }
 
