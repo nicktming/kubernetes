@@ -158,6 +158,7 @@ func NewAttachDetachController(
 
 	nodeInformer.Informer().AddEventHandler(kcache.ResourceEventHandlerFuncs{
 		AddFunc: 	adc.nodeAdd,
+		UpdateFunc: 	adc.nodeUpdate,
 		DeleteFunc:	adc.nodeDelete,
 	})
 
@@ -461,7 +462,7 @@ func (adc *attachDetachController) podDelete(obj interface{}) {
 	if pod == nil || !ok {
 		return
 	}
-	//klog.Infof("podDelete delete pod : %v/%v\n", pod.Namespace, pod.Name)
+	klog.Infof("======>podDelete delete pod : %v/%v\n", pod.Namespace, pod.Name)
 	//volumeActionFlag := util.DetermineVolumeAction(
 	//	pod,
 	//	adc.desiredStateOfWorld,
