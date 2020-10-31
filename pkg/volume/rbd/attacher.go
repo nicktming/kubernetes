@@ -88,6 +88,7 @@ var _ volume.DeviceMounter = &rbdAttacher{}
 // controller will not try to attach RWO volumes which are already attached to
 // other nodes.
 func (attacher *rbdAttacher) Attach(spec *volume.Spec, nodeName types.NodeName) (string, error) {
+	klog.Infof("==============>rbdAttacher Attach")
 	return "", nil
 }
 
