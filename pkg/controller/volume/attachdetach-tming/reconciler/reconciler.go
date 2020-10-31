@@ -87,6 +87,72 @@ func (rc *reconciler) reconciliationLoopFunc() func() {
 func (rc *reconciler) reconcile() {
 	// TODO Ensure volumes that should be detached are detached
 
+	// Ensure volumes that should be detached are detached.
+	for _, attachedVolume := range rc.actualStateOfWorld.GetAttachedVolumes() {
+		if !rc.desiredStateOfWorld.VolumeExists(
+			attachedVolume.VolumeName, attachedVolume.NodeName) {
+			// Don't even try to start an operation if there is already one running
+			// This check must be done before we do any other checks, as otherwise the other checks
+			// may pass while at the same time the volume leaves the pending state, resulting in
+			// double detach attempts
+			if rc.attacherDetacher.IsOperationPending(attachedVolume.VolumeName, "") {
+				klog.V(10).Infof("Operation for volume %q is already running. Can't start detach for %q", attachedVolume.VolumeName, attachedVolume.NodeName)
+				continue
+			}
+
+			// Set the detach request time
+			elapsedTime, err := rc.actualStateOfWorld.SetDetachRequestTime(attachedVolume.VolumeName, attachedVolume.NodeName)
+			if err != nil {
+				klog.Errorf("Cannot trigger detach because it fails to set detach request time with error %v", err)
+				continue
+			}
+			// Check whether timeout has reached the maximum waiting time
+			timeout := elapsedTime > rc.maxWaitForUnmountDuration
+			// Check whether volume is still mounted. Skip detach if it is still mounted unless timeout
+			if attachedVolume.MountedByNode && !timeout {
+				klog.V(5).Infof(attachedVolume.GenerateMsgDetailed("Cannot detach volume because it is still mounted", ""))
+				continue
+			}
+
+			// Before triggering volume detach, mark volume as detached and update the node status
+			// If it fails to update node status, skip detach volume
+			err = rc.actualStateOfWorld.RemoveVolumeFromReportAsAttached(attachedVolume.VolumeName, attachedVolume.NodeName)
+			if err != nil {
+				klog.V(5).Infof("RemoveVolumeFromReportAsAttached failed while removing volume %q from node %q with: %v",
+					attachedVolume.VolumeName,
+					attachedVolume.NodeName,
+					err)
+			}
+
+			// Update Node Status to indicate volume is no longer safe to mount.
+			err = rc.nodeStatusUpdater.UpdateNodeStatuses()
+			if err != nil {
+				// Skip detaching this volume if unable to update node status
+				klog.Errorf(attachedVolume.GenerateErrorDetailed("UpdateNodeStatuses failed while attempting to report volume as attached", err).Error())
+				continue
+			}
+
+			// Trigger detach volume which requires verifing safe to detach step
+			// If timeout is true, skip verifySafeToDetach check
+			klog.V(5).Infof(attachedVolume.GenerateMsgDetailed("Starting attacherDetacher.DetachVolume", ""))
+			verifySafeToDetach := !timeout
+			err = rc.attacherDetacher.DetachVolume(attachedVolume.AttachedVolume, verifySafeToDetach, rc.actualStateOfWorld)
+			if err == nil {
+				if !timeout {
+					klog.Infof(attachedVolume.GenerateMsgDetailed("attacherDetacher.DetachVolume started", ""))
+				} else {
+					//metrics.RecordForcedDetachMetric()
+					klog.Warningf(attachedVolume.GenerateMsgDetailed("attacherDetacher.DetachVolume started", fmt.Sprintf("This volume is not safe to detach, but maxWaitForUnmountDuration %v expired, force detaching", rc.maxWaitForUnmountDuration)))
+				}
+			}
+			if err != nil && !exponentialbackoff.IsExponentialBackoff(err) {
+				// Ignore exponentialbackoff.IsExponentialBackoff errors, they are expected.
+				// Log all other errors.
+				klog.Errorf(attachedVolume.GenerateErrorDetailed("attacherDetacher.DetachVolume failed to start", err).Error())
+			}
+		}
+	}
+
 	rc.attachDesiredVolumes()
 
 	// Update Node Status
@@ -100,7 +166,7 @@ func (rc *reconciler) attachDesiredVolumes() {
 	// Ensure volumes that should be attached are attached
 	for _, volumeToAttach := range rc.desiredStateOfWorld.GetVolumesToAttach() {
 		if rc.actualStateOfWorld.IsVolumeAttachedToNode(volumeToAttach.VolumeName, volumeToAttach.NodeName) {
-			klog.Infof(volumeToAttach.GenerateMsgDetailed("Volume attached--touching", ""))
+			//klog.Infof(volumeToAttach.GenerateMsgDetailed("Volume attached--touching", ""))
 			// TODO reset detach request time
 			rc.actualStateOfWorld.ResetDetachRequestTime(volumeToAttach.VolumeName, volumeToAttach.NodeName)
 			continue

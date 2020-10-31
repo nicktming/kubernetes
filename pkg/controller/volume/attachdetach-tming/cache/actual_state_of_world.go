@@ -28,6 +28,10 @@ type ActualStateOfWorld interface {
 
 	GetVolumesToReportAttached() map[types.NodeName][]v1.AttachedVolume
 
+	GetAttachedVolumes() []AttachedVolume
+
+	SetDetachRequestTime(volumeName v1.UniqueVolumeName, nodeName types.NodeName) (time.Duration, error)
+
 
 }
 
@@ -459,6 +463,117 @@ func (asw *actualStateOfWorld) GetVolumesToReportAttached() map[types.NodeName][
 }
 
 
+func (asw *actualStateOfWorld) GetAttachedVolumes() []AttachedVolume {
+	asw.RLock()
+	defer asw.RUnlock()
+
+	attachedVolumes := make([]AttachedVolume, 0 /* len */, len(asw.attachedVolumes) /* cap */)
+	for _, volumeObj := range asw.attachedVolumes {
+		for _, nodeObj := range volumeObj.nodesAttachedTo {
+			attachedVolumes = append(
+				attachedVolumes,
+				getAttachedVolume(&volumeObj, &nodeObj))
+		}
+	}
+
+	return attachedVolumes
+}
+
+func (asw *actualStateOfWorld) GetAttachedVolumesForNode(
+nodeName types.NodeName) []AttachedVolume {
+	asw.RLock()
+	defer asw.RUnlock()
+
+	attachedVolumes := make(
+	[]AttachedVolume, 0 /* len */, len(asw.attachedVolumes) /* cap */)
+	for _, volumeObj := range asw.attachedVolumes {
+		for actualNodeName, nodeObj := range volumeObj.nodesAttachedTo {
+			if actualNodeName == nodeName {
+				attachedVolumes = append(
+					attachedVolumes,
+					getAttachedVolume(&volumeObj, &nodeObj))
+				break
+			}
+		}
+	}
+
+	return attachedVolumes
+}
+
+func (asw *actualStateOfWorld) GetAttachedVolumesPerNode() map[types.NodeName][]operationexecutor.AttachedVolume {
+	asw.RLock()
+	defer asw.RUnlock()
+
+	attachedVolumesPerNode := make(map[types.NodeName][]operationexecutor.AttachedVolume)
+	for _, volumeObj := range asw.attachedVolumes {
+		for nodeName, nodeObj := range volumeObj.nodesAttachedTo {
+			if nodeObj.attachedConfirmed {
+				volumes := attachedVolumesPerNode[nodeName]
+				volumes = append(volumes, getAttachedVolume(&volumeObj, &nodeObj).AttachedVolume)
+				attachedVolumesPerNode[nodeName] = volumes
+			}
+		}
+	}
+
+	return attachedVolumesPerNode
+}
+
+func (asw *actualStateOfWorld) GetNodesForAttachedVolume(volumeName v1.UniqueVolumeName) []types.NodeName {
+	asw.RLock()
+	defer asw.RUnlock()
+
+	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
+	if !volumeExists || len(volumeObj.nodesAttachedTo) == 0 {
+		return []types.NodeName{}
+	}
+
+	nodes := []types.NodeName{}
+	for k, nodesAttached := range volumeObj.nodesAttachedTo {
+		if nodesAttached.attachedConfirmed {
+			nodes = append(nodes, k)
+		}
+	}
+	return nodes
+}
+
+func (asw *actualStateOfWorld) GetNodesToUpdateStatusFor() map[types.NodeName]nodeToUpdateStatusFor {
+	return asw.nodesToUpdateStatusFor
+}
+
+func getAttachedVolume(
+attachedVolume *attachedVolume,
+nodeAttachedTo *nodeAttachedTo) AttachedVolume {
+	return AttachedVolume{
+		AttachedVolume: operationexecutor.AttachedVolume{
+			VolumeName:         attachedVolume.volumeName,
+			VolumeSpec:         attachedVolume.spec,
+			NodeName:           nodeAttachedTo.nodeName,
+			DevicePath:         attachedVolume.devicePath,
+			PluginIsAttachable: true,
+		},
+		MountedByNode:       nodeAttachedTo.mountedByNode,
+		DetachRequestedTime: nodeAttachedTo.detachRequestedTime}
+}
+
+func (asw *actualStateOfWorld) SetDetachRequestTime(
+volumeName v1.UniqueVolumeName, nodeName types.NodeName) (time.Duration, error) {
+	asw.Lock()
+	defer asw.Unlock()
+
+	volumeObj, nodeObj, err := asw.getNodeAndVolume(volumeName, nodeName)
+	if err != nil {
+		return 0, fmt.Errorf("Failed to set detach request time with error: %v", err)
+	}
+	// If there is no previous detach request, set it to the current time
+	if nodeObj.detachRequestedTime.IsZero() {
+		nodeObj.detachRequestedTime = time.Now()
+		volumeObj.nodesAttachedTo[nodeName] = nodeObj
+		klog.V(4).Infof("Set detach request time to current time for volume %v on node %q",
+			volumeName,
+			nodeName)
+	}
+	return time.Since(nodeObj.detachRequestedTime), nil
+}
 
 
 
