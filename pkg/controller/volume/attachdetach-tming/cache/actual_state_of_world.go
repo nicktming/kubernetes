@@ -10,7 +10,7 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/volume"
-	//"k8s.io/kubernetes/pkg/volume/util"
+	"k8s.io/kubernetes/pkg/volume/util"
 	"k8s.io/kubernetes/pkg/volume/util/operationexecutor"
 )
 
@@ -180,7 +180,7 @@ func (asw *actualStateOfWorld) ResetDetachRequestTime(
 
 func (asw *actualStateOfWorld) MarkVolumeAsAttached(
 uniqueName v1.UniqueVolumeName, volumeSpec *volume.Spec, nodeName types.NodeName, devicePath string) error {
-	//_, err := asw.AddVolumeNode(uniqueName, volumeSpec, nodeName, devicePath, true)
+	_, err := asw.AddVolumeNode(uniqueName, volumeSpec, nodeName, devicePath, true)
 
 	klog.Infof("=====>volumename:%v nodeName: %v devicePath: %v mark as attached", uniqueName, nodeName, devicePath)
 	return nil
@@ -220,7 +220,81 @@ volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
 	klog.Infof("=====>volumename:%v nodeName: %v mark as uncertain", volumeName, nodeName)
 }
 
+func (asw *actualStateOfWorld) AddVolumeNode(
+	uniqueName v1.UniqueVolumeName, volumeSpec *volume.Spec,
+	nodeName types.NodeName, devicePath string, isAttached bool) (v1.UniqueVolumeName, error) {
 
+	asw.Lock()
+	defer asw.Unlock()
+
+	volumeName := uniqueName
+	if volumeName == "" {
+		if volumeSpec == nil {
+			return volumeName, fmt.Errorf("volumeSpec cannot be nil if volumeName is empty")
+		}
+		attachableVolumePlugin, err := asw.volumePluginMgr.FindAttachablePluginBySpec(volumeSpec)
+		if err != nil || attachableVolumePlugin == nil {
+			return "", fmt.Errorf(
+				"failed to get AttachablePlugin from volumeSpec for volume %q err=%v",
+				volumeSpec.Name(),
+				err)
+		}
+
+		volumeName, err = util.GetUniqueVolumeNameFromSpec(
+			attachableVolumePlugin, volumeSpec)
+		if err != nil {
+			return "", fmt.Errorf(
+				"failed to GetUniqueVolumeNameFromSpec for volumeSpec %q err=%v",
+				volumeSpec.Name(),
+				err)
+		}
+	}
+
+	klog.Infof("actualStateOfWorld AddVolumeNode volumeName: %v, nodeName: %v", volumeName, nodeName)
+
+	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
+	if !volumeExists {
+		volumeObj = attachedVolume{
+			volumeName:      volumeName,
+			spec:            volumeSpec,
+			nodesAttachedTo: make(map[types.NodeName]nodeAttachedTo),
+			devicePath:      devicePath,
+		}
+	} else {
+		// If volume object already exists, it indicates that the information would be out of date.
+		// Update the fields for volume object except the nodes attached to the volumes.
+		volumeObj.devicePath = devicePath
+		volumeObj.spec = volumeSpec
+		klog.Infof("Volume %q is already added to attachedVolume list to node %q, update device path %q",
+			volumeName,
+			nodeName,
+			devicePath)
+	}
+	node, nodeExists := volumeObj.nodesAttachedTo[nodeName]
+	if !nodeExists {
+		// Create object if it doesn't exist.
+		node = nodeAttachedTo{
+			nodeName:            nodeName,
+			mountedByNode:       true, // Assume mounted, until proven otherwise
+			attachedConfirmed:   isAttached,
+			detachRequestedTime: time.Time{},
+		}
+	} else {
+		node.attachedConfirmed = isAttached
+		klog.Infof("Volume %q is already added to attachedVolume list to the node %q, the current attach state is %t",
+			volumeName,
+			nodeName,
+			isAttached)
+	}
+
+	volumeObj.nodesAttachedTo[nodeName] = node
+	asw.attachedVolumes[volumeName] = volumeObj
+
+	//if isAttached {
+	//	asw.addVolumeToReportAsAttached(volumeName, nodeName)
+	//}
+	return volumeName, nil
+}
 
 
 
