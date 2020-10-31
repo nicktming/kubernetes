@@ -192,12 +192,20 @@ func ProcessPodVolumes(pod *v1.Pod, addVolumes bool, desiredStateOfWorld cache.D
 					err)
 			}
 		} else {
-			desiredStateOfWorld.DeletePod(uniquePodName, pod, nodeName)
-			klog.Infof(
-				"delete volume %q for pod %q/%q to desiredStateOfWorld.",
-				podVolume.Name,
-				pod.Namespace,
-				pod.Name)
+			// Remove volume from desired state of world
+			uniqueVolumeName, err := util.GetUniqueVolumeNameFromSpec(
+				attachableVolumePlugin, volumeSpec)
+			if err != nil {
+				klog.V(10).Infof(
+					"Failed to delete volume %q for pod %q/%q from desiredStateOfWorld. GetUniqueVolumeNameFromSpec failed with %v",
+					podVolume.Name,
+					pod.Namespace,
+					pod.Name,
+					err)
+				continue
+			}
+			desiredStateOfWorld.DeletePod(
+				uniquePodName, uniqueVolumeName, nodeName)
 		}
 	}
 
