@@ -33,6 +33,13 @@ type ActualStateOfWorld interface {
 	SetDetachRequestTime(volumeName v1.UniqueVolumeName, nodeName types.NodeName) (time.Duration, error)
 
 
+	SetVolumeMountedByNode(volumeName v1.UniqueVolumeName, nodeName types.NodeName, mounted bool) error
+
+	GetAttachedVolumesForNode(nodeName types.NodeName) []AttachedVolume
+
+	GetAttachedVolumesPerNode() map[types.NodeName][]operationexecutor.AttachedVolume
+
+	GetNodesForAttachedVolume(volumeName v1.UniqueVolumeName) []types.NodeName
 }
 
 // AttachedVolume represents a volume that is attached to a node.
@@ -558,7 +565,30 @@ volumeName v1.UniqueVolumeName, nodeName types.NodeName) (time.Duration, error) 
 	return time.Since(nodeObj.detachRequestedTime), nil
 }
 
+// 确认一个volume有没有被mount, 只是从volumeInUse中得到, 如果volumeInUse有, 则表示mount
+// volumeInUse在volume_manager中获取, volume是desired volumes or attached volumes就表示in use
+// volumeInUse有两种地方会更新:
+// 1. kubelet的node condition方法中
+// 2. attachdetachcontroller中node刚刚起来的时候
 
+func (asw *actualStateOfWorld) SetVolumeMountedByNode(
+volumeName v1.UniqueVolumeName, nodeName types.NodeName, mounted bool) error {
+	asw.Lock()
+	defer asw.Unlock()
+
+	volumeObj, nodeObj, err := asw.getNodeAndVolume(volumeName, nodeName)
+	if err != nil {
+		return fmt.Errorf("Failed to SetVolumeMountedByNode with error: %v", err)
+	}
+
+	nodeObj.mountedByNode = mounted
+	volumeObj.nodesAttachedTo[nodeName] = nodeObj
+	klog.V(4).Infof("SetVolumeMountedByNode volume %v to the node %q mounted %t",
+		volumeName,
+		nodeName,
+		mounted)
+	return nil
+}
 
 
 

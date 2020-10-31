@@ -347,21 +347,75 @@ func (adc *attachDetachController) syncPVCByKey(key string) error {
 
 func (adc *attachDetachController) nodeAdd(obj interface{}) {
 	node, ok := obj.(*v1.Node)
+	// TODO: investigate if nodeName is empty then if we can return
+	// kubernetes/kubernetes/issues/37777
 	if node == nil || !ok {
 		return
 	}
-	klog.Infof("nodeAdd add node: %v", node.Name)
-	adc.desiredStateOfWorld.AddNode(types.NodeName(node.Name), false)
+	nodeName := types.NodeName(node.Name)
+	adc.nodeUpdate(nil, obj)
+	// kubernetes/kubernetes/issues/37586
+	// This is to workaround the case when a node add causes to wipe out
+	// the attached volumes field. This function ensures that we sync with
+	// the actual status.
+	adc.actualStateOfWorld.SetNodeStatusUpdateNeeded(nodeName)
 }
+
+func (adc *attachDetachController) nodeUpdate(oldObj, newObj interface{}) {
+	node, ok := newObj.(*v1.Node)
+	// TODO: investigate if nodeName is empty then if we can return
+	if node == nil || !ok {
+		return
+	}
+
+	nodeName := types.NodeName(node.Name)
+	adc.addNodeToDswp(node, nodeName)
+	adc.processVolumesInUse(nodeName, node.Status.VolumesInUse)
+}
+
+
+
+// processVolumesInUse processes the list of volumes marked as "in-use"
+// according to the specified Node's Status.VolumesInUse and updates the
+// corresponding volume in the actual state of the world to indicate that it is
+// mounted.
+func (adc *attachDetachController) processVolumesInUse(
+nodeName types.NodeName, volumesInUse []v1.UniqueVolumeName) {
+	klog.V(4).Infof("processVolumesInUse for node %q", nodeName)
+	for _, attachedVolume := range adc.actualStateOfWorld.GetAttachedVolumesForNode(nodeName) {
+		mounted := false
+		for _, volumeInUse := range volumesInUse {
+			if attachedVolume.VolumeName == volumeInUse {
+				mounted = true
+				break
+			}
+		}
+		err := adc.actualStateOfWorld.SetVolumeMountedByNode(attachedVolume.VolumeName, nodeName, mounted)
+		if err != nil {
+			klog.Warningf(
+				"SetVolumeMountedByNode(%q, %q, %v) returned an error: %v",
+				attachedVolume.VolumeName, nodeName, mounted, err)
+		}
+	}
+}
+
+
 
 func (adc *attachDetachController) nodeDelete(obj interface{}) {
 	node, ok := obj.(*v1.Node)
 	if node == nil || !ok {
 		return
 	}
-	klog.Infof("nodeDelete delete node: %v", node.Name)
-	adc.desiredStateOfWorld.DeleteNode(types.NodeName(node.Name))
+
+	nodeName := types.NodeName(node.Name)
+	if err := adc.desiredStateOfWorld.DeleteNode(nodeName); err != nil {
+		// This might happen during drain, but we still want it to appear in our logs
+		klog.Infof("error removing node %q from desired-state-of-world: %v", nodeName, err)
+	}
+
+	adc.processVolumesInUse(nodeName, node.Status.VolumesInUse)
 }
+
 
 func (adc *attachDetachController) podAdd(obj interface{}) {
 	pod, ok := obj.(*v1.Pod)
