@@ -253,6 +253,7 @@ volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
 func (asw *actualStateOfWorld) removeVolumeFromReportAsAttached(
 volumeName v1.UniqueVolumeName, nodeName types.NodeName) error {
 
+	klog.Infof("=====>removeVolumeFromReportAsAttached volumename:%v nodeName: %v remove from report as attached", volumeName, nodeName)
 	nodeToUpdate, nodeToUpdateExists := asw.nodesToUpdateStatusFor[nodeName]
 	if nodeToUpdateExists {
 		_, nodeToUpdateVolumeExists :=

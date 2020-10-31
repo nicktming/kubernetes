@@ -110,7 +110,7 @@ func (rc *reconciler) reconcile() {
 			timeout := elapsedTime > rc.maxWaitForUnmountDuration
 			// Check whether volume is still mounted. Skip detach if it is still mounted unless timeout
 			if attachedVolume.MountedByNode && !timeout {
-				klog.V(5).Infof(attachedVolume.GenerateMsgDetailed("Cannot detach volume because it is still mounted", ""))
+				klog.Infof(attachedVolume.GenerateMsgDetailed("Cannot detach volume because it is still mounted", ""))
 				continue
 			}
 
@@ -134,7 +134,7 @@ func (rc *reconciler) reconcile() {
 
 			// Trigger detach volume which requires verifing safe to detach step
 			// If timeout is true, skip verifySafeToDetach check
-			klog.V(5).Infof(attachedVolume.GenerateMsgDetailed("Starting attacherDetacher.DetachVolume", ""))
+			klog.Infof(attachedVolume.GenerateMsgDetailed("Starting attacherDetacher.DetachVolume", ""))
 			verifySafeToDetach := !timeout
 			err = rc.attacherDetacher.DetachVolume(attachedVolume.AttachedVolume, verifySafeToDetach, rc.actualStateOfWorld)
 			if err == nil {
