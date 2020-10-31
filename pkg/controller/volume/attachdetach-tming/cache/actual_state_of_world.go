@@ -23,6 +23,12 @@ type ActualStateOfWorld interface {
 	// ResetDetachRequestTime resets the detachRequestTime to 0 which indicates there is no detach
 	// request any more for the volume
 	ResetDetachRequestTime(volumeName v1.UniqueVolumeName, nodeName types.NodeName)
+
+	SetNodeStatusUpdateNeeded(nodeName types.NodeName)
+
+	GetVolumesToReportAttached() map[types.NodeName][]v1.AttachedVolume
+
+
 }
 
 // AttachedVolume represents a volume that is attached to a node.
@@ -191,7 +197,7 @@ uniqueName v1.UniqueVolumeName, volumeSpec *volume.Spec, nodeName types.NodeName
 
 func (asw *actualStateOfWorld) MarkVolumeAsDetached(
 volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
-	//asw.DeleteVolumeNode(volumeName, nodeName)
+	asw.DeleteVolumeNode(volumeName, nodeName)
 
 	klog.Infof("=====>volumename:%v nodeName: %v mark as detached", volumeName, nodeName)
 }
@@ -199,7 +205,7 @@ volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
 func (asw *actualStateOfWorld) MarkVolumeAsUncertain(
 uniqueName v1.UniqueVolumeName, volumeSpec *volume.Spec, nodeName types.NodeName) error {
 
-	//_, err := asw.AddVolumeNode(uniqueName, volumeSpec, nodeName, "", false /* isAttached */)
+	asw.AddVolumeNode(uniqueName, volumeSpec, nodeName, "", false /* isAttached */)
 
 	klog.Infof("=====>volumename:%v nodeName: %v mark as uncertain", uniqueName, nodeName)
 	return nil
@@ -209,17 +215,62 @@ func (asw *actualStateOfWorld) RemoveVolumeFromReportAsAttached(
 volumeName v1.UniqueVolumeName, nodeName types.NodeName) error {
 	asw.Lock()
 	defer asw.Unlock()
-	//return asw.removeVolumeFromReportAsAttached(volumeName, nodeName)
+	return asw.removeVolumeFromReportAsAttached(volumeName, nodeName)
 
-	klog.Infof("=====>volumename:%v nodeName: %v mark as uncertain", volumeName, nodeName)
-	return nil
+	//klog.Infof("=====>volumename:%v nodeName: %v mark as uncertain", volumeName, nodeName)
+	//return nil
+}
+
+func (asw *actualStateOfWorld) DeleteVolumeNode(
+volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
+	asw.Lock()
+	defer asw.Unlock()
+
+	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
+	if !volumeExists {
+		return
+	}
+
+	_, nodeExists := volumeObj.nodesAttachedTo[nodeName]
+	if nodeExists {
+		delete(asw.attachedVolumes[volumeName].nodesAttachedTo, nodeName)
+	}
+
+	if len(volumeObj.nodesAttachedTo) == 0 {
+		delete(asw.attachedVolumes, volumeName)
+	}
+
+	// Remove volume from volumes to report as attached
+	asw.removeVolumeFromReportAsAttached(volumeName, nodeName)
+}
+
+// Remove the volumeName from the node's volumesToReportAsAttached list
+// This is an internal function and caller should acquire and release the lock
+func (asw *actualStateOfWorld) removeVolumeFromReportAsAttached(
+volumeName v1.UniqueVolumeName, nodeName types.NodeName) error {
+
+	nodeToUpdate, nodeToUpdateExists := asw.nodesToUpdateStatusFor[nodeName]
+	if nodeToUpdateExists {
+		_, nodeToUpdateVolumeExists :=
+			nodeToUpdate.volumesToReportAsAttached[volumeName]
+		if nodeToUpdateVolumeExists {
+			nodeToUpdate.statusUpdateNeeded = true
+			delete(nodeToUpdate.volumesToReportAsAttached, volumeName)
+			asw.nodesToUpdateStatusFor[nodeName] = nodeToUpdate
+			return nil
+		}
+	}
+	return fmt.Errorf("volume %q does not exist in volumesToReportAsAttached list or node %q does not exist in nodesToUpdateStatusFor list",
+		volumeName,
+		nodeName)
+
 }
 
 func (asw *actualStateOfWorld) AddVolumeToReportAsAttached(
 volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
 	asw.Lock()
 	defer asw.Unlock()
-	//asw.addVolumeToReportAsAttached(volumeName, nodeName)
+	asw.addVolumeToReportAsAttached(volumeName, nodeName)
 	klog.Infof("=====>volumename:%v nodeName: %v mark as uncertain", volumeName, nodeName)
 }
 
@@ -358,6 +409,54 @@ func (asw *actualStateOfWorld) SetNodeStatusUpdateNeeded(nodeName types.NodeName
 }
 
 
+func (asw *actualStateOfWorld) GetNodesForAttachedVolume(volumeName v1.UniqueVolumeName) []types.NodeName {
+	asw.RLock()
+	defer asw.RUnlock()
+
+	volumeObj, volumeExists := asw.attachedVolumes[volumeName]
+	if !volumeExists || len(volumeObj.nodesAttachedTo) == 0 {
+		return []types.NodeName{}
+	}
+
+	nodes := []types.NodeName{}
+	for k, nodesAttached := range volumeObj.nodesAttachedTo {
+		if nodesAttached.attachedConfirmed {
+			nodes = append(nodes, k)
+		}
+	}
+	return nodes
+}
+
+func (asw *actualStateOfWorld) GetVolumesToReportAttached() map[types.NodeName][]v1.AttachedVolume {
+	asw.RLock()
+	defer asw.RUnlock()
+
+	volumesToReportAttached := make(map[types.NodeName][]v1.AttachedVolume)
+	for nodeName, nodeToUpdateObj := range asw.nodesToUpdateStatusFor {
+		if nodeToUpdateObj.statusUpdateNeeded {
+			attachedVolumes := make(
+			[]v1.AttachedVolume,
+				len(nodeToUpdateObj.volumesToReportAsAttached) /* len */)
+			i := 0
+			for _, volume := range nodeToUpdateObj.volumesToReportAsAttached {
+				attachedVolumes[i] = v1.AttachedVolume{
+					Name:       volume,
+					DevicePath: asw.attachedVolumes[volume].devicePath,
+				}
+				i++
+			}
+			volumesToReportAttached[nodeToUpdateObj.nodeName] = attachedVolumes
+		}
+		// When GetVolumesToReportAttached is called by node status updater, the current status
+		// of this node will be updated, so set the flag statusUpdateNeeded to false indicating
+		// the current status is already updated.
+		if err := asw.updateNodeStatusUpdateNeeded(nodeName, false); err != nil {
+			klog.Errorf("Failed to update statusUpdateNeeded field when getting volumes: %v", err)
+		}
+	}
+
+	return volumesToReportAttached
+}
 
 
 

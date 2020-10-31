@@ -102,6 +102,8 @@ func (rc *reconciler) attachDesiredVolumes() {
 		if rc.actualStateOfWorld.IsVolumeAttachedToNode(volumeToAttach.VolumeName, volumeToAttach.NodeName) {
 			klog.Infof(volumeToAttach.GenerateMsgDetailed("Volume attached--touching", ""))
 			// TODO reset detach request time
+			rc.actualStateOfWorld.ResetDetachRequestTime(volumeToAttach.VolumeName, volumeToAttach.NodeName)
+			continue
 		}
 
 		// Don't even try to start an operation if there is already one running

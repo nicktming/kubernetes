@@ -4,7 +4,7 @@ import (
 	"k8s.io/klog"
 
 	"k8s.io/api/core/v1"
-	//"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	clientset "k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
@@ -41,39 +41,39 @@ type nodeStatusUpdater struct {
 func (nsu *nodeStatusUpdater) UpdateNodeStatuses() error {
 	// TODO: investigate right behavior if nodeName is empty
 	// kubernetes/kubernetes/issues/37777
-	//nodesToUpdate := nsu.actualStateOfWorld.GetVolumesToReportAttached()
-	//for nodeName, attachedVolumes := range nodesToUpdate {
-	//	nodeObj, err := nsu.nodeLister.Get(string(nodeName))
-	//	if errors.IsNotFound(err) {
-	//		// If node does not exist, its status cannot be updated.
-	//		// Do nothing so that there is no retry until node is created.
-	//		klog.V(2).Infof(
-	//			"Could not update node status. Failed to find node %q in NodeInformer cache. Error: '%v'",
-	//			nodeName,
-	//			err)
-	//		continue
-	//	} else if err != nil {
-	//		// For all other errors, log error and reset flag statusUpdateNeeded
-	//		// back to true to indicate this node status needs to be updated again.
-	//		klog.V(2).Infof("Error retrieving nodes from node lister. Error: %v", err)
-	//		nsu.actualStateOfWorld.SetNodeStatusUpdateNeeded(nodeName)
-	//		continue
-	//	}
-	//
-	//	if err := nsu.updateNodeStatus(nodeName, nodeObj, attachedVolumes); err != nil {
-	//		// If update node status fails, reset flag statusUpdateNeeded back to true
-	//		// to indicate this node status needs to be updated again
-	//		nsu.actualStateOfWorld.SetNodeStatusUpdateNeeded(nodeName)
-	//
-	//		klog.V(2).Infof(
-	//			"Could not update node status for %q; re-marking for update. %v",
-	//			nodeName,
-	//			err)
-	//
-	//		// We currently always return immediately on error
-	//		return err
-	//	}
-	//}
+	nodesToUpdate := nsu.actualStateOfWorld.GetVolumesToReportAttached()
+	for nodeName, attachedVolumes := range nodesToUpdate {
+		nodeObj, err := nsu.nodeLister.Get(string(nodeName))
+		if errors.IsNotFound(err) {
+			// If node does not exist, its status cannot be updated.
+			// Do nothing so that there is no retry until node is created.
+			klog.V(2).Infof(
+				"Could not update node status. Failed to find node %q in NodeInformer cache. Error: '%v'",
+				nodeName,
+				err)
+			continue
+		} else if err != nil {
+			// For all other errors, log error and reset flag statusUpdateNeeded
+			// back to true to indicate this node status needs to be updated again.
+			klog.V(2).Infof("Error retrieving nodes from node lister. Error: %v", err)
+			nsu.actualStateOfWorld.SetNodeStatusUpdateNeeded(nodeName)
+			continue
+		}
+
+		if err := nsu.updateNodeStatus(nodeName, nodeObj, attachedVolumes); err != nil {
+			// If update node status fails, reset flag statusUpdateNeeded back to true
+			// to indicate this node status needs to be updated again
+			nsu.actualStateOfWorld.SetNodeStatusUpdateNeeded(nodeName)
+
+			klog.V(2).Infof(
+				"Could not update node status for %q; re-marking for update. %v",
+				nodeName,
+				err)
+
+			// We currently always return immediately on error
+			return err
+		}
+	}
 	return nil
 }
 
