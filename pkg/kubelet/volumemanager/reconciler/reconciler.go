@@ -188,6 +188,8 @@ func (rc *reconciler) reconcile() {
 		volMounted, devicePath, err := rc.actualStateOfWorld.PodExistsInVolume(volumeToMount.PodName, volumeToMount.VolumeName)
 		volumeToMount.DevicePath = devicePath
 		if cache.IsVolumeNotAttachedError(err) {
+			klog.Infof("======>volume: %v and rc.controllerAttachDetachEnabled: %v, volumeToMount.PluginIsAttachable: %v",
+				volumeToMount.VolumeName, rc.controllerAttachDetachEnabled, volumeToMount.PluginIsAttachable)
 			if rc.controllerAttachDetachEnabled || !volumeToMount.PluginIsAttachable {
 				// Volume is not attached (or doesn't implement attacher), kubelet attach is disabled, wait
 				// for controller to finish attaching volume.

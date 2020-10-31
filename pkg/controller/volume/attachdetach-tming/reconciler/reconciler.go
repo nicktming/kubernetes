@@ -2,19 +2,19 @@ package reconciler
 
 import (
 	"fmt"
-	//"strings"
+	"strings"
 	"time"
 
-	//"k8s.io/api/core/v1"
-	//"k8s.io/apimachinery/pkg/types"
+	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/controller/volume/attachdetach-tming/cache"
 	"k8s.io/kubernetes/pkg/controller/volume/attachdetach-tming/statusupdater"
-	//kevents "k8s.io/kubernetes/pkg/kubelet/events"
+	kevents "k8s.io/kubernetes/pkg/kubelet/events"
 	"k8s.io/kubernetes/pkg/util/goroutinemap/exponentialbackoff"
-	//"k8s.io/kubernetes/pkg/volume"
+	"k8s.io/kubernetes/pkg/volume"
 	"k8s.io/kubernetes/pkg/volume/util/operationexecutor"
 )
 
@@ -181,6 +181,18 @@ func (rc *reconciler) attachDesiredVolumes() {
 		}
 
 		// TODO isMultiAttachForbidden
+		if rc.isMultiAttachForbidden(volumeToAttach.VolumeSpec) {
+			// 如果pod volumes里面没有ReadOnlyMany, ReadWriteMany, 则该volume不能在其他节点中有出现attach的情况,
+			// 如果存在len(nodes)大于0, 则先跳过该volume
+			nodes := rc.actualStateOfWorld.GetNodesForAttachedVolume(volumeToAttach.VolumeName)
+			if len(nodes) > 0 {
+				if !volumeToAttach.MultiAttachErrorReported {
+					rc.reportMultiAttachError(volumeToAttach, nodes)
+					rc.desiredStateOfWorld.SetMultiAttachError(volumeToAttach.VolumeName, volumeToAttach.NodeName)
+				}
+				continue
+			}
+		}
 
 		// Volume/Node doesn't exist, spawn a goroutine to attach it
 		klog.Infof(volumeToAttach.GenerateMsgDetailed("Starting attacherDetacher.AttachVolume", ""))
@@ -196,7 +208,111 @@ func (rc *reconciler) attachDesiredVolumes() {
 	}
 }
 
+func (rc *reconciler) isMultiAttachForbidden(volumeSpec *volume.Spec) bool {
+	if volumeSpec.Volume != nil {
+		// Check for volume types which are known to fail slow or cause trouble when trying to multi-attach
+		if volumeSpec.Volume.AzureDisk != nil ||
+			volumeSpec.Volume.Cinder != nil {
+			return true
+		}
+	}
 
+	// Only if this volume is a persistent volume, we have reliable information on whether it's allowed or not to
+	// multi-attach. We trust in the individual volume implementations to not allow unsupported access modes
+	if volumeSpec.PersistentVolume != nil {
+		// Check for persistent volume types which do not fail when trying to multi-attach
+		if len(volumeSpec.PersistentVolume.Spec.AccessModes) == 0 {
+			// No access mode specified so we don't know for sure. Let the attacher fail if needed
+			return false
+		}
+
+		// check if this volume is allowed to be attached to multiple PODs/nodes, if yes, return false
+		for _, accessMode := range volumeSpec.PersistentVolume.Spec.AccessModes {
+			if accessMode == v1.ReadWriteMany || accessMode == v1.ReadOnlyMany {
+				return false
+			}
+		}
+		return true
+	}
+
+	// we don't know if it's supported or not and let the attacher fail later in cases it's not supported
+	return false
+}
+
+
+// reportMultiAttachError sends events and logs situation that a volume that
+// should be attached to a node is already attached to different node(s).
+func (rc *reconciler) reportMultiAttachError(volumeToAttach cache.VolumeToAttach, nodes []types.NodeName) {
+	// Filter out the current node from list of nodes where the volume is
+	// attached.
+	// Some methods need []string, some other needs []NodeName, collect both.
+	// In theory, these arrays should have always only one element - the
+	// controller does not allow more than one attachment. But use array just
+	// in case...
+	otherNodes := []types.NodeName{}
+	otherNodesStr := []string{}
+	for _, node := range nodes {
+		if node != volumeToAttach.NodeName {
+			otherNodes = append(otherNodes, node)
+			otherNodesStr = append(otherNodesStr, string(node))
+		}
+	}
+
+	// Get list of pods that use the volume on the other nodes.
+	pods := rc.desiredStateOfWorld.GetVolumePodsOnNodes(otherNodes, volumeToAttach.VolumeName)
+
+	if len(pods) == 0 {
+		// We did not find any pods that requests the volume. The pod must have been deleted already.
+		simpleMsg, _ := volumeToAttach.GenerateMsg("Multi-Attach error", "Volume is already exclusively attached to one node and can't be attached to another")
+		for _, pod := range volumeToAttach.ScheduledPods {
+			rc.recorder.Eventf(pod, v1.EventTypeWarning, kevents.FailedAttachVolume, simpleMsg)
+		}
+		// Log detailed message to system admin
+		nodeList := strings.Join(otherNodesStr, ", ")
+		detailedMsg := volumeToAttach.GenerateMsgDetailed("Multi-Attach error", fmt.Sprintf("Volume is already exclusively attached to node %s and can't be attached to another", nodeList))
+		klog.Warningf(detailedMsg)
+		return
+	}
+
+	// There are pods that require the volume and run on another node. Typically
+	// it's user error, e.g. a ReplicaSet uses a PVC and has >1 replicas. Let
+	// the user know what pods are blocking the volume.
+	for _, scheduledPod := range volumeToAttach.ScheduledPods {
+		// Each scheduledPod must get a custom message. They can run in
+		// different namespaces and user of a namespace should not see names of
+		// pods in other namespaces.
+		localPodNames := []string{} // Names of pods in scheduledPods's namespace
+		otherPods := 0              // Count of pods in other namespaces
+		for _, pod := range pods {
+			if pod.Namespace == scheduledPod.Namespace {
+				localPodNames = append(localPodNames, pod.Name)
+			} else {
+				otherPods++
+			}
+		}
+
+		var msg string
+		if len(localPodNames) > 0 {
+			msg = fmt.Sprintf("Volume is already used by pod(s) %s", strings.Join(localPodNames, ", "))
+			if otherPods > 0 {
+				msg = fmt.Sprintf("%s and %d pod(s) in different namespaces", msg, otherPods)
+			}
+		} else {
+			// No local pods, there are pods only in different namespaces.
+			msg = fmt.Sprintf("Volume is already used by %d pod(s) in different namespaces", otherPods)
+		}
+		simpleMsg, _ := volumeToAttach.GenerateMsg("Multi-Attach error", msg)
+		rc.recorder.Eventf(scheduledPod, v1.EventTypeWarning, kevents.FailedAttachVolume, simpleMsg)
+	}
+
+	// Log all pods for system admin
+	podNames := []string{}
+	for _, pod := range pods {
+		podNames = append(podNames, pod.Namespace+"/"+pod.Name)
+	}
+	detailedMsg := volumeToAttach.GenerateMsgDetailed("Multi-Attach error", fmt.Sprintf("Volume is already used by pods %s on node %s", strings.Join(podNames, ", "), strings.Join(otherNodesStr, ", ")))
+	klog.Warningf(detailedMsg)
+}
 
 
 

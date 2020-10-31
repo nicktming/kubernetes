@@ -32,6 +32,8 @@ type DesiredStateOfWorld interface {
 	GetPodToAdd() map[types.UniquePodName]PodToAdd
 
 	GetVolumesToAttach() []VolumeToAttach
+
+	SetMultiAttachError(v1.UniqueVolumeName, k8stypes.NodeName)
 }
 
 type VolumeToAttach struct {
@@ -307,6 +309,23 @@ func getPodsFromMap(podMap map[types.UniquePodName]pod) []*v1.Pod {
 	}
 	return pods
 }
+
+func (dsw *desiredStateOfWorld) SetMultiAttachError(
+volumeName v1.UniqueVolumeName,
+nodeName k8stypes.NodeName) {
+	dsw.Lock()
+	defer dsw.Unlock()
+
+	nodeObj, nodeExists := dsw.nodesManaged[nodeName]
+	if nodeExists {
+		if volumeObj, volumeExists := nodeObj.volumesToAttach[volumeName]; volumeExists {
+			volumeObj.multiAttachErrorReported = true
+			dsw.nodesManaged[nodeName].volumesToAttach[volumeName] = volumeObj
+		}
+	}
+}
+
+
 
 
 

@@ -740,6 +740,8 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 		klog.Warning(err)
 	}
 
+	klog.Infof("==================>EnableControllerAttachDetach:%v", s.EnableControllerAttachDetach)
+
 	if err := RunKubelet(s, kubeDeps, s.RunOnce); err != nil {
 		return err
 	}
