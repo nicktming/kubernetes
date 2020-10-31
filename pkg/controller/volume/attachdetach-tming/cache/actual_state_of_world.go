@@ -181,6 +181,9 @@ func (asw *actualStateOfWorld) ResetDetachRequestTime(
 func (asw *actualStateOfWorld) MarkVolumeAsAttached(
 uniqueName v1.UniqueVolumeName, volumeSpec *volume.Spec, nodeName types.NodeName, devicePath string) error {
 	_, err := asw.AddVolumeNode(uniqueName, volumeSpec, nodeName, devicePath, true)
+	if err != nil {
+		return err 
+	}
 
 	klog.Infof("=====>volumename:%v nodeName: %v devicePath: %v mark as attached", uniqueName, nodeName, devicePath)
 	return nil
