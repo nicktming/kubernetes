@@ -257,6 +257,7 @@ HTTP server: The kubelet can also listen for HTTP and respond to a simple API
 
 			// run the kubelet
 			klog.V(5).Infof("KubeletConfiguration: %#v", kubeletServer.KubeletConfiguration)
+			klog.Infof("=====>KubeletConfiguration EnableControllerAttachDetach: %#v", kubeletServer.KubeletConfiguration.EnableControllerAttachDetach)
 			if err := Run(kubeletServer, kubeletDeps, stopCh); err != nil {
 				klog.Fatal(err)
 			}
