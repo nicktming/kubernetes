@@ -182,7 +182,7 @@ func (asw *actualStateOfWorld) MarkVolumeAsAttached(
 uniqueName v1.UniqueVolumeName, volumeSpec *volume.Spec, nodeName types.NodeName, devicePath string) error {
 	_, err := asw.AddVolumeNode(uniqueName, volumeSpec, nodeName, devicePath, true)
 	if err != nil {
-		return err 
+		return err
 	}
 
 	klog.Infof("=====>volumename:%v nodeName: %v devicePath: %v mark as attached", uniqueName, nodeName, devicePath)
@@ -293,13 +293,69 @@ func (asw *actualStateOfWorld) AddVolumeNode(
 	volumeObj.nodesAttachedTo[nodeName] = node
 	asw.attachedVolumes[volumeName] = volumeObj
 
-	//if isAttached {
-	//	asw.addVolumeToReportAsAttached(volumeName, nodeName)
-	//}
+	if isAttached {
+		asw.addVolumeToReportAsAttached(volumeName, nodeName)
+	}
 	return volumeName, nil
 }
 
 
+// Add the volumeName to the node's volumesToReportAsAttached list
+// This is an internal function and caller should acquire and release the lock
+func (asw *actualStateOfWorld) addVolumeToReportAsAttached(
+volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
+	// In case the volume/node entry is no longer in attachedVolume list, skip the rest
+	if _, _, err := asw.getNodeAndVolume(volumeName, nodeName); err != nil {
+		klog.V(4).Infof("Volume %q is no longer attached to node %q", volumeName, nodeName)
+		return
+	}
+	nodeToUpdate, nodeToUpdateExists := asw.nodesToUpdateStatusFor[nodeName]
+	if !nodeToUpdateExists {
+		// Create object if it doesn't exist
+		nodeToUpdate = nodeToUpdateStatusFor{
+			nodeName:                  nodeName,
+			statusUpdateNeeded:        true,
+			volumesToReportAsAttached: make(map[v1.UniqueVolumeName]v1.UniqueVolumeName),
+		}
+		asw.nodesToUpdateStatusFor[nodeName] = nodeToUpdate
+		klog.V(4).Infof("Add new node %q to nodesToUpdateStatusFor", nodeName)
+	}
+	_, nodeToUpdateVolumeExists :=
+		nodeToUpdate.volumesToReportAsAttached[volumeName]
+	if !nodeToUpdateVolumeExists {
+		nodeToUpdate.statusUpdateNeeded = true
+		nodeToUpdate.volumesToReportAsAttached[volumeName] = volumeName
+		asw.nodesToUpdateStatusFor[nodeName] = nodeToUpdate
+		klog.V(4).Infof("Report volume %q as attached to node %q", volumeName, nodeName)
+	}
+}
+
+// Update the flag statusUpdateNeeded to indicate whether node status is already updated or
+// needs to be updated again by the node status updater.
+// If the specified node does not exist in the nodesToUpdateStatusFor list, log the error and return
+// This is an internal function and caller should acquire and release the lock
+func (asw *actualStateOfWorld) updateNodeStatusUpdateNeeded(nodeName types.NodeName, needed bool) error {
+	nodeToUpdate, nodeToUpdateExists := asw.nodesToUpdateStatusFor[nodeName]
+	if !nodeToUpdateExists {
+		// should not happen
+		errMsg := fmt.Sprintf("Failed to set statusUpdateNeeded to needed %t, because nodeName=%q does not exist",
+			needed, nodeName)
+		return fmt.Errorf(errMsg)
+	}
+
+	nodeToUpdate.statusUpdateNeeded = needed
+	asw.nodesToUpdateStatusFor[nodeName] = nodeToUpdate
+
+	return nil
+}
+
+func (asw *actualStateOfWorld) SetNodeStatusUpdateNeeded(nodeName types.NodeName) {
+	asw.Lock()
+	defer asw.Unlock()
+	if err := asw.updateNodeStatusUpdateNeeded(nodeName, true); err != nil {
+		klog.Warningf("Failed to update statusUpdateNeeded field in actual state of world: %v", err)
+	}
+}
 
 
 
