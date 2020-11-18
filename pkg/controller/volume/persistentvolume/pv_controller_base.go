@@ -45,6 +45,7 @@ import (
 	vol "k8s.io/kubernetes/pkg/volume"
 
 	"k8s.io/klog"
+	"encoding/json"
 )
 
 // This file contains the controller base functionality, i.e. framework to
@@ -103,7 +104,9 @@ func NewController(p ControllerParameters) (*PersistentVolumeController, error) 
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { controller.enqueueWork(controller.volumeQueue, obj) },
 			UpdateFunc: func(oldObj, newObj interface{}) { controller.enqueueWork(controller.volumeQueue, newObj) },
-			DeleteFunc: func(obj interface{}) { controller.enqueueWork(controller.volumeQueue, obj) },
+			DeleteFunc: func(obj interface{}) {
+				controller.enqueueWork(controller.volumeQueue, obj)
+			},
 		},
 	)
 	controller.volumeLister = p.VolumeInformer.Lister()
@@ -112,8 +115,17 @@ func NewController(p ControllerParameters) (*PersistentVolumeController, error) 
 	p.ClaimInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { controller.enqueueWork(controller.claimQueue, obj) },
-			UpdateFunc: func(oldObj, newObj interface{}) { controller.enqueueWork(controller.claimQueue, newObj) },
-			DeleteFunc: func(obj interface{}) { controller.enqueueWork(controller.claimQueue, obj) },
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				pretty_oldobj, _ := json.MarshalIndent(oldObj, "", "\t")
+				pretty_newobj, _ := json.MarshalIndent(oldObj, "", "\t")
+				fmt.Printf("update event for old:%s\n,new:%s\n", string(pretty_oldobj), string(pretty_newobj))
+				controller.enqueueWork(controller.claimQueue, newObj)
+			},
+			DeleteFunc: func(obj interface{}) {
+				pretty_obj, _ := json.MarshalIndent(obj, "", "\t")
+				fmt.Printf("delete event for %s\n", string(pretty_obj))
+				controller.enqueueWork(controller.claimQueue, obj)
+			},
 		},
 	)
 	controller.claimLister = p.ClaimInformer.Lister()
