@@ -1219,7 +1219,10 @@ func (ctrl *PersistentVolumeController) deleteVolumeOperation(volume *v1.Persist
 		return "", nil
 	}
 
+
+
 	pluginName, deleted, err := ctrl.doDeleteVolume(volume)
+	klog.Infof("======>ctrl.doDeleteVolume %s, pluginName: %s, deleted: %v\n", volume.Name, pluginName, deleted)
 	if err != nil {
 		// Delete failed, update the volume and emit an event.
 		klog.V(3).Infof("deletion of volume %q failed: %v", volume.Name, err)
