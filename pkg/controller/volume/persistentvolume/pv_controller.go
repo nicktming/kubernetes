@@ -1153,6 +1153,8 @@ func (ctrl *PersistentVolumeController) recycleVolumeOperation(volume *v1.Persis
 	// Find a plugin.
 	spec := vol.NewSpecFromPersistentVolume(volume, false)
 	plugin, err := ctrl.volumePluginMgr.FindRecyclablePluginBySpec(spec)
+
+	klog.Infof("=======>Recycle strategy found plugin: %s, err: %v", plugin.GetPluginName(), err)
 	if err != nil {
 		// No recycler found. Emit an event and mark the volume Failed.
 		if _, err = ctrl.updateVolumePhaseWithEvent(volume, v1.VolumeFailed, v1.EventTypeWarning, events.VolumeFailedRecycle, "No recycler plugin found for the volume!"); err != nil {
@@ -1222,7 +1224,7 @@ func (ctrl *PersistentVolumeController) deleteVolumeOperation(volume *v1.Persist
 
 
 	pluginName, deleted, err := ctrl.doDeleteVolume(volume)
-	klog.Infof("======>ctrl.doDeleteVolume %s, pluginName: %s, deleted: %v\n", volume.Name, pluginName, deleted)
+	klog.Infof("======>ctrl.doDeleteVolume %s, pluginName: %s, deleted: %v, err: %v\n", volume.Name, pluginName, deleted, err)
 	if err != nil {
 		// Delete failed, update the volume and emit an event.
 		klog.V(3).Infof("deletion of volume %q failed: %v", volume.Name, err)
