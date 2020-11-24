@@ -1996,9 +1996,12 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handle
 			kl.sourcesReady.AddSource(u.Source)
 		}
 	case e := <-plegCh:
+		klog.Infof("=======>SyncLoop (PLEG) event: type: %v, uid: %v", e.Type, e.ID)
 		if isSyncPodWorthy(e) {
+			klog.Infof("=======>SyncLoop (PLEG) event: type: %v, uid: %v 11111", e.Type, e.ID)
 			// PLEG event for a pod; sync it.
 			if pod, ok := kl.podManager.GetPodByUID(e.ID); ok {
+				klog.Infof("=======>SyncLoop (PLEG) event: type: %v, uid: %v 22222", e.Type, e.ID)
 				klog.V(2).Infof("SyncLoop (PLEG): %q, event: %#v", format.Pod(pod), e)
 				handler.HandlePodSyncs([]*v1.Pod{pod})
 			} else {
@@ -2008,7 +2011,9 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handle
 		}
 
 		if e.Type == pleg.ContainerDied {
+			klog.Infof("=======>SyncLoop (PLEG) event: type: %v, uid: %v 333333", e.Type, e.ID)
 			if containerID, ok := e.Data.(string); ok {
+				klog.Infof("=======>SyncLoop (PLEG) event: type: %v, uid: %v 444444", e.Type, e.ID)
 				kl.cleanUpContainersInPod(e.ID, containerID)
 			}
 		}

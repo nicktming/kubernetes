@@ -212,7 +212,9 @@ func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods() {
 	runningPodsFetched := false
 	for _, volumeToMount := range dswp.desiredStateOfWorld.GetVolumesToMount() {
 		pod, podExists := dswp.podManager.GetPodByUID(volumeToMount.Pod.UID)
-		klog.Infof("=========>pod: %s/%s, podExists: %v", pod.Namespace, pod.Name, podExists)
+		if pod.Name == "test-pod" {
+			klog.Infof("=========>pod: %s/%s, podExists: %v", pod.Namespace, pod.Name, podExists)
+		}
 		if podExists {
 			// Skip running pods
 			if !dswp.isPodTerminated(pod) {

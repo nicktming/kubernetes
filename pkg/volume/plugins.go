@@ -577,9 +577,9 @@ func (pm *VolumePluginMgr) FindPluginBySpec(spec *Spec) (VolumePlugin, error) {
 
 	matchedPluginNames := []string{}
 	matches := []VolumePlugin{}
-	klog.Infof("=========>pm.plugins: %v", len(pm.plugins))
+	//klog.Infof("=========>pm.plugins: %v", len(pm.plugins))
 	for k, v := range pm.plugins {
-		klog.Infof("=====>plugin cansupport: %v, spec: %v", v.GetPluginName(), v.CanSupport(spec), spec)
+		//klog.Infof("=====>plugin cansupport: %v, spec: %v", v.GetPluginName(), v.CanSupport(spec), spec)
 		if v.CanSupport(spec) {
 			matchedPluginNames = append(matchedPluginNames, k)
 			matches = append(matches, v)
@@ -587,7 +587,7 @@ func (pm *VolumePluginMgr) FindPluginBySpec(spec *Spec) (VolumePlugin, error) {
 	}
 
 	pm.refreshProbedPlugins()
-	klog.Infof("=========>pm.probedPlugins: %v", len(pm.probedPlugins))
+	//klog.Infof("=========>pm.probedPlugins: %v", len(pm.probedPlugins))
 	for _, plugin := range pm.probedPlugins {
 		if plugin.CanSupport(spec) {
 			matchedPluginNames = append(matchedPluginNames, plugin.GetPluginName())

@@ -149,7 +149,7 @@ func generateEvents(podID types.UID, cid string, oldState, newState plegContaine
 	if newState == oldState {
 		return nil
 	}
-
+	klog.Infof("=========>GenericPLEG: %v/%v: %v -> %v", podID, cid, oldState, newState)
 	klog.V(4).Infof("GenericPLEG: %v/%v: %v -> %v", podID, cid, oldState, newState)
 	switch newState {
 	case plegContainerRunning:
