@@ -492,6 +492,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		protocol = utilipt.ProtocolIpv6
 	}
 
+	klog.Infof("-------------->keepTerminatedPodVolumes:%v", keepTerminatedPodVolumes)
+
 	klet := &Kubelet{
 		hostname:                                hostname,
 		hostnameOverridden:                      len(hostnameOverride) > 0,
