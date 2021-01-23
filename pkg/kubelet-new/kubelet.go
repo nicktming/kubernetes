@@ -363,6 +363,10 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		nodeRef: 					nodeRef,
 	}
 
+	// Generating the status funcs should be the last thing we do,
+	// since this relies on the rest of the Kubelet having been constructed.
+	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
+
 	return klet, nil
 }
 
