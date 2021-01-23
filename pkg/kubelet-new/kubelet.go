@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/clock"
+	"k8s.io/kubernetes/pkg/kubelet/util/format"
 	"fmt"
 	"os"
 	"path"
@@ -58,6 +59,14 @@ type Bootstrap interface {
 	BirthCry()
 	Run(<-chan kubetypes.PodUpdate)
 }
+
+type SyncHandler interface {
+	//HandlePodAdditions(pods []*v1.Pod)
+	//HandlePodUpdates(pods []*v1.Pod)
+	//HandlePodReconcile(pods []*v1.Pod)
+	//HandlePodSyncs(pods []*v1.Pod)
+}
+
 
 type Kubelet struct {
 	kubeClient      clientset.Interface
@@ -158,7 +167,64 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	//
 	//// Start the pod lifecycle event generator.
 	//kl.pleg.Start()
-	//kl.syncLoop(updates, kl)
+	kl.syncLoop(updates, kl)
+}
+
+func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHandler) {
+	klog.Infof("Starting kubelet main sync loop.")
+
+	//plegCh := kl.pleg.Watch()
+
+	for {
+		if !kl.syncLoopIteration(updates, kl) {
+			break
+		}
+		//time.Sleep(time.Minute)
+	}
+
+	klog.Infof("syncLoop finishes!")
+
+}
+
+// TODO pleg
+func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handler SyncHandler) bool {
+	select {
+	case u, open := <- configCh:
+		if !open {
+			klog.Errorf("Update channel is closed. Exiting the sync loop.")
+			return false
+		}
+		switch u.Op {
+		case kubetypes.ADD:
+			klog.Infof("SyncLoop (Add, %q): %q", u.Source, format.Pods(u.Pods))
+			//handler.HandlePodAdditions(u.Pods)
+		//case kubetypes.UPDATE:
+		//	klog.Infof("SyncLoop (UPDATE, %q): %q", u.Source, format.PodsWithDeletionTimestamps(u.Pods))
+		//	handler.HandlePodUpdates(u.Pods)
+
+		case kubetypes.RECONCILE:
+			klog.Infof("SyncLoop (RECONCILE, %q): %q", u.Source, format.Pods(u.Pods))
+			//handler.HandlePodReconcile(u.Pods)
+		}
+	//case e := <-plegCh:
+	//	if isSyncPodWorthy(e) {
+	//		// PLEG event for a pod; sync it.
+	//		if pod, ok := kl.podManager.GetPodByUID(e.ID); ok {
+	//			klog.Infof("SyncLoop (PLEG): %q, event: %#v", format.Pod(pod), e)
+	//			handler.HandlePodSyncs([]*v1.Pod{pod})
+	//		} else {
+	//			klog.Infof("SyncLoop (PLEG): ignore irrelevant event: %#v", e)
+	//		}
+	//	}
+
+	// TODO pleg.ContainerDied
+	//if e.Type == pleg.ContainerDied {
+	//	if containID, ok := e.Data.(string); ok {
+	//		kl.cle
+	//	}
+	//}
+	}
+	return true
 }
 
 
@@ -266,6 +332,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	klet := &Kubelet{
 		kubeClient: 					kubeDeps.KubeClient,
+		heartbeatClient:  				kubeDeps.HeartbeatClient,
 
 		nodeName:   					nodeName,
 		hostname:   					string(nodeName),
