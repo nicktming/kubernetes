@@ -12,7 +12,36 @@ import (
 	nodeutil "k8s.io/kubernetes/pkg/util/node"
 	"k8s.io/apimachinery/pkg/types"
 	"fmt"
+	"k8s.io/kubernetes/pkg/kubelet-new/nodestatus"
 )
+
+func (kl *Kubelet) recordEvent(eventType, event, message string) {
+	kl.recorder.Eventf(kl.nodeRef, eventType, event, message)
+}
+
+func (kl *Kubelet) recordNodeStatusEvent(eventType, event string) {
+	klog.V(2).Infof("Recording %s event message for node %s", event, kl.nodeName)
+
+	kl.recorder.Eventf(kl.nodeRef, eventType, event, "Node %s status is now: %s", kl.nodeName, event)
+}
+
+func (kl *Kubelet) defaultNodeStatusFuncs() []func(*v1.Node) error {
+	//var nodeAddressFunc func() ([]v1.NodeAddress, error)
+
+	// TODO kl.cloud and kl.appArmorValidator
+
+	var setters []func(n *v1.Node) error
+	setters = append(setters,
+		//nodestatus.MemoryPressureCondition(kl.clock.Now, kl.evictionManager.IsUnderMemoryPressure, kl.recordNodeStatusEvent),
+		//nodestatus.DiskPressureCondition(kl.clock.Now, kl.evictionManager.IsUnderDiskPressure, kl.recordNodeStatusEvent),
+		//nodestatus.PIDPressureCondition(kl.clock.Now, kl.evictionManager.IsUnderPIDPressure, kl.recordNodeStatusEvent),
+		nodestatus.ReadyCondition(kl.clock.Now, kl.recordNodeStatusEvent),
+		//nodestatus.VolumesInUse(kl.volumeManager.ReconcilerStatesHasBeenSynced, kl.volumeManager.GetVolumesInUse),
+	)
+
+	return setters
+
+}
 
 func (kl *Kubelet) initialNode() (*v1.Node, error) {
 	node := &v1.Node{

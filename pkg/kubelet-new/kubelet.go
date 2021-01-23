@@ -14,6 +14,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
+	"k8s.io/client-go/tools/record"
+	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"fmt"
 	"os"
 	"path"
@@ -51,6 +53,9 @@ type Dependencies struct {
 	PodConfig               *config.PodConfig
 	KubeClient              clientset.Interface
 	HeartbeatClient         clientset.Interface
+	Recorder                record.EventRecorder
+	EventClient             v1core.EventsGetter
+	OnHeartbeatFailure      func()
 
 }
 
@@ -91,6 +96,12 @@ type Kubelet struct {
 	lastStatusReportTime time.Time
 	lastObservedNodeAddressesMux sync.RWMutex
 	lastObservedNodeAddresses    []v1.NodeAddress
+
+	// The EventRecorder to use
+	recorder record.EventRecorder
+
+	// Reference to this node.
+	nodeRef *v1.ObjectReference
 }
 
 func (kl *Kubelet) BirthCry() {
@@ -330,6 +341,13 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		}
 	}
 
+	nodeRef := &v1.ObjectReference{
+		Kind:      "Node",
+		Name:      string(nodeName),
+		UID:       types.UID(nodeName),
+		Namespace: "",
+	}
+
 	klet := &Kubelet{
 		kubeClient: 					kubeDeps.KubeClient,
 		heartbeatClient:  				kubeDeps.HeartbeatClient,
@@ -341,6 +359,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		registerNode: 					registerNode,
 		registerSchedulable: 				registerSchedulable,
 		clock: 						clock.RealClock{},
+		recorder:                                	kubeDeps.Recorder,
+		nodeRef: 					nodeRef,
 	}
 
 	return klet, nil
