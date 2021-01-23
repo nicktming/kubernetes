@@ -7,10 +7,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeletconfiginternal "k8s.io/kubernetes/pkg/kubelet/apis/config"
 	"k8s.io/klog"
+	"k8s.io/apimachinery/pkg/types"
+	clientset "k8s.io/client-go/kubernetes"
+	nodeutil "k8s.io/kubernetes/pkg/util/node"
+	"fmt"
 )
 
 type Dependencies struct {
 	PodConfig               *config.PodConfig
+	KubeClient              clientset.Interface
 }
 
 
@@ -20,7 +25,11 @@ type Bootstrap interface {
 }
 
 type Kubelet struct {
+	kubeClient      clientset.Interface
+	nodeName        types.NodeName
 
+	// hostname is the hostname the kubelet detected or was given via flag/config
+	hostname string
 }
 
 func (kl *Kubelet) BirthCry() {
@@ -54,6 +63,24 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 }
 
 
+func makePodSourceConfig(kubeCfg *kubeletconfiginternal.KubeletConfiguration, kubeDeps *Dependencies, nodeName types.NodeName, bootstrapCheckpointPath string) (*config.PodConfig, error) {
+
+	cfg := config.NewPodConfig(config.PodConfigNotificationIncremental)
+
+	var updatechannel chan<- interface{}
+
+	if kubeDeps.KubeClient != nil {
+		klog.Infof("Watching apiserver")
+		if updatechannel == nil {
+			updatechannel = cfg.Channel(kubetypes.ApiserverSource)
+		}
+		config.NewSourceApiserver(kubeDeps.KubeClient, nodeName, updatechannel)
+	}
+
+	return cfg, nil
+
+}
+
 func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		kubeDeps *Dependencies,
 		crOptions *config.ContainerRuntimeOptions,
@@ -85,8 +112,32 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		seccompProfileRoot string,
 		bootstrapCheckpointPath string,
 		nodeStatusMaxImages int32) (*Kubelet, error) {
-	klet := &Kubelet{
 
+	klog.Infof("klet.rootDirectory: %v, CheckpointPath: %v", rootDirectory, crOptions.DockershimRootDirectory)
+
+	if rootDirectory == "" {
+		return nil, fmt.Errorf("invalid root directory %q", rootDirectory)
 	}
+
+	hostname, err := nodeutil.GetHostname(hostnameOverride)
+	if err != nil {
+		return nil, err
+	}
+
+	nodeName := types.NodeName(hostname)
+	if kubeDeps.PodConfig == nil {
+		var err error
+		kubeDeps.PodConfig, err = makePodSourceConfig(kubeCfg, kubeDeps, nodeName, bootstrapCheckpointPath)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	klet := &Kubelet{
+		kubeClient: 					kubeDeps.KubeClient,
+		nodeName:   					nodeName,
+		hostname:   					string(nodeName),
+	}
+
 	return klet, nil
 }

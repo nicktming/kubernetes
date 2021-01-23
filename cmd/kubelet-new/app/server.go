@@ -38,7 +38,7 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/klog"
 
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -106,6 +106,7 @@ import (
 	//"k8s.io/utils/exec"
 	//"k8s.io/utils/nsenter"
 
+	//"k8s.io/kubernetes/pkg/kubelet/dockershim"
 )
 
 const (
@@ -412,7 +413,7 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 		//Cloud:               nil, // cloud provider might start background processes
 		//ContainerManager:    nil,
 		//DockerClientConfig:  dockerClientConfig,
-		//KubeClient:          nil,
+		KubeClient:          nil,
 		//HeartbeatClient:     nil,
 		//EventClient:         nil,
 		//Mounter:             mounter,
@@ -528,10 +529,10 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 	}
 
 	// About to get clients and such, detect standaloneMode
-	//standaloneMode := true
-	//if len(s.KubeConfig) > 0 {
-	//	standaloneMode = false
-	//}
+	standaloneMode := true
+	if len(s.KubeConfig) > 0 {
+		standaloneMode = false
+	}
 
 	if kubeDeps == nil {
 		kubeDeps, err = UnsecuredDependencies(s)
@@ -567,52 +568,52 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 
 	// if in standalone mode, indicate as much by setting all clients to nil
 	switch {
-	//case standaloneMode:
-	//	kubeDeps.KubeClient = nil
-	//	//kubeDeps.EventClient = nil
-	//	//kubeDeps.HeartbeatClient = nil
-	//	klog.Warningf("standalone mode, no API client")
-	//
-	////case kubeDeps.KubeClient == nil, kubeDeps.EventClient == nil, kubeDeps.HeartbeatClient == nil:
-	//case kubeDeps.KubeClient == nil:
-	//	clientConfig, closeAllConns, err := buildKubeletClientConfig(s, nodeName)
-	//	if err != nil {
-	//		return err
-	//	}
-	//	if closeAllConns == nil {
-	//		return errors.New("closeAllConns must be a valid function other than nil")
-	//	}
-	//	kubeDeps.OnHeartbeatFailure = closeAllConns
-	//
-	//	kubeDeps.KubeClient, err = clientset.NewForConfig(clientConfig)
-	//	if err != nil {
-	//		return fmt.Errorf("failed to initialize kubelet client: %v", err)
-	//	}
-	//
-	//	// make a separate client for events
-	//	eventClientConfig := *clientConfig
-	//	eventClientConfig.QPS = float32(s.EventRecordQPS)
-	//	eventClientConfig.Burst = int(s.EventBurst)
-	//	kubeDeps.EventClient, err = v1core.NewForConfig(&eventClientConfig)
-	//	if err != nil {
-	//		return fmt.Errorf("failed to initialize kubelet event client: %v", err)
-	//	}
-	//
-	//	// make a separate client for heartbeat with throttling disabled and a timeout attached
-	//	heartbeatClientConfig := *clientConfig
-	//	heartbeatClientConfig.Timeout = s.KubeletConfiguration.NodeStatusUpdateFrequency.Duration
-	//	// if the NodeLease feature is enabled, the timeout is the minimum of the lease duration and status update frequency
-	//	if utilfeature.DefaultFeatureGate.Enabled(features.NodeLease) {
-	//		leaseTimeout := time.Duration(s.KubeletConfiguration.NodeLeaseDurationSeconds) * time.Second
-	//		if heartbeatClientConfig.Timeout > leaseTimeout {
-	//			heartbeatClientConfig.Timeout = leaseTimeout
-	//		}
-	//	}
-	//	heartbeatClientConfig.QPS = float32(-1)
-	//	kubeDeps.HeartbeatClient, err = clientset.NewForConfig(&heartbeatClientConfig)
-	//	if err != nil {
-	//		return fmt.Errorf("failed to initialize kubelet heartbeat client: %v", err)
-	//	}
+	case standaloneMode:
+		kubeDeps.KubeClient = nil
+		//kubeDeps.EventClient = nil
+		//kubeDeps.HeartbeatClient = nil
+		klog.Warningf("standalone mode, no API client")
+
+	//case kubeDeps.KubeClient == nil, kubeDeps.EventClient == nil, kubeDeps.HeartbeatClient == nil:
+	case kubeDeps.KubeClient == nil:
+		clientConfig, closeAllConns, err := buildKubeletClientConfig(s, nodeName)
+		if err != nil {
+			return err
+		}
+		if closeAllConns == nil {
+			return errors.New("closeAllConns must be a valid function other than nil")
+		}
+		//kubeDeps.OnHeartbeatFailure = closeAllConns
+
+		kubeDeps.KubeClient, err = clientset.NewForConfig(clientConfig)
+		if err != nil {
+			return fmt.Errorf("failed to initialize kubelet client: %v", err)
+		}
+
+		// make a separate client for events
+		eventClientConfig := *clientConfig
+		eventClientConfig.QPS = float32(s.EventRecordQPS)
+		eventClientConfig.Burst = int(s.EventBurst)
+		//kubeDeps.EventClient, err = v1core.NewForConfig(&eventClientConfig)
+		if err != nil {
+			return fmt.Errorf("failed to initialize kubelet event client: %v", err)
+		}
+
+		// make a separate client for heartbeat with throttling disabled and a timeout attached
+		heartbeatClientConfig := *clientConfig
+		heartbeatClientConfig.Timeout = s.KubeletConfiguration.NodeStatusUpdateFrequency.Duration
+		// if the NodeLease feature is enabled, the timeout is the minimum of the lease duration and status update frequency
+		if utilfeature.DefaultFeatureGate.Enabled(features.NodeLease) {
+			leaseTimeout := time.Duration(s.KubeletConfiguration.NodeLeaseDurationSeconds) * time.Second
+			if heartbeatClientConfig.Timeout > leaseTimeout {
+				heartbeatClientConfig.Timeout = leaseTimeout
+			}
+		}
+		heartbeatClientConfig.QPS = float32(-1)
+		//kubeDeps.HeartbeatClient, err = clientset.NewForConfig(&heartbeatClientConfig)
+		if err != nil {
+			return fmt.Errorf("failed to initialize kubelet heartbeat client: %v", err)
+		}
 	}
 
 	// If the kubelet config controller is available, and dynamic config is enabled, start the config and status sync loops
