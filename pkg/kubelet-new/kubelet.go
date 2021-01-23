@@ -10,12 +10,47 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientset "k8s.io/client-go/kubernetes"
 	nodeutil "k8s.io/kubernetes/pkg/util/node"
+	"k8s.io/apimachinery/pkg/util/wait"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/clock"
 	"fmt"
+	"os"
+	"path"
+	"time"
+	"sync"
+)
+
+const (
+	nodeStatusUpdateRetry = 1
+
+	backOffPeriod = time.Second * 10
+
+	// Capacity of the channel for receiving pod lifecycle events. This number
+	// is a bit arbitrary and may be adjusted in the future.
+	plegChannelCapacity = 1000
+
+	// Generic PLEG relies on relisting for discovering container events.
+	// A longer period means that kubelet will take longer to detect container
+	// changes and to update pod status. On the other hand, a shorter period
+	// will cause more frequent relisting (e.g., container runtime operations),
+	// leading to higher cpu usage.
+	// Note that even though we set the period to 1s, the relisting itself can
+	// take more than 1s to finish if the container runtime responds slowly
+	// and/or when there are many container changes in one cycle.
+	plegRelistPeriod = time.Second * 1
+
+	// MaxContainerBackOff is the max backoff period, exported for the e2e test
+	MaxContainerBackOff = 300 * time.Second
+
+	// The path in containers' filesystems where the hosts file is mounted.
+	etcHostsPath = "/etc/hosts"
 )
 
 type Dependencies struct {
 	PodConfig               *config.PodConfig
 	KubeClient              clientset.Interface
+	HeartbeatClient         clientset.Interface
+
 }
 
 
@@ -26,32 +61,96 @@ type Bootstrap interface {
 
 type Kubelet struct {
 	kubeClient      clientset.Interface
+	heartbeatClient      clientset.Interface
 	nodeName        types.NodeName
 
 	// hostname is the hostname the kubelet detected or was given via flag/config
 	hostname string
+	rootDirectory 	string
+	nodeStatusUpdateFrequency time.Duration
+	syncNodeStatusMux sync.Mutex
+
+	registerNode bool
+	registrationCompleted bool
+	registerSchedulable bool
+
+	// handlers called during the tryUpdateNodeStatus cycle
+	setNodeStatusFuncs []func(*v1.Node) error
+
+	clock clock.Clock
+	// lastStatusReportTime is the time when node status was last reported.
+	lastStatusReportTime time.Time
+	lastObservedNodeAddressesMux sync.RWMutex
+	lastObservedNodeAddresses    []v1.NodeAddress
 }
 
 func (kl *Kubelet) BirthCry() {
 	klog.Infof("kubelet BirthCry")
 }
 
+func (kl *Kubelet) initializeModules() error {
+
+	// Setup filesystem directories.
+	if err := kl.setupDataDirs(); err != nil {
+		return err
+	}
+
+	//kl.imageManager.Start()
+	return nil
+}
+
+func (kl *Kubelet) setupDataDirs() error {
+	kl.rootDirectory = path.Clean(kl.rootDirectory)
+	//pluginRegistrationDir := kl.getPluginsRegistrationDir()
+	//pluginsDir := kl.getPluginsDir()
+	if err := os.MkdirAll(kl.getRootDir(), 0750); err != nil {
+		return fmt.Errorf("error creating root directory: %v", err)
+	}
+	//if err := kl.mounter.MakeRShared(kl.getRootDir()); err != nil {
+	//	return fmt.Errorf("error configuring root directory: %v", err)
+	//}
+
+	if err := os.MkdirAll(kl.getPodsDir(), 0750); err != nil {
+		return fmt.Errorf("error creating pods directory: %v", err)
+	}
+
+	if err := os.MkdirAll(kl.getPluginsDir(), 0750); err != nil {
+		return fmt.Errorf("error creating plugins directory: %v", err)
+	}
+	if err := os.MkdirAll(kl.getPluginsRegistrationDir(), 0750); err != nil {
+		return fmt.Errorf("error creating plugins registry directory: %v", err)
+	}
+	//if selinux.SELinuxEnabled() {
+	//	err := selinux.SetFileLabel(pluginRegistrationDir, config.KubeletPluginsDirSELinuxLabel)
+	//	if err != nil {
+	//		klog.Warningf("Unprivileged containerized plugins might not work. Could not set selinux context on %s: %v", pluginRegistrationDir, err)
+	//	}
+	//	err = selinux.SetFileLabel(pluginsDir, config.KubeletPluginsDirSELinuxLabel)
+	//	if err != nil {
+	//		klog.Warningf("Unprivileged containerized plugins might not work. Could not set selinux context on %s: %v", pluginsDir, err)
+	//	}
+	//}
+
+	return nil
+}
+
+
 func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
-	//klog.Infof("kubelet run")
-	//
-	//kl.initializeModules()
-	//
+	klog.Infof("kubelet run")
+
+	kl.initializeModules()
+
 	//
 	//// Start volume manager
 	//go kl.volumeManager.Run(kl.sourcesReady, wait.NeverStop)
 	//
-	//if kl.kubeClient != nil {
-	//
-	//	klog.V(5).Infof("syncNodeStatus kl.nodeStatusUpdateFrequency: %v", kl.nodeStatusUpdateFrequency)
-	//
-	//	// when k8s delete node, we need to restart kubelet again
-	//	go wait.Until(kl.syncNodeStatus, kl.nodeStatusUpdateFrequency, wait.NeverStop)
-	//}
+	if kl.kubeClient != nil {
+
+		klog.V(5).Infof("syncNodeStatus kl.nodeStatusUpdateFrequency: %v", kl.nodeStatusUpdateFrequency)
+
+		// when k8s delete node, we need to restart kubelet again
+		go wait.Until(kl.syncNodeStatus, kl.nodeStatusUpdateFrequency, wait.NeverStop)
+	}
 	//
 	//go wait.Until(kl.updateRuntimeUp, 5*time.Second, wait.NeverStop)
 	//
@@ -60,6 +159,38 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	//// Start the pod lifecycle event generator.
 	//kl.pleg.Start()
 	//kl.syncLoop(updates, kl)
+}
+
+
+func (kl *Kubelet) syncNodeStatus() {
+	kl.syncNodeStatusMux.Lock()
+	defer kl.syncNodeStatusMux.Unlock()
+
+	if kl.kubeClient == nil {
+		return
+	}
+	if kl.registerNode {
+		kl.registerWithAPIServer()
+	}
+
+	if err := kl.updateNodeStatus(); err != nil {
+		klog.Errorf("Unable to update node status: %v", err)
+	}
+}
+
+func (kl *Kubelet) updateNodeStatus() error {
+	klog.V(5).Infof("updating node status")
+	for i := 0; i < nodeStatusUpdateRetry; i++ {
+		if err := kl.tryUpdateNodeStatus(i); err != nil {
+			//if i > 0 && kl.onRepeatedHeartbeatFailure != nil {
+			//	kl.onRepeatedHeartbeatFailure()
+			//}
+			klog.Errorf("Error updating node status, will retry: %v", err)
+		} else {
+			return nil
+		}
+	}
+	return fmt.Errorf("update node status exceeds retry count")
 }
 
 
@@ -135,9 +266,26 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	klet := &Kubelet{
 		kubeClient: 					kubeDeps.KubeClient,
+
 		nodeName:   					nodeName,
 		hostname:   					string(nodeName),
+		rootDirectory:					rootDirectory,
+		nodeStatusUpdateFrequency:               	kubeCfg.NodeStatusUpdateFrequency.Duration,
+		registerNode: 					registerNode,
+		registerSchedulable: 				registerSchedulable,
+		clock: 						clock.RealClock{},
 	}
 
 	return klet, nil
+}
+
+func (kl *Kubelet) setLastObservedNodeAddresses(addresses []v1.NodeAddress) {
+	kl.lastObservedNodeAddressesMux.Lock()
+	defer kl.lastObservedNodeAddressesMux.Unlock()
+	kl.lastObservedNodeAddresses = addresses
+}
+func (kl *Kubelet) getLastObservedNodeAddresses() []v1.NodeAddress {
+	kl.lastObservedNodeAddressesMux.RLock()
+	defer kl.lastObservedNodeAddressesMux.RUnlock()
+	return kl.lastObservedNodeAddresses
 }
