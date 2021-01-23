@@ -5,8 +5,6 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"time"
-	"fmt"
-	"strings"
 )
 
 type Setter func(node *v1.Node) error
