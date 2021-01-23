@@ -46,7 +46,7 @@ recordEventFunc func(eventType, event string), // typically Kubelet.recordNodeSt
 			}
 		}
 		if len(missingCapacities) > 0 {
-			errs = append(errs, fmt.Errorf("Missing node capacity for resources: %s", strings.Join(missingCapacities, ", ")))
+			//errs = append(errs, fmt.Errorf("Missing node capacity for resources: %s", strings.Join(missingCapacities, ", ")))
 		}
 		if aggregatedErr := errors.NewAggregate(errs); aggregatedErr != nil {
 			newNodeReadyCondition = v1.NodeCondition{

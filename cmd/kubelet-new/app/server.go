@@ -763,16 +763,16 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 		return err
 	}
 
-	if s.HealthzPort > 0 {
-		mux := http.NewServeMux()
-		healthz.InstallHandler(mux)
-		go wait.Until(func() {
-			err := http.ListenAndServe(net.JoinHostPort(s.HealthzBindAddress, strconv.Itoa(int(s.HealthzPort))), mux)
-			if err != nil {
-				klog.Errorf("Starting healthz server failed: %v", err)
-			}
-		}, 5*time.Second, wait.NeverStop)
-	}
+	//if s.HealthzPort > 0 {
+	//	mux := http.NewServeMux()
+	//	healthz.InstallHandler(mux)
+	//	go wait.Until(func() {
+	//		err := http.ListenAndServe(net.JoinHostPort(s.HealthzBindAddress, strconv.Itoa(int(s.HealthzPort))), mux)
+	//		if err != nil {
+	//			klog.Errorf("Starting healthz server failed: %v", err)
+	//		}
+	//	}, 5*time.Second, wait.NeverStop)
+	//}
 
 	if s.RunOnce {
 		return nil
