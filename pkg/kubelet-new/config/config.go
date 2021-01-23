@@ -1,7 +1,7 @@
 package config
 
 import (
-	kubetypes "k8s.io/kubernetes/pkg/kubelet-tming/types"
+	kubetypes "k8s.io/kubernetes/pkg/kubelet-new/types"
 	"k8s.io/kubernetes/pkg/util/config"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/types"
