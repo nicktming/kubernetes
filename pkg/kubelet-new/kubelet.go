@@ -51,15 +51,13 @@ const (
 	// Note that even though we set the period to 1s, the relisting itself can
 	// take more than 1s to finish if the container runtime responds slowly
 	// and/or when there are many container changes in one cycle.
-	plegRelistPeriod = time.Second * 1
+	plegRelistPeriod = time.Second * 5
 
 	// MaxContainerBackOff is the max backoff period, exported for the e2e test
 	MaxContainerBackOff = 300 * time.Second
 
 	// The path in containers' filesystems where the hosts file is mounted.
 	etcHostsPath = "/etc/hosts"
-
-	plegRelistPeriod = time.Second * 5
 )
 
 type Dependencies struct {
