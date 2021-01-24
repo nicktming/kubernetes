@@ -38,6 +38,7 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/klog"
 
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
