@@ -74,7 +74,7 @@ import (
 	//"k8s.io/kubernetes/pkg/kubelet-tming/cm"
 	"k8s.io/kubernetes/pkg/kubelet-new/config"
 	"k8s.io/kubernetes/pkg/kubelet/dockershim"
-	dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
+	//dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
 	dynamickubeletconfig "k8s.io/kubernetes/pkg/kubelet/kubeletconfig"
 	"k8s.io/kubernetes/pkg/kubelet/kubeletconfig/configfiles"
 	"k8s.io/kubernetes/pkg/kubelet/server"
