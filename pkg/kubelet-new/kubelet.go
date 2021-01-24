@@ -16,11 +16,15 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
 	"k8s.io/client-go/tools/record"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
 	"fmt"
 	"os"
 	"path"
 	"time"
 	"sync"
+	"k8s.io/kubernetes/pkg/kubelet-new/remote"
+	internalapi "k8s.io/cri-api/pkg/apis"
+	"k8s.io/kubernetes/pkg/kubelet-new/kuberuntime"
 )
 
 const (
@@ -56,6 +60,7 @@ type Dependencies struct {
 	Recorder                record.EventRecorder
 	EventClient             v1core.EventsGetter
 	OnHeartbeatFailure      func()
+	OSInterface 		kubecontainer.OSInterface
 
 }
 
@@ -66,7 +71,7 @@ type Bootstrap interface {
 }
 
 type SyncHandler interface {
-	//HandlePodAdditions(pods []*v1.Pod)
+	HandlePodAdditions(pods []*v1.Pod)
 	//HandlePodUpdates(pods []*v1.Pod)
 	//HandlePodReconcile(pods []*v1.Pod)
 	//HandlePodSyncs(pods []*v1.Pod)
@@ -102,6 +107,23 @@ type Kubelet struct {
 
 	// Reference to this node.
 	nodeRef *v1.ObjectReference
+
+	// Container runtime.
+	containerRuntime kubecontainer.Runtime
+
+	runtimeService internalapi.RuntimeService
+}
+
+func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
+	rs, err := remote.NewRemoteRuntimeService(remoteRuntimeEndpoint, runtimeRequestTimeout.Duration)
+	if err != nil {
+		return nil, nil, err
+	}
+	is, err := remote.NewRemoteImageService(remoteImageEndpoint, runtimeRequestTimeout.Duration)
+	if err != nil {
+		return nil, nil, err
+	}
+	return rs, is, err
 }
 
 func (kl *Kubelet) BirthCry() {
@@ -208,10 +230,10 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handle
 		switch u.Op {
 		case kubetypes.ADD:
 			klog.Infof("SyncLoop (Add, %q): %q", u.Source, format.Pods(u.Pods))
-			//handler.HandlePodAdditions(u.Pods)
-		//case kubetypes.UPDATE:
-		//	klog.Infof("SyncLoop (UPDATE, %q): %q", u.Source, format.PodsWithDeletionTimestamps(u.Pods))
-		//	handler.HandlePodUpdates(u.Pods)
+			handler.HandlePodAdditions(u.Pods)
+		case kubetypes.UPDATE:
+			klog.Infof("SyncLoop (UPDATE, %q): %q", u.Source, format.PodsWithDeletionTimestamps(u.Pods))
+			//handler.HandlePodUpdates(u.Pods)
 
 		case kubetypes.RECONCILE:
 			klog.Infof("SyncLoop (RECONCILE, %q): %q", u.Source, format.Pods(u.Pods))
@@ -362,6 +384,22 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		recorder:                                	kubeDeps.Recorder,
 		nodeRef: 					nodeRef,
 	}
+	runtimeService, imageService, err := getRuntimeAndImageServices(remoteRuntimeEndpoint, remoteImageEndpoint, kubeCfg.RuntimeRequestTimeout)
+	if err != nil {
+		return nil, err
+	}
+	klet.runtimeService = runtimeService
+
+	runtime, err := kuberuntime.NewKubeGenericRuntimeManager(
+		kubeDeps.Recorder,
+		kubeDeps.OSInterface,
+		runtimeService,
+		imageService,
+	)
+	if err != nil {
+		return nil, err
+	}
+	klet.containerRuntime = runtime
 
 	// Generating the status funcs should be the last thing we do,
 	// since this relies on the rest of the Kubelet having been constructed.
@@ -380,3 +418,105 @@ func (kl *Kubelet) getLastObservedNodeAddresses() []v1.NodeAddress {
 	defer kl.lastObservedNodeAddressesMux.RUnlock()
 	return kl.lastObservedNodeAddresses
 }
+
+func (kl *Kubelet) HandlePodAdditions(pods []*v1.Pod) {
+
+	start := kl.clock.Now()
+	for _, pod := range pods {
+
+		// TODO podManager
+
+		go kl.dispatchWork(pod, kubetypes.SyncPodCreate, nil, start)
+	}
+
+}
+
+
+func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mirrorPod *v1.Pod, start time.Time) {
+
+	opt := syncPodOptions{
+		mirrorPod:      mirrorPod,
+		pod:            pod,
+		//podStatus:      nil,
+		killPodOptions: nil,
+		updateType:     syncType,
+	}
+
+	for {
+		err := kl.syncPod(opt)
+		if err == nil {
+			return
+		}
+		time.Sleep(time.Minute)
+	}
+}
+
+func (kl *Kubelet) syncPod(o syncPodOptions) error {
+	pod := o.pod
+	result := kl.containerRuntime.SyncPod(pod)
+	if err := result.Error(); err != nil {
+		// Do not return error if the only failures were pods in backoff
+		for _, r := range result.SyncResults {
+			// TODO  r.Error != images.ErrImagePullBackOff
+			if r.Error != kubecontainer.ErrCrashLoopBackOff {
+				// Do not record an event here, as we keep all event logging for sync pod failures
+				// local to container runtime so we get better errors
+				return err
+			}
+		}
+
+		return nil
+	}
+	return nil
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

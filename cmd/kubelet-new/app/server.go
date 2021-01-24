@@ -421,7 +421,7 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 		//Mounter:             mounter,
 		//Subpather:           subpather,
 		//OOMAdjuster:         oom.NewOOMAdjuster(),
-		//OSInterface:         kubecontainer.RealOS{},
+		OSInterface:         kubecontainer.RealOS{},
 		//VolumePlugins:       ProbeVolumePlugins(),
 		//DynamicPluginProber: GetDynamicPluginProber(s.VolumePluginDir, pluginRunner),
 		//TLSOptions:          tlsOptions,
