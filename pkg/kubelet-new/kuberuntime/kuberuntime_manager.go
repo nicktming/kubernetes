@@ -143,7 +143,7 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod,
 
 	podSandboxConfig, _ := m.generatePodSandboxConfig(pod, 0)
 	{
-		for _, idx := range pod.Spec.Containers {
+		for idx, _ := range pod.Spec.Containers {
 			container := &pod.Spec.Containers[idx]
 			startContainerResult := kubecontainer.NewSyncResult(kubecontainer.StartContainer, container.Name)
 			result.AddSyncResult(startContainerResult)
