@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/kubelet/events"
 	"gopkg.in/square/go-jose.v2/json"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"fmt"
 )
 
@@ -91,6 +92,10 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod,
 			//backOff *flowcontrol.Backoff,
 			) (result kubecontainer.PodSyncResult) {
 
+	var podSandboxID string
+	var podIP string
+
+
 	{
 		var msg string
 		var err error
@@ -131,8 +136,31 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod,
 		// host-network, we may use a stale IP.
 		if !kubecontainer.IsHostNetworkPod(pod) {
 			// Overwrite the podIP passed in the pod status, since we just started the pod sandbox.
-			podIP := m.determinePodSandboxIP(pod.Namespace, pod.Name, podSandboxStatus)
+			podIP = m.determinePodSandboxIP(pod.Namespace, pod.Name, podSandboxStatus)
 			klog.Infof("Determined the ip %q for pod %q after sandbox changed", podIP, format.Pod(pod))
+		}
+	}
+
+	podSandboxConfig, _ := m.generatePodSandboxConfig(pod, 0)
+	{
+		for _, idx := range pod.Spec.Containers {
+			container := &pod.Spec.Containers[idx]
+			startContainerResult := kubecontainer.NewSyncResult(kubecontainer.StartContainer, container.Name)
+			result.AddSyncResult(startContainerResult)
+
+			klog.Infof("Creating container %+v in pod %v", container, format.Pod(pod))
+			if msg, err := m.startContainer(podSandboxID, podSandboxConfig, container, pod, podIP); err != nil {
+				startContainerResult.Fail(err, msg)
+				// known errors that are logged in other places are logged at higher levels here to avoid
+				// repetitive log spam
+				switch {
+				//case err == images.ErrImagePullBackOff:
+				//	klog.V(3).Infof("container start failed: %v: %s", err, msg)
+				default:
+					utilruntime.HandleError(fmt.Errorf("container start failed: %v: %s", err, msg))
+				}
+				continue
+			}
 		}
 	}
 	return
