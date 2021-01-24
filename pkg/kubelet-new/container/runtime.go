@@ -10,5 +10,5 @@ type Runtime interface {
 
 	// TODO podStatus
 	// Syncs the running pod into the desired pod.
-	SyncPod(pod *v1.Pod, backOff *flowcontrol.Backoff) PodSyncResult
+	SyncPod(pod *v1.Pod) PodSyncResult
 }
