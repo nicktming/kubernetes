@@ -16,6 +16,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/events"
 	"gopkg.in/square/go-jose.v2/json"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	kubetypes "k8s.io/apimachinery/pkg/types"
 	"fmt"
 )
 
@@ -167,8 +168,73 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod,
 }
 
 
+func (m *kubeGenericRuntimeManager) GetPods(all bool) ([]*kubecontainer.Pod, error) {
+	pods := make(map[kubetypes.UID]*kubecontainer.Pod)
 
+	sandboxes, err := m.getKubeletSandboxes(all)
+	if err != nil {
+		return nil, err
+	}
 
+	for i := range sandboxes {
+		s := sandboxes[i]
+		if s.Metadata == nil {
+			klog.Infof("Sandbox does not have metadata: %+v", s)
+			continue
+		}
+		podUID := kubetypes.UID(s.Metadata.Uid)
+		if _, ok := pods[podUID]; !ok {
+			pods[podUID] = &kubecontainer.Pod{
+				ID: 		podUID,
+				Name: 		s.Metadata.Name,
+				Namespace:      s.Metadata.Namespace,
+			}
+		}
+		pod := pods[podUID]
+		converted, err := m.sandboxToKubeContainer(s)
+		if err != nil {
+			klog.V(4).Infof("Convert %q sandbox %v of pod %q failed: %v", m.runtimeName, s, podUID, err)
+			continue
+		}
+		pod.Sandboxes = append(pod.Sandboxes, converted)
+	}
+
+	containers, err := m.getKubeletContainers(all)
+	if err != nil {
+		return nil, err
+	}
+	for i := range containers {
+		c := containers[i]
+		if c.Metadata == nil {
+			klog.Infof("container does not have metadata: %+v", c)
+			continue
+		}
+		labelledInfo := getContainerInfoFromLabels(c.Labels)
+		pod, found := pods[labelledInfo.PodUID]
+		if !found {
+			pod = &kubecontainer.Pod{
+				ID:        labelledInfo.PodUID,
+				Name:      labelledInfo.PodName,
+				Namespace: labelledInfo.PodNamespace,
+			}
+			pods[labelledInfo.PodUID] = pod
+		}
+		converted, err := m.toKubeContainer(c)
+		if err != nil {
+			klog.V(4).Infof("Convert %s container %v of pod %q failed: %v", m.runtimeName, c, labelledInfo.PodUID, err)
+			continue
+		}
+
+		pod.Containers = append(pod.Containers, converted)
+	}
+
+	var result []*kubecontainer.Pod
+	for _, pod := range pods {
+		result = append(result, pod)
+	}
+
+	return result, nil
+}
 
 
 

@@ -24,6 +24,26 @@ var (
 	ErrPostStartHook = errors.New("PostStartHookError")
 )
 
+// getKubeletContainers lists containers managed by kubelet.
+// The boolean parameter specifies whether returns all containers including
+// those already exited and dead containers (used for garbage collection).
+func (m *kubeGenericRuntimeManager) getKubeletContainers(allContainers bool) ([]*runtimeapi.Container, error) {
+	filter := &runtimeapi.ContainerFilter{}
+	if !allContainers {
+		filter.State = &runtimeapi.ContainerStateValue{
+			State: runtimeapi.ContainerState_CONTAINER_RUNNING,
+		}
+	}
+
+	containers, err := m.runtimeService.ListContainers(filter)
+	if err != nil {
+		klog.Errorf("getKubeletContainers failed: %v", err)
+		return nil, err
+	}
+
+	return containers, nil
+}
+
 
 // recordContainerEvent should be used by the runtime manager for all container related events.
 // it has sanity checks to ensure that we do not write events that can abuse our masters.

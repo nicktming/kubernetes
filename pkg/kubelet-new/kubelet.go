@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"net"
 	"net/http"
+	"k8s.io/kubernetes/pkg/kubelet-new/pleg"
 )
 
 const (
@@ -57,6 +58,8 @@ const (
 
 	// The path in containers' filesystems where the hosts file is mounted.
 	etcHostsPath = "/etc/hosts"
+
+	plegRelistPeriod = time.Second * 5
 )
 
 type Dependencies struct {
@@ -127,6 +130,9 @@ type Kubelet struct {
 	// dockerLegacyService contains some legacy methods for backward compatibility.
 	// It should be set only when docker is using non json-file logging driver.
 	dockerLegacyService dockershim.DockerLegacyService
+
+	// Generates pod events.
+	pleg pleg.PodLifecycleEventGenerator
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -214,7 +220,7 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	//kl.statusManager.Start()
 	//
 	//// Start the pod lifecycle event generator.
-	//kl.pleg.Start()
+	kl.pleg.Start()
 	kl.syncLoop(updates, kl)
 }
 
@@ -464,6 +470,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		return nil, err
 	}
 	klet.containerRuntime = runtime
+
+	klet.pleg = pleg.NewGenericPLEG(runtime, plegRelistPeriod)
 
 	// Generating the status funcs should be the last thing we do,
 	// since this relies on the rest of the Kubelet having been constructed.

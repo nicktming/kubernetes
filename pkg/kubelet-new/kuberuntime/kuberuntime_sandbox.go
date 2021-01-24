@@ -9,6 +9,28 @@ import (
 	"net"
 )
 
+
+// getKubeletSandboxes lists all (or just the running) sandboxes managed by kubelet.
+func (m *kubeGenericRuntimeManager) getKubeletSandboxes(all bool) ([]*runtimeapi.PodSandbox, error) {
+	var filter *runtimeapi.PodSandboxFilter
+	if !all {
+		readyState := runtimeapi.PodSandboxState_SANDBOX_READY
+		filter = &runtimeapi.PodSandboxFilter{
+			State: &runtimeapi.PodSandboxStateValue{
+				State: readyState,
+			},
+		}
+	}
+
+	resp, err := m.runtimeService.ListPodSandbox(filter)
+	if err != nil {
+		klog.Errorf("ListPodSandbox failed: %v", err)
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 func (m *kubeGenericRuntimeManager) createPodSandbox(pod *v1.Pod, attempt uint32) (string, string, error) {
 	podSandboxConfig, err := m.generatePodSandboxConfig(pod, attempt)
 	if err != nil {
