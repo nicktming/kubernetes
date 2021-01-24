@@ -63,6 +63,7 @@ func NewKubeGenericRuntimeManager(
 		recorder: 		recorder,
 		runtimeService:      	runtimeService,
 		imageService:        	imageService,
+		osInterface: 		osInterface,
 
 	}
 
