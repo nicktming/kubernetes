@@ -17,6 +17,8 @@ import (
 	"k8s.io/client-go/tools/record"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
+	"k8s.io/kubernetes/pkg/kubelet/dockershim"
+	dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
 	"fmt"
 	"os"
 	"path"
@@ -25,6 +27,10 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-new/remote"
 	internalapi "k8s.io/cri-api/pkg/apis"
 	"k8s.io/kubernetes/pkg/kubelet-new/kuberuntime"
+	"k8s.io/kubernetes/pkg/kubelet/server/streaming"
+	"net/url"
+	"net"
+	"net/http"
 )
 
 const (
@@ -61,6 +67,7 @@ type Dependencies struct {
 	EventClient             v1core.EventsGetter
 	OnHeartbeatFailure      func()
 	OSInterface 		kubecontainer.OSInterface
+	DockerClientConfig      *dockershim.ClientConfig
 
 }
 
@@ -112,6 +119,14 @@ type Kubelet struct {
 	containerRuntime kubecontainer.Runtime
 
 	runtimeService internalapi.RuntimeService
+
+	// The handler serving CRI streaming calls (exec/attach/port-forward).
+	criHandler http.Handler
+
+
+	// dockerLegacyService contains some legacy methods for backward compatibility.
+	// It should be set only when docker is using non json-file logging driver.
+	dockerLegacyService dockershim.DockerLegacyService
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -384,6 +399,55 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		recorder:                                	kubeDeps.Recorder,
 		nodeRef: 					nodeRef,
 	}
+
+	pluginSettings := dockershim.NetworkPluginSettings{
+		HairpinMode:        kubeletconfiginternal.HairpinMode(kubeCfg.HairpinMode),
+		NonMasqueradeCIDR:  nonMasqueradeCIDR,
+		PluginName:         crOptions.NetworkPluginName,
+		PluginConfDir:      crOptions.CNIConfDir,
+		PluginBinDirString: crOptions.CNIBinDir,
+		MTU:                int(crOptions.NetworkPluginMTU),
+	}
+
+	switch containerRuntime {
+	case kubetypes.DockerContainerRuntime:
+		// Create and start the CRI shim running as a grpc server.
+		streamingConfig := getStreamingConfig(kubeCfg, kubeDeps, crOptions)
+		ds, err := dockershim.NewDockerService(kubeDeps.DockerClientConfig, crOptions.PodSandboxImage, streamingConfig,
+			&pluginSettings, runtimeCgroups, kubeCfg.CgroupDriver, crOptions.DockershimRootDirectory, !crOptions.RedirectContainerStreaming)
+		if err != nil {
+			return nil, err
+		}
+		if crOptions.RedirectContainerStreaming {
+			klet.criHandler = ds
+		}
+
+		// The unix socket for kubelet <-> dockershim communication.
+		klog.V(5).Infof("RemoteRuntimeEndpoint: %q, RemoteImageEndpoint: %q",
+			remoteRuntimeEndpoint,
+			remoteImageEndpoint)
+		klog.V(2).Infof("Starting the GRPC server for the docker CRI shim.")
+		server := dockerremote.NewDockerServer(remoteRuntimeEndpoint, ds)
+		if err := server.Start(); err != nil {
+			return nil, err
+		}
+
+		// Create dockerLegacyService when the logging driver is not supported.
+		supported, err := ds.IsCRISupportedLogDriver()
+		if err != nil {
+			return nil, err
+		}
+		if !supported {
+			klet.dockerLegacyService = ds
+			//legacyLogProvider = ds
+		}
+	//case kubetypes.RemoteContainerRuntime:
+	//	// No-op.
+	//	break
+	default:
+		return nil, fmt.Errorf("unsupported CRI runtime: %q", containerRuntime)
+	}
+
 	runtimeService, imageService, err := getRuntimeAndImageServices(remoteRuntimeEndpoint, remoteImageEndpoint, kubeCfg.RuntimeRequestTimeout)
 	if err != nil {
 		return nil, err
@@ -471,6 +535,27 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 }
 
 
+// Gets the streaming server configuration to use with in-process CRI shims.
+func getStreamingConfig(kubeCfg *kubeletconfiginternal.KubeletConfiguration, kubeDeps *Dependencies, crOptions *config.ContainerRuntimeOptions) *streaming.Config {
+	config := &streaming.Config{
+		StreamIdleTimeout:               kubeCfg.StreamingConnectionIdleTimeout.Duration,
+		StreamCreationTimeout:           streaming.DefaultConfig.StreamCreationTimeout,
+		SupportedRemoteCommandProtocols: streaming.DefaultConfig.SupportedRemoteCommandProtocols,
+		SupportedPortForwardProtocols:   streaming.DefaultConfig.SupportedPortForwardProtocols,
+	}
+	if !crOptions.RedirectContainerStreaming {
+		config.Addr = net.JoinHostPort("localhost", "0")
+	} else {
+		// Use a relative redirect (no scheme or host).
+		config.BaseURL = &url.URL{
+			Path: "/cri/",
+		}
+		//if kubeDeps.TLSOptions != nil {
+		//	config.TLSConfig = kubeDeps.TLSOptions.Config
+		//}
+	}
+	return config
+}
 
 
 

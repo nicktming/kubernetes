@@ -73,8 +73,8 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/certificate/bootstrap"
 	//"k8s.io/kubernetes/pkg/kubelet-tming/cm"
 	"k8s.io/kubernetes/pkg/kubelet-new/config"
-	//"k8s.io/kubernetes/pkg/kubelet/dockershim"
-	//dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
+	"k8s.io/kubernetes/pkg/kubelet/dockershim"
+	dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
 	dynamickubeletconfig "k8s.io/kubernetes/pkg/kubelet/kubeletconfig"
 	"k8s.io/kubernetes/pkg/kubelet/kubeletconfig/configfiles"
 	"k8s.io/kubernetes/pkg/kubelet/server"
@@ -401,13 +401,13 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 		//}
 	}
 
-	//var dockerClientConfig *dockershim.ClientConfig
+	var dockerClientConfig *dockershim.ClientConfig
 	if s.ContainerRuntime == kubetypes.DockerContainerRuntime {
-		//dockerClientConfig = &dockershim.ClientConfig{
-		//	DockerEndpoint:            s.DockerEndpoint,
-		//	RuntimeRequestTimeout:     s.RuntimeRequestTimeout.Duration,
-		//	ImagePullProgressDeadline: s.ImagePullProgressDeadline.Duration,
-		//}
+		dockerClientConfig = &dockershim.ClientConfig{
+			DockerEndpoint:            s.DockerEndpoint,
+			RuntimeRequestTimeout:     s.RuntimeRequestTimeout.Duration,
+			ImagePullProgressDeadline: s.ImagePullProgressDeadline.Duration,
+		}
 	}
 
 	return &kubelet.Dependencies{
@@ -415,7 +415,7 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 		//CAdvisorInterface:   nil, // cadvisor.New launches background processes (bg http.ListenAndServe, and some bg cleaners), not set here
 		//Cloud:               nil, // cloud provider might start background processes
 		//ContainerManager:    nil,
-		//DockerClientConfig:  dockerClientConfig,
+		DockerClientConfig:  dockerClientConfig,
 		KubeClient:          nil,
 		//HeartbeatClient:     nil,
 		//EventClient:         nil,
