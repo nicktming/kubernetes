@@ -14,7 +14,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/kubelet/events"
-	"gopkg.in/square/go-jose.v2/json"
+	"encoding/json"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	kubetypes "k8s.io/apimachinery/pkg/types"
 	"fmt"
@@ -178,6 +178,9 @@ func (m *kubeGenericRuntimeManager) GetPods(all bool) ([]*kubecontainer.Pod, err
 
 	for i := range sandboxes {
 		s := sandboxes[i]
+		pretty_sandbox, _ := json.MarshalIndent(s, "", "\t")
+		fmt.Printf("kubeGenericRuntimeManager GetPods pretty sandbox: %s\n, s.metadata: %v, s.Metadata == nil (%v)\n",
+			string(pretty_sandbox), s.Metadata, (s.Metadata == nil))
 		if s.Metadata == nil {
 			klog.Infof("Sandbox does not have metadata: %+v", s)
 			continue
