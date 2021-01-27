@@ -91,6 +91,9 @@ func getContainersFromPod(pods ...*kubecontainer.Pod) []kubecontainer.ContainerI
 }
 
 func getContainerState(pod *kubecontainer.Pod, cid kubecontainer.ContainerID) kubecontainer.ContainerState {
+	if pod == nil {
+		return kubecontainer.ContainerStateUnknown
+	}
 	for _, c := range pod.Containers {
 		if c.ID.ID != cid.ID  {
 			continue
