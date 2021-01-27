@@ -133,6 +133,9 @@ func generateContainerState(old, cur *kubecontainer.Pod, c kubecontainer.Contain
 }
 
 func updateEvents(eventsByPodID map[types.UID][]*PodLifecycleEvent, event *PodLifecycleEvent, pid types.UID) {
+	if event == nil {
+		return 
+	}
 	if _, ok := eventsByPodID[pid]; !ok {
 		eventsByPodID[pid] = make([]*PodLifecycleEvent, 0)
 	}
