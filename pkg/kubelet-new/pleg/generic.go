@@ -126,9 +126,9 @@ func generateContainerState(old, cur *kubecontainer.Pod, c kubecontainer.Contain
 	return computeEventType(oldState, curState, cur, c)
 }
 
-func updateEvents(eventsByPodID map[types.UID][]*PodLifeCycleEventType, event *PodLifeCycleEventType, pid types.UID) {
-	if eventsByPodID[pid] {
-		return
+func updateEvents(eventsByPodID map[types.UID][]*PodLifecycleEvent, event *PodLifecycleEvent, pid types.UID) {
+	if _, ok := eventsByPodID[pid]; !ok {
+		eventsByPodID[pid] = make([]*PodLifeCycleEventType, 0)
 	}
 	eventsByPodID[pid] = append(eventsByPodID[pid], event...)
 }
