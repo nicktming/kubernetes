@@ -71,6 +71,9 @@ func getContainersFromPod(pods ...*kubecontainer.Pod) []kubecontainer.ContainerI
 	var containers []kubecontainer.ContainerID
 
 	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
 		for _, c := range pod.Containers {
 			if cidSet.Has(c.ID.ID) {
 				continue
