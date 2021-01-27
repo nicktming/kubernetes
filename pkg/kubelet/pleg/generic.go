@@ -29,6 +29,7 @@ import (
 	"k8s.io/klog"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
+	"encoding/json"
 )
 
 // GenericPLEG is an extremely simple generic PLEG that relies solely on
@@ -204,6 +205,11 @@ func (g *GenericPLEG) relist() {
 	if err != nil {
 		klog.Errorf("GenericPLEG: Unable to retrieve pods: %v", err)
 		return
+	}
+
+	for _, pod := range podList {
+		pretty_pod, _ := json.MarshalIndent(pod, "", "\t")
+		fmt.Printf("relist pod : %v\n", string(pretty_pod))
 	}
 
 	g.updateRelistTime(timestamp)
