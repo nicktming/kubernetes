@@ -9,8 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"fmt"
-	"github.com/docker/docker/builder/builder-next/exporter"
-	"k8s.io/kubernetes/pkg/kubelet/pleg"
 )
 
 type GenericPLEG struct {
@@ -31,23 +29,25 @@ type PodRecords map[types.UID]*PodRecord
 
 func (p PodRecords) setCurrent(pods []*kubecontainer.Pod) {
 	for _, pod := range pods {
-		if !p[pod.ID] {
+		if _, ok := p[pod.ID]; !ok {
 			p[pod.ID] = &PodRecord{}
+		} else {
+			p[pod.ID].old = p[pod.ID].cur
+			p[pod.ID].cur = pod
 		}
-		p[pod.ID].old = p[pod.ID].cur
-		p[pod.ID].cur = pod
+
 	}
 }
 
 func (p PodRecords) getOld(pid types.UID) *kubecontainer.Pod {
-	if !p[pid] {
+	if _, ok := p[pid]; !ok {
 		return nil
 	}
 	return p[pid].old
 }
 
 func (p PodRecords) getCurrent(pid types.UID) *kubecontainer.Pod {
-	if !p[pid] {
+	if _, ok := p[pid]; !ok {
 		return nil
 	}
 	return p[pid].cur
@@ -68,7 +68,7 @@ func (g *GenericPLEG) Start() {
 
 func getContainersFromPod(pods ...*kubecontainer.Pod) []kubecontainer.ContainerID {
 	cidSet := sets.NewString()
-	var containers []*kubecontainer.ContainerID
+	var containers []kubecontainer.ContainerID
 
 	for _, pod := range pods {
 		for _, c := range pod.Containers {
@@ -112,10 +112,11 @@ func computeEventType(oldState, curState kubecontainer.ContainerState, pod *kube
 	case kubecontainer.ContainerStateRunning:
 		return &PodLifecycleEvent{ID: pod.ID, Type: ContainerStarted, Data: c}
 	case kubecontainer.ContainerStateExited:
-		return &PodLifecycleEvent{ID: pod.ID, Type: pleg.ContainerDied, Data: c}
+		return &PodLifecycleEvent{ID: pod.ID, Type: ContainerDied, Data: c}
 	default:
 		panic(fmt.Sprintf("unrecognized container state: %v", curState))
 	}
+	return nil
 }
 
 func generateContainerState(old, cur *kubecontainer.Pod, c kubecontainer.ContainerID) *PodLifecycleEvent {

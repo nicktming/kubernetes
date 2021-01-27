@@ -8,7 +8,7 @@ type PodLifeCycleEventType string
 
 const (
 	ContainerStarted PodLifeCycleEventType = "ContainerStarted"
-	ContainerStarted PodLifeCycleEventType = "ContainerDied"
+	ContainerDied PodLifeCycleEventType = "ContainerDied"
 )
 
 type PodLifecycleEvent struct {
