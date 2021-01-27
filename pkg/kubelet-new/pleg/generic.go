@@ -128,9 +128,9 @@ func generateContainerState(old, cur *kubecontainer.Pod, c kubecontainer.Contain
 
 func updateEvents(eventsByPodID map[types.UID][]*PodLifecycleEvent, event *PodLifecycleEvent, pid types.UID) {
 	if _, ok := eventsByPodID[pid]; !ok {
-		eventsByPodID[pid] = make([]*PodLifeCycleEventType, 0)
+		eventsByPodID[pid] = make([]*PodLifecycleEvent, 0)
 	}
-	eventsByPodID[pid] = append(eventsByPodID[pid], event...)
+	eventsByPodID[pid] = append(eventsByPodID[pid], event)
 }
 
 func (g *GenericPLEG) relist() {
