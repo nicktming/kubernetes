@@ -8,6 +8,7 @@ type PodLifeCycleEventType string
 
 const (
 	ContainerStarted PodLifeCycleEventType = "ContainerStarted"
+	ContainerStarted PodLifeCycleEventType = "ContainerDied"
 )
 
 type PodLifecycleEvent struct {
@@ -16,6 +17,7 @@ type PodLifecycleEvent struct {
 	Type PodLifeCycleEventType
 
 	// TODO Data
+	Data interface{}
 }
 
 
