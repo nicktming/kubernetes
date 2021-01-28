@@ -53,6 +53,10 @@ func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.Po
 func (kl *Kubelet) convertToAPIContainerStatuses(pod *v1.Pod, podStatus *kubecontainer.PodStatus) v1.PodStatus {
 	var apiPodStatus v1.PodStatus
 
+	if podStatus == nil {
+		return apiPodStatus
+	}
+
 	covertContainerStatus := func(cs *kubecontainer.ContainerStatus) v1.ContainerStatus {
 		cid := cs.ID.String()
 		status := v1.ContainerStatus{
