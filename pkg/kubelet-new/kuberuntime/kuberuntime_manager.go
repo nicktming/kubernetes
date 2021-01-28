@@ -142,7 +142,7 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod,
 		klog.Infof("Creating sandbox for pod %q", format.Pod(pod))
 		createSandboxResult := kubecontainer.NewSyncResult(kubecontainer.CreatePodSandbox, format.Pod(pod))
 		result.AddSyncResult(createSandboxResult)
-		podSandboxID, msg, err = m.createPodSandbox(pod, podContainerChanges.Attempt)
+		podSandboxID, msg, err = m.createPodSandbox(pod, uint32(podContainerChanges.Attempt))
 		if err != nil {
 			createSandboxResult.Fail(kubecontainer.ErrCreatePodSandbox, msg)
 			klog.Errorf("createPodSandbox for pod %q failed: %v", format.Pod(pod), err)
@@ -178,7 +178,7 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod,
 			klog.Infof("Determined the ip %q for pod %q after sandbox changed", podIP, format.Pod(pod))
 		}
 	}
-	podSandboxConfig, _ := m.generatePodSandboxConfig(pod, podContainerChanges.Attempt)
+	podSandboxConfig, _ := m.generatePodSandboxConfig(pod, uint32(podContainerChanges.Attempt))
 	if len(podContainerChanges.ContainersToStart) > 0 {
 		for _, idx := range podContainerChanges.ContainersToStart {
 			container := &pod.Spec.Containers[idx]
