@@ -96,6 +96,9 @@ func (m *kubeGenericRuntimeManager) computePodActions(pod *v1.Pod, podStatus *ku
 	pa := podActions {
 		ContainersToStart: 	make([]int, 0),
 	}
+	if podStatus == nil {
+		podStatus = &kubecontainer.PodStatus{}
+	}
 	if len(podStatus.SandboxStatuses) == 0 {
 		pa.CreateSandbox = true
 		pa.Attempt = pa.Attempt + 1
