@@ -34,7 +34,8 @@ func (pm *basicManager) AddPod(pod *v1.Pod) {
 }
 
 func (pm *basicManager) GetPodByUID(pid types.UID) (*v1.Pod, bool) {
-	return pm.podByUID[pid]
+	p, ok := pm.podByUID[pid]
+	return p, ok
 }
 
 

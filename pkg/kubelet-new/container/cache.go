@@ -13,9 +13,9 @@ type Cache interface {
 	Set(types.UID, *PodStatus, error, time.Time)
 	// GetNewerThan is a blocking call that only returns the status
 	// when it is newer than the given time.
-	GetNewerThan(types.UID, time.Time) (*PodStatus, error)
-	Delete(types.UID)
-	UpdateTime(time.Time)
+	//GetNewerThan(types.UID, time.Time) (*PodStatus, error)
+	//Delete(types.UID)
+	//UpdateTime(time.Time)
 }
 
 
