@@ -178,6 +178,8 @@ func (g *GenericPLEG) relist() {
 	for pid, events := range eventsByPodID {
 		pod := g.podRecords.getCurrent(pid)
 		podstatus, err := g.runtime.GetPodStatus(pid, pod.Name, pod.Namespace)
+		pretty_podstatus, _ := json.MarshalIndent(podstatus, "", "\t")
+		fmt.Printf("got podStatus: %v\n", string(pretty_podstatus))
 		if err != nil {
 			klog.Warningf("error get pod status: %v\n", err)
 		} else {

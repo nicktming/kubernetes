@@ -103,7 +103,9 @@ func (m *kubeGenericRuntimeManager) computePodActions(pod *v1.Pod, podStatus *ku
 		pa.CreateSandbox = true
 		pa.Attempt = pa.Attempt + 1
 	} else {
-		pa.SandboxID = podStatus.SandboxStatuses[0].Id
+		sandboxStatus := podStatus.SandboxStatuses[0]
+		pa.SandboxID = sandboxStatus.Id
+		pa.Attempt  =  sandboxStatus.Metadata.Attempt
 	}
 	for i := range pod.Spec.Containers {
 		container := pod.Spec.Containers[i]
