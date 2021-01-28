@@ -45,3 +45,9 @@ func newContainerLabels(container *v1.Container, pod *v1.Pod) map[string]string 
 
 	return labels
 }
+
+func newPodLabels(pod *v1.Pod) map[string]string {
+	labels := map[string]string{}
+	labels[types.KubernetesPodUIDLabel]= string(pod.UID)
+	return labels
+}

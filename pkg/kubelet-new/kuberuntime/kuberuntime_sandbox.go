@@ -69,7 +69,7 @@ func (m *kubeGenericRuntimeManager) generatePodSandboxConfig(pod *v1.Pod, attemp
 			Uid:       podUID,
 			Attempt:   attempt,
 		},
-		//Labels:      newPodLabels(pod),
+		Labels:      newPodLabels(pod),
 		//Annotations: newPodAnnotations(pod),
 	}
 	// TODO dnsConfig
