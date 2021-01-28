@@ -33,6 +33,7 @@ import (
 	"net"
 	"net/http"
 	"k8s.io/kubernetes/pkg/kubelet-new/pleg"
+	"k8s.io/kubernetes/pkg/kubelet-new/status"
 )
 
 const (
@@ -137,7 +138,12 @@ type Kubelet struct {
 	// this Kubelet services.
 	podManager kubepod.Manager
 
+	// 用于获取docker端的podStatus
 	podCache kubecontainer.Cache
+
+
+	// Syncs pods statuses with apiserver; also used as a cache of statuses.
+	statusManager status.Manager
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -483,6 +489,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	klet.pleg = pleg.NewGenericPLEG(runtime, plegRelistPeriod, klet.podCache)
 
 	klet.podManager = kubepod.NewBasicPodManager()
+	klet.statusManager = status.NewManager(klet.kubeClient)
 
 	// Generating the status funcs should be the last thing we do,
 	// since this relies on the rest of the Kubelet having been constructed.
@@ -541,7 +548,13 @@ func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mir
 
 func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	pod := o.pod
-	result := kl.containerRuntime.SyncPod(pod, o.podStatus)
+	podStatus := o.podStatus
+
+	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus)
+
+	kl.statusManager.SetPodStatus(pod, apiPodStatus)
+
+	result := kl.containerRuntime.SyncPod(pod, podStatus)
 	if err := result.Error(); err != nil {
 		// Do not return error if the only failures were pods in backoff
 		for _, r := range result.SyncResults {
