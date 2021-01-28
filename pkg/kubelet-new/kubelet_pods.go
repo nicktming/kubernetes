@@ -42,7 +42,7 @@ func getPhase(spec *v1.PodSpec, info []v1.ContainerStatus) v1.PodPhase {
 
 func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.PodStatus) v1.PodStatus {
 	s := kl.convertToAPIContainerStatuses(pod, podStatus)
-	allStatus := append(append([]v1.ContainerStatus{}, s.ContainerStatuses...), s.InitContainerStatuses)
+	allStatus := append(append([]v1.ContainerStatus{}, s.ContainerStatuses...), s.InitContainerStatuses...)
 
 	spec := &pod.Spec
 	s.Phase = getPhase(spec, allStatus)
@@ -53,9 +53,9 @@ func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.Po
 func (kl *Kubelet) convertToAPIContainerStatuses(pod *v1.Pod, podStatus *kubecontainer.PodStatus) v1.PodStatus {
 	var apiPodStatus v1.PodStatus
 
-	covertContainerStatus := func(cs *kubecontainer.ContainerStatus) *v1.ContainerStatus {
+	covertContainerStatus := func(cs *kubecontainer.ContainerStatus) v1.ContainerStatus {
 		cid := cs.ID.String()
-		status := &v1.ContainerStatus{
+		status := v1.ContainerStatus{
 			Name: 			cs.Name,
 			RestartCount: 		int32(cs.RestartCount),
 			Image: 			cs.Image,
@@ -71,10 +71,10 @@ func (kl *Kubelet) convertToAPIContainerStatuses(pod *v1.Pod, podStatus *kubecon
 		return status
 	}
 
-	apiPodStatus.ContainerStatuses = make([]v1.PodStatus, len(podStatus.ContainerStatuses))
+	apiPodStatus.ContainerStatuses = make([]v1.ContainerStatus, len(podStatus.ContainerStatuses))
 
 	for i, containerStatus := range podStatus.ContainerStatuses {
-		apiPodStatus[i] = covertContainerStatus(containerStatus)
+		apiPodStatus.ContainerStatuses[i] = covertContainerStatus(containerStatus)
 	}
 
 	return apiPodStatus
