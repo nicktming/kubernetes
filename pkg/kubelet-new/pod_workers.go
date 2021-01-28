@@ -12,7 +12,7 @@ import (
 	//"k8s.io/apimachinery/pkg/util/wait"
 	//"k8s.io/client-go/tools/record"
 	//"k8s.io/klog"
-	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
 	//"k8s.io/kubernetes/pkg/kubelet/events"
 	//"k8s.io/kubernetes/pkg/kubelet/eviction"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet-new/types"
@@ -62,7 +62,7 @@ type syncPodOptions struct {
 	// the type of update (create, update, sync)
 	updateType kubetypes.SyncPodType
 	// the current status
-	//podStatus *kubecontainer.PodStatus
+	podStatus *kubecontainer.PodStatus
 	// if update type is kill, use the specified options to kill the pod.
 	killPodOptions *KillPodOptions
 }

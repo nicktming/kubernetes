@@ -18,6 +18,10 @@ type GenericPLEG struct {
 	runtime kubecontainer.Runtime
 
 	podRecords PodRecords
+
+	eventChannel chan*PodLifecycleEvent
+
+	cache kubecontainer.Cache
 }
 
 type PodRecord struct {
@@ -53,11 +57,13 @@ func (p PodRecords) getCurrent(pid types.UID) *kubecontainer.Pod {
 	return p[pid].cur
 }
 
-func NewGenericPLEG(runtime kubecontainer.Runtime, relistPeriod time.Duration) PodLifecycleEventGenerator {
+func NewGenericPLEG(runtime kubecontainer.Runtime, relistPeriod time.Duration, cache kubecontainer.Cache) PodLifecycleEventGenerator {
 	return &GenericPLEG{
-		relistPeriod: relistPeriod,
-		runtime: runtime,
-		podRecords: make(PodRecords),
+		relistPeriod: 	relistPeriod,
+		runtime: 	runtime,
+		podRecords: 	make(PodRecords),
+		eventChannel: 	make(chan *PodLifecycleEvent, 10),
+		cache: 		cache,
 	}
 }
 
@@ -170,8 +176,22 @@ func (g *GenericPLEG) relist() {
 	}
 
 	for pid, events := range eventsByPodID {
+		pod := g.podRecords.getCurrent(pid)
+		podstatus, err := g.runtime.GetPodStatus(pid, pod.Name, pod.Namespace)
+		if err != nil {
+			klog.Warningf("error get pod status: %v\n", err)
+		} else {
+			g.cache.Set(pid, podstatus, nil, time.Now())
+		}
+
 		for i := range events {
 			fmt.Printf("===>pid: %v cid: %v, event: %v\n", pid, events[i].Data, events[i].Type)
+			g.eventChannel <- events[i]
 		}
 	}
 }
+
+func (g *GenericPLEG) Watch() chan *PodLifecycleEvent {
+	return g.eventChannel
+}
+

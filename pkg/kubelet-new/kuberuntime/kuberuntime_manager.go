@@ -3,6 +3,7 @@ package kuberuntime
 import (
 	internalapi "k8s.io/cri-api/pkg/apis"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/api/core/v1"
 	//"k8s.io/client-go/util/flowcontrol"
 	"errors"
@@ -17,6 +18,7 @@ import (
 	"encoding/json"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	kubetypes "k8s.io/apimachinery/pkg/types"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 	"fmt"
 )
 
@@ -78,6 +80,38 @@ func NewKubeGenericRuntimeManager(
 	return kubeRuntimeManager, nil
 }
 
+// podActions keeps information what to do for a pod.
+type podActions struct {
+	SandboxID string
+
+	CreateSandbox bool
+
+	ContainersToStart []int
+
+	Attempt int
+}
+
+// computePodActions check whether the pod spec has changed and returns the changes if true
+func (m *kubeGenericRuntimeManager) computePodActions(pod *v1.Pod, podStatus *kubecontainer.PodStatus) podActions {
+	pa := podActions {
+		ContainersToStart: 	make([]int, 0),
+	}
+	if len(podStatus.SandboxStatuses) == 0 {
+		pa.CreateSandbox = true
+		pa.Attempt = pa.Attempt + 1
+	} else {
+		pa.SandboxID = podStatus.SandboxStatuses[0].Id
+	}
+	for i := range pod.Spec.Containers {
+		container := pod.Spec.Containers[i]
+		containerStatus := podStatus.GetContainerStatusFromPodStatus(container.Name)
+
+		if containerStatus == nil || containerStatus.State != kubecontainer.ContainerStateRunning {
+			pa.ContainersToStart = append(pa.ContainersToStart, i)
+		}
+	}
+	return pa
+}
 
 // SyncPod syncs the running pod into the desired pod by executing following steps:
 //
@@ -88,23 +122,27 @@ func NewKubeGenericRuntimeManager(
 //  5. Create init containers.
 //  6. Create normal containers.
 func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod,
-			//podStatus *kubecontainer.PodStatus,
+			podStatus *kubecontainer.PodStatus,
 			//pullSecrets []v1.Secret,
 			//backOff *flowcontrol.Backoff,
 			) (result kubecontainer.PodSyncResult) {
 
-	var podSandboxID string
+	podContainerChanges := m.computePodActions(pod, podStatus)
+
+	pretty_podContainerChanges, _ := json.MarshalIndent(podContainerChanges, "", "\t")
+	fmt.Printf("compute pod actions: %v\n", string(pretty_podContainerChanges))
+
+	podSandboxID := podContainerChanges.SandboxID
 	var podIP string
 
-
-	{
+	if podContainerChanges.CreateSandbox {
 		var msg string
 		var err error
 
 		klog.Infof("Creating sandbox for pod %q", format.Pod(pod))
 		createSandboxResult := kubecontainer.NewSyncResult(kubecontainer.CreatePodSandbox, format.Pod(pod))
 		result.AddSyncResult(createSandboxResult)
-		podSandboxID, msg, err := m.createPodSandbox(pod, 0)
+		podSandboxID, msg, err = m.createPodSandbox(pod, podContainerChanges.Attempt)
 		if err != nil {
 			createSandboxResult.Fail(kubecontainer.ErrCreatePodSandbox, msg)
 			klog.Errorf("createPodSandbox for pod %q failed: %v", format.Pod(pod), err)
@@ -116,7 +154,6 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod,
 			return
 		}
 		klog.Infof("Created PodSandbox %q for pod %q", podSandboxID, format.Pod(pod))
-
 
 		podSandboxStatus, err := m.runtimeService.PodSandboxStatus(podSandboxID)
 		if err != nil {
@@ -141,10 +178,9 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod,
 			klog.Infof("Determined the ip %q for pod %q after sandbox changed", podIP, format.Pod(pod))
 		}
 	}
-
-	podSandboxConfig, _ := m.generatePodSandboxConfig(pod, 0)
-	{
-		for idx, _ := range pod.Spec.Containers {
+	podSandboxConfig, _ := m.generatePodSandboxConfig(pod, podContainerChanges.Attempt)
+	if len(podContainerChanges.ContainersToStart) > 0 {
+		for _, idx := range podContainerChanges.ContainersToStart {
 			container := &pod.Spec.Containers[idx]
 			startContainerResult := kubecontainer.NewSyncResult(kubecontainer.StartContainer, container.Name)
 			result.AddSyncResult(startContainerResult)
@@ -239,7 +275,53 @@ func (m *kubeGenericRuntimeManager) GetPods(all bool) ([]*kubecontainer.Pod, err
 	return result, nil
 }
 
+func (m *kubeGenericRuntimeManager) GetPodStatus(uid kubetypes.UID, name, namespace string) (*kubecontainer.PodStatus, error) {
+	podSandboxIDs, err := m.getSandboxIDByPodUID(uid, nil)
+	if err != nil {
+		return nil, err
+	}
 
+	podFullName := format.Pod(&v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			UID:       uid,
+		},
+	})
+	sandboxStatuses := make([]*runtimeapi.PodSandboxStatus, len(podSandboxIDs))
+	podIP := ""
+	for idx, podSandboxID := range podSandboxIDs {
+		podSandboxStatus, err := m.runtimeService.PodSandboxStatus(podSandboxID)
+		if err != nil {
+			klog.Errorf("PodSandboxStatus of sandbox %q for pod %q error: %v", podSandboxID, podFullName, err)
+			return nil, err
+		}
+		sandboxStatuses[idx] = podSandboxStatus
+
+		// Only get pod IP from latest sandbox
+		if idx == 0 && podSandboxStatus.State == runtimeapi.PodSandboxState_SANDBOX_READY {
+			podIP = m.determinePodSandboxIP(namespace, name, podSandboxStatus)
+		}
+	}
+	// Get statuses of all containers visible in the pod.
+	containerStatuses, err := m.getPodContainerStatuses(uid, name, namespace)
+	if err != nil {
+		//if m.logReduction.ShouldMessageBePrinted(err.Error(), podFullName) {
+		//	klog.Errorf("getPodContainerStatuses for pod %q failed: %v", podFullName, err)
+		//}
+		return nil, err
+	}
+	//m.logReduction.ClearID(podFullName)
+
+	return &kubecontainer.PodStatus{
+		ID:                uid,
+		Name:              name,
+		Namespace:         namespace,
+		IP:                podIP,
+		SandboxStatuses:   sandboxStatuses,
+		ContainerStatuses: containerStatuses,
+	}, nil
+}
 
 
 

@@ -9,6 +9,47 @@ import (
 	"fmt"
 )
 
+type podsByID []*kubecontainer.Pod
+
+func (b podsByID) Len() int           { return len(b) }
+func (b podsByID) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
+func (b podsByID) Less(i, j int) bool { return b[i].ID < b[j].ID }
+
+type containersByID []*kubecontainer.Container
+
+func (b containersByID) Len() int           { return len(b) }
+func (b containersByID) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
+func (b containersByID) Less(i, j int) bool { return b[i].ID.ID < b[j].ID.ID }
+
+// Newest first.
+type podSandboxByCreated []*runtimeapi.PodSandbox
+
+func (p podSandboxByCreated) Len() int           { return len(p) }
+func (p podSandboxByCreated) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p podSandboxByCreated) Less(i, j int) bool { return p[i].CreatedAt > p[j].CreatedAt }
+
+type containerStatusByCreated []*kubecontainer.ContainerStatus
+
+func (c containerStatusByCreated) Len() int           { return len(c) }
+func (c containerStatusByCreated) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
+func (c containerStatusByCreated) Less(i, j int) bool { return c[i].CreatedAt.After(c[j].CreatedAt) }
+
+// toKubeContainerState converts runtimeapi.ContainerState to kubecontainer.ContainerState.
+func toKubeContainerState(state runtimeapi.ContainerState) kubecontainer.ContainerState {
+	switch state {
+	case runtimeapi.ContainerState_CONTAINER_CREATED:
+		return kubecontainer.ContainerStateCreated
+	case runtimeapi.ContainerState_CONTAINER_RUNNING:
+		return kubecontainer.ContainerStateRunning
+	case runtimeapi.ContainerState_CONTAINER_EXITED:
+		return kubecontainer.ContainerStateExited
+	case runtimeapi.ContainerState_CONTAINER_UNKNOWN:
+		return kubecontainer.ContainerStateUnknown
+	}
+
+	return kubecontainer.ContainerStateUnknown
+}
+
 // logPathDelimiter is the delimiter used in the log path.
 const logPathDelimiter = "_"
 

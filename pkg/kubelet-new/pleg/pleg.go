@@ -23,5 +23,6 @@ type PodLifecycleEvent struct {
 
 type PodLifecycleEventGenerator interface {
 	Start()
+	Watch() chan *PodLifecycleEvent
 }
 

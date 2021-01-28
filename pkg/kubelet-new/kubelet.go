@@ -28,6 +28,7 @@ import (
 	internalapi "k8s.io/cri-api/pkg/apis"
 	"k8s.io/kubernetes/pkg/kubelet-new/kuberuntime"
 	"k8s.io/kubernetes/pkg/kubelet/server/streaming"
+	kubepod "k8s.io/kubernetes/pkg/kubelet-new/pod"
 	"net/url"
 	"net"
 	"net/http"
@@ -82,7 +83,7 @@ type SyncHandler interface {
 	HandlePodAdditions(pods []*v1.Pod)
 	//HandlePodUpdates(pods []*v1.Pod)
 	//HandlePodReconcile(pods []*v1.Pod)
-	//HandlePodSyncs(pods []*v1.Pod)
+	HandlePodSyncs(pods []*v1.Pod)
 }
 
 
@@ -131,6 +132,12 @@ type Kubelet struct {
 
 	// Generates pod events.
 	pleg pleg.PodLifecycleEventGenerator
+
+	// podManager is a facade that abstracts away the various sources of pods
+	// this Kubelet services.
+	podManager kubepod.Manager
+
+	podCache kubecontainer.Cache
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -225,10 +232,10 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHandler) {
 	klog.Infof("Starting kubelet main sync loop.")
 
-	//plegCh := kl.pleg.Watch()
+	plegCh := kl.pleg.Watch()
 
 	for {
-		if !kl.syncLoopIteration(updates, kl) {
+		if !kl.syncLoopIteration(updates, kl, plegCh) {
 			break
 		}
 		//time.Sleep(time.Minute)
@@ -239,7 +246,9 @@ func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHand
 }
 
 // TODO pleg
-func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handler SyncHandler) bool {
+func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
+			handler SyncHandler,
+			plegCh chan*pleg.PodLifecycleEvent) bool {
 	select {
 	case u, open := <- configCh:
 		if !open {
@@ -258,16 +267,16 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate, handle
 			klog.Infof("SyncLoop (RECONCILE, %q): %q", u.Source, format.Pods(u.Pods))
 			//handler.HandlePodReconcile(u.Pods)
 		}
-	//case e := <-plegCh:
-	//	if isSyncPodWorthy(e) {
-	//		// PLEG event for a pod; sync it.
-	//		if pod, ok := kl.podManager.GetPodByUID(e.ID); ok {
-	//			klog.Infof("SyncLoop (PLEG): %q, event: %#v", format.Pod(pod), e)
-	//			handler.HandlePodSyncs([]*v1.Pod{pod})
-	//		} else {
-	//			klog.Infof("SyncLoop (PLEG): ignore irrelevant event: %#v", e)
-	//		}
-	//	}
+	case e := <-plegCh:
+		//if isSyncPodWorthy(e) {
+			// PLEG event for a pod; sync it.
+			if pod, ok := kl.podManager.GetPodByUID(e.ID); ok {
+				klog.Infof("SyncLoop (PLEG): %q, event: %#v", format.Pod(pod), e)
+				handler.HandlePodSyncs([]*v1.Pod{pod})
+			} else {
+				klog.Infof("SyncLoop (PLEG): ignore irrelevant event: %#v", e)
+			}
+		//}
 
 	// TODO pleg.ContainerDied
 	//if e.Type == pleg.ContainerDied {
@@ -469,7 +478,11 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	}
 	klet.containerRuntime = runtime
 
-	klet.pleg = pleg.NewGenericPLEG(runtime, plegRelistPeriod)
+	klet.podCache = kubecontainer.NewCache()
+
+	klet.pleg = pleg.NewGenericPLEG(runtime, plegRelistPeriod, klet.podCache)
+
+	klet.podManager = kubepod.NewBasicPodManager()
 
 	// Generating the status funcs should be the last thing we do,
 	// since this relies on the rest of the Kubelet having been constructed.
@@ -490,24 +503,29 @@ func (kl *Kubelet) getLastObservedNodeAddresses() []v1.NodeAddress {
 }
 
 func (kl *Kubelet) HandlePodAdditions(pods []*v1.Pod) {
-
 	start := kl.clock.Now()
 	for _, pod := range pods {
-
 		// TODO podManager
-
+		kl.podManager.AddPod(pod)
 		go kl.dispatchWork(pod, kubetypes.SyncPodCreate, nil, start)
 	}
+}
 
+func (kl *Kubelet) HandlePodSyncs(pods []*v1.Pod) {
+	start := kl.clock.Now()
+	for _, pod := range pods {
+		kl.dispatchWork(pod, kubetypes.SyncPodSync, nil, start)
+	}
 }
 
 
 func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mirrorPod *v1.Pod, start time.Time) {
 
+	podStatus, _ := kl.podCache.Get(pod.UID)
 	opt := syncPodOptions{
 		mirrorPod:      mirrorPod,
 		pod:            pod,
-		//podStatus:      nil,
+		podStatus:      podStatus,
 		killPodOptions: nil,
 		updateType:     syncType,
 	}
@@ -523,7 +541,7 @@ func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mir
 
 func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	pod := o.pod
-	result := kl.containerRuntime.SyncPod(pod)
+	result := kl.containerRuntime.SyncPod(pod, o.podStatus)
 	if err := result.Error(); err != nil {
 		// Do not return error if the only failures were pods in backoff
 		for _, r := range result.SyncResults {

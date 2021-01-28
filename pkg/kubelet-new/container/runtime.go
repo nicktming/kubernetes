@@ -5,18 +5,73 @@ import (
 	"k8s.io/api/core/v1"
 	//"k8s.io/client-go/util/flowcontrol"
 	"k8s.io/apimachinery/pkg/types"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 	"k8s.io/klog"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type Runtime interface {
 
+	// GetPodStatus retrieves the status of the pod, including the
+	// information of all containers in the pod that are visible in Runtime.
+	GetPodStatus(uid types.UID, name, namespace string) (*PodStatus, error)
+
 	// TODO podStatus
 	// Syncs the running pod into the desired pod.
-	SyncPod(pod *v1.Pod) PodSyncResult
+	SyncPod(pod *v1.Pod, podStatus *PodStatus) PodSyncResult
 
 	GetPods(all bool) ([]*Pod, error)
+}
+
+type PodStatus struct {
+	// ID of the pod.
+	ID types.UID
+	// Name of the pod
+	Name string
+	// Namespace of the pod
+	Namespace string
+	// IP of the pod
+	IP string
+	// Status of containers in the pod.
+	ContainerStatuses []*ContainerStatus
+	// Status of the pod sandbox.
+	// Only for kuberuntime now, other runtime may keep it nil.
+	SandboxStatuses []*runtimeapi.PodSandboxStatus
+}
+
+
+// ContainerStatus represents the status of a container.
+type ContainerStatus struct {
+	// ID of the container.
+	ID ContainerID
+	// Name of the container.
+	Name string
+	// Status of the container.
+	State ContainerState
+	// Creation time of the container.
+	CreatedAt time.Time
+	// Start time of the container.
+	StartedAt time.Time
+	// Finish time of the container.
+	FinishedAt time.Time
+	// Exit code of the container.
+	ExitCode int
+	// Name of the image, this also includes the tag of the image,
+	// the expected form is "NAME:TAG".
+	Image string
+	// ID of the image.
+	ImageID string
+	// Hash of the container, used for comparison.
+	Hash uint64
+	// Number of times that the container has been restarted.
+	RestartCount int
+	// A string explains why container is in such a status.
+	Reason string
+	// Message written by the container before exiting (stored in
+	// TerminationMessagePath).
+	Message string
 }
 
 // Pod is a group of containers.
@@ -128,6 +183,15 @@ type Container struct {
 	State ContainerState
 }
 
+
+func (ps *PodStatus) GetContainerStatusFromPodStatus(name string) *ContainerStatus {
+	for _, cs := range ps.ContainerStatuses {
+		if cs.Name == name {
+			return cs
+		}
+	}
+	return nil
+}
 
 
 
