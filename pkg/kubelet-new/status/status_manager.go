@@ -10,6 +10,7 @@ import (
 	"sync"
 	"k8s.io/apimachinery/pkg/api/errors"
 	statusutil "k8s.io/kubernetes/pkg/util/pod"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 type Manager interface {
@@ -26,11 +27,13 @@ type PodDeletionSafetyProvider interface {
 type manager struct {
 	kubeClient clientset.Interface
 	podStatusesLock  sync.RWMutex
+	podDeletionSafetyProvider PodDeletionSafetyProvider
 }
 
-func NewManager(kubeClient clientset.Interface) Manager {
+func NewManager(kubeClient clientset.Interface, podDeletionSafetyProvider PodDeletionSafetyProvider) Manager {
 	return &manager {
-		kubeClient: 	kubeClient,
+		kubeClient: 			kubeClient,
+		podDeletionSafetyProvider: 	podDeletionSafetyProvider,
 	}
 }
 
@@ -78,6 +81,30 @@ func (m *manager) syncPod(pod *v1.Pod, status v1.PodStatus) {
 	pod = newPod
 
 	klog.Infof("Status for pod %q updated successfully: (, %+v)", format.Pod(pod), status)
+
+	if m.CanBeDeleted(pod, status) {
+		deleteOptions := metav1.NewDeleteOptions(0)
+		deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pod.UID))
+		err = m.kubeClient.CoreV1().Pods(pod.Namespace).Delete(pod.Name, deleteOptions)
+		if err != nil {
+			klog.Warningf("Failed to delete status for pod %q: %v", format.Pod(pod), err)
+			return
+		}
+		klog.Infof("+++++++++++++Pod %q fully terminated and removed from etcd++++++++++", format.Pod(pod))
+		// TODO deletePodStatus
+		//m.deletePodStatus(uid)
+	}
+}
+
+func (m *manager) deletePodStatus(uid types.UID) {
+
+}
+
+func (m *manager) CanBeDeleted(pod *v1.Pod, status v1.PodStatus) bool {
+	if pod.DeletionTimestamp == nil {
+		return false
+	}
+	return m.podDeletionSafetyProvider.PodResourcesAreReclaimed(pod, status)
 }
 
 //func mergePodStatus(oldPodStatus, newPodStatus v1.PodStatus) v1.PodStatus {

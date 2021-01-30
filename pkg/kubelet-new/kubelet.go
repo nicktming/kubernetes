@@ -36,7 +36,6 @@ import (
 	"net/http"
 	"k8s.io/kubernetes/pkg/kubelet-new/pleg"
 	"k8s.io/kubernetes/pkg/kubelet-new/status"
-	"k8s.io/kubernetes/pkg/kubelet/container"
 )
 
 const (
@@ -63,6 +62,9 @@ const (
 
 	// The path in containers' filesystems where the hosts file is mounted.
 	etcHostsPath = "/etc/hosts"
+
+	// Period for performing global cleanup tasks.
+	housekeepingPeriod = time.Second * 2
 )
 
 type Dependencies struct {
@@ -88,6 +90,8 @@ type SyncHandler interface {
 	HandlePodUpdates(pods []*v1.Pod)
 	//HandlePodReconcile(pods []*v1.Pod)
 	HandlePodSyncs(pods []*v1.Pod)
+	HandlePodRemoves(pods []*v1.Pod)
+	HandlePodCleanups() error
 }
 
 
@@ -244,11 +248,13 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 
 func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHandler) {
 	klog.Infof("Starting kubelet main sync loop.")
-
 	plegCh := kl.pleg.Watch()
 
+	housekeepingTicker := time.NewTicker(housekeepingPeriod)
+	defer housekeepingTicker.Stop()
+
 	for {
-		if !kl.syncLoopIteration(updates, kl, plegCh) {
+		if !kl.syncLoopIteration(updates, kl, plegCh, housekeepingTicker.C) {
 			break
 		}
 		//time.Sleep(time.Minute)
@@ -261,7 +267,8 @@ func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHand
 // TODO pleg
 func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
 			handler SyncHandler,
-			plegCh chan*pleg.PodLifecycleEvent) bool {
+			plegCh chan*pleg.PodLifecycleEvent,
+			housekeepingCh <-chan time.Time) bool {
 	select {
 	case u, open := <- configCh:
 		if !open {
@@ -283,6 +290,10 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
 		case kubetypes.DELETE:
 			klog.Infof("SyncLoop (DELETE, %q): %q", u.Source, format.Pods(u.Pods))
 			handler.HandlePodUpdates(u.Pods)
+
+		case kubetypes.REMOVE:
+			klog.Infof("SyncLoop (DELETE, %q): %q", u.Source, format.Pods(u.Pods))
+			handler.HandlePodRemoves(u.Pods)
 		}
 	case e := <-plegCh:
 		//if isSyncPodWorthy(e) {
@@ -300,6 +311,11 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
 			if containID, ok := e.Data.(string); ok {
 				kl.cleanUpContainersInPod(e.ID, containID)
 			}
+		}
+
+	case <-housekeepingCh:
+		if err := handler.HandlePodCleanups(); err != nil {
+			klog.Infof("house keeping with err: %v\n", err)
 		}
 	}
 	return true
@@ -515,10 +531,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	klet.pleg = pleg.NewGenericPLEG(runtime, plegRelistPeriod, klet.podCache)
 
 	klet.podManager = kubepod.NewBasicPodManager()
-	klet.statusManager = status.NewManager(klet.kubeClient)
-
 	klet.containerDeletor = newPodContainerDeletor(klet.containerRuntime, 100)
-
+	klet.statusManager = status.NewManager(klet.kubeClient, klet)
 	// Generating the status funcs should be the last thing we do,
 	// since this relies on the rest of the Kubelet having been constructed.
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
@@ -536,6 +550,19 @@ func (kl *Kubelet) getLastObservedNodeAddresses() []v1.NodeAddress {
 	defer kl.lastObservedNodeAddressesMux.RUnlock()
 	return kl.lastObservedNodeAddresses
 }
+
+func (kl *Kubelet) HandlePodRemove(pods []*v1.Pod) {
+	for _, pod := range pods {
+		// TODO podManager
+		kl.podManager(pod)
+
+		if err := kl.deletePod(pod); err != nil {
+			klog.Infof("delete pod %v with err: %v", format.Pod(pod), err)
+		}
+		// TODO probemanager
+	}
+}
+
 
 func (kl *Kubelet) HandlePodAdditions(pods []*v1.Pod) {
 	start := kl.clock.Now()
@@ -657,8 +684,14 @@ func getStreamingConfig(kubeCfg *kubeletconfiginternal.KubeletConfiguration, kub
 	return config
 }
 
-
-
+func (kl *Kubelet) deletePod(pod *v1.Pod) error {
+	if pod == nil {
+		return fmt.Errorf("deletePod does not allow nil pod")
+	}
+	// TODO source Ready
+	// TODO runtimecache
+	return nil
+}
 
 
 

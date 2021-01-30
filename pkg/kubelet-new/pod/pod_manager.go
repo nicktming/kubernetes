@@ -15,6 +15,11 @@ type Manager interface {
 	// UpdatePod updates the given pod in the manager.
 	UpdatePod(pod *v1.Pod)
 
+	// DeletePod deletes the given pod from the manager.  For mirror pods,
+	// this means deleting the mappings related to mirror pods.  For non-
+	// mirror pods, this means deleting from indexes for all non-mirror pods.
+	DeletePod(pod *v1.Pod)
+
 	// GetPodByUID provides the (non-mirror) pod that matches pod UID, as well as
 	// whether the pod is found.
 	GetPodByUID(types.UID) (*v1.Pod, bool)
@@ -39,6 +44,11 @@ func (pm *basicManager) AddPod(pod *v1.Pod) {
 func (pm *basicManager) UpdatePod(pod *v1.Pod) {
 	pm.podByUID[pod.UID] = pod
 }
+
+func (pm *basicManager) DeletePod(pod *v1.Pod) {
+	delete(pm.podByUID, pod.UID)
+}
+
 
 func (pm *basicManager) GetPodByUID(pid types.UID) (*v1.Pod, bool) {
 	p, ok := pm.podByUID[pid]

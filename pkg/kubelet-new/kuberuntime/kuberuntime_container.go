@@ -17,6 +17,7 @@ import (
 	"sort"
 	"time"
 	"sync"
+	"os"
 )
 
 var (
@@ -275,4 +276,56 @@ func toKubeContainerStatus(status *runtimeapi.ContainerStatus, runtimeName strin
 		cStatus.FinishedAt = time.Unix(0, status.FinishedAt)
 	}
 	return cStatus
+}
+
+// removeContainer removes the container and the container logs.
+// Notice that we remove the container logs first, so that container will not be removed if
+// container logs are failed to be removed, and kubelet will retry this later. This guarantees
+// that container logs to be removed with the container.
+// Notice that we assume that the container should only be removed in non-running state, and
+// it will not write container logs anymore in that state.
+func (m *kubeGenericRuntimeManager) removeContainer(containerID string) error {
+	klog.V(4).Infof("Removing container %q", containerID)
+	// Call internal container post-stop lifecycle hook.
+	//if err := m.internalLifecycle.PostStopContainer(containerID); err != nil {
+	//	return err
+	//}
+
+	// Remove the container log.
+	// TODO: Separate log and container lifecycle management.
+	if err := m.removeContainerLog(containerID); err != nil {
+		return err
+	}
+	// Remove the container.
+	return m.runtimeService.RemoveContainer(containerID)
+}
+
+
+// removeContainerLog removes the container log.
+func (m *kubeGenericRuntimeManager) removeContainerLog(containerID string) error {
+	// Remove the container log.
+	status, err := m.runtimeService.ContainerStatus(containerID)
+	if err != nil {
+		return fmt.Errorf("failed to get container status %q: %v", containerID, err)
+	}
+	//labeledInfo := getContainerInfoFromLabels(status.Labels)
+	path := status.GetLogPath()
+	if err := m.osInterface.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove container %q log %q: %v", containerID, path, err)
+	}
+
+	// Remove the legacy container log symlink.
+	// TODO(random-liu): Remove this after cluster logging supports CRI container log path.
+	//legacySymlink := legacyLogSymlink(containerID, labeledInfo.ContainerName, labeledInfo.PodName,
+	//	labeledInfo.PodNamespace)
+	//if err := m.osInterface.Remove(legacySymlink); err != nil && !os.IsNotExist(err) {
+	//	return fmt.Errorf("failed to remove container %q log legacy symbolic link %q: %v",
+	//		containerID, legacySymlink, err)
+	//}
+	return nil
+}
+
+// DeleteContainer removes a container.
+func (m *kubeGenericRuntimeManager) DeleteContainer(containerID kubecontainer.ContainerID) error {
+	return m.removeContainer(containerID.ID)
 }

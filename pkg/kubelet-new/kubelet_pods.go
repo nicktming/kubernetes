@@ -4,8 +4,11 @@ import (
 	"k8s.io/api/core/v1"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/kubernetes/pkg/kubelet/util/format"
+	"k8s.io/apimachinery/pkg/types"
 	"os"
 	"fmt"
+	"k8s.io/klog"
 )
 
 func getPhase(spec *v1.PodSpec, info []v1.ContainerStatus) v1.PodPhase {
@@ -123,6 +126,27 @@ func (kl *Kubelet) PodResourcesAreReclaimed(pod *v1.Pod, status v1.PodStatus) bo
 	if pod.DeletionTimestamp == nil || !notRunning(status.ContainerStatuses) {
 		return false
 	}
+	// pod's containers should be deleted
+	runtimeStatus, err := kl.podCache.Get(pod.UID)
+	if err != nil {
+		klog.Infof("Pod %q is terminated, Error getting runtimeStatus from the podCache: %s", format.Pod(pod), err)
+		return false
+	}
+	if runtimeStatus != nil && len(runtimeStatus.ContainerStatuses) > 0 {
+		var statusStr string
+		for _, status := range runtimeStatus.ContainerStatuses {
+			statusStr += fmt.Sprintf("%+v ", *status)
+		}
+		klog.Infof("Pod %q is terminated, but some containers have not been cleaned up: %s", format.Pod(pod), statusStr)
+		return false
+	}
+	// TODO podVolumesExist keepTerminatedPodVolumes
+	if kl.podVolumesExist(pod.UID) {
+		klog.Infof("Pod %q is terminated, but some volumes have not been cleaned up", format.Pod(pod))
+		return false
+	}
+	// TODO cgroup qos
+	return true
 }
 
 func notRunning(statuses []v1.ContainerStatus) bool {
@@ -134,10 +158,22 @@ func notRunning(statuses []v1.ContainerStatus) bool {
 	return true
 }
 
+func (kl *Kubelet) getMountedVolumePathListFromDisk(podUID types.UID) ([]string, error) {
+	mountedVolumes := []string{}
+	volumePaths, err := kl.getPodVolumePathListFromDisk(podUID)
+	if err != nil {
+		return mountedVolumes, err
+	}
+	//for _, volumePath := range volumePaths {
+	//	isNotMount, err :=
+	//}
+	return volumePaths, nil
+}
 
 
-
-
+func (kl *Kubelet) HandlePodCleanups() error {
+	return nil
+}
 
 
 

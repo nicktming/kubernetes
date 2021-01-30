@@ -5,6 +5,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/kubelet-new/config"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
+	"k8s.io/kubernetes/pkg/util/mount"
+	utilpath "k8s.io/utils/path"
+	"fmt"
+	"k8s.io/klog"
+	"io/ioutil"
 )
 
 func (kl *Kubelet) getRootDir() string {
@@ -69,6 +74,89 @@ func (kl *Kubelet) getPodResourcesDir() string {
 func (kl *Kubelet) getRuntime() kubecontainer.Runtime {
 	return kl.containerRuntime
 }
+
+func (kl *Kubelet) getPodVolumePathListFromDisk(podUID types.UID) ([]string, error) {
+	volumes := []string{}
+	podVolDir := kl.getPodVolumesDir(podUID)
+
+	if pathExists, pathErr := mount.PathExists(podVolDir); pathErr != nil {
+		return volumes, fmt.Errorf("Error checking if path %q exists: %v", podVolDir, pathErr)
+	} else if !pathExists {
+		klog.Warningf("Path %q does not exist", podVolDir)
+		return volumes, nil
+	}
+
+	volumePluginDirs, err := ioutil.ReadDir(podVolDir)
+	if err != nil {
+		klog.Errorf("Could not read directory %s: %v", podVolDir, err)
+		return volumes, err
+	}
+	for _, volumePluginDir := range volumePluginDirs {
+		volumePluginName := volumePluginDir.Name()
+		volumePluginPath := filepath.Join(podVolDir, volumePluginName)
+		volumeDirs, err := utilpath.ReadDirNoStat(volumePluginPath)
+		if err != nil {
+			return volumes, fmt.Errorf("Could not read directory %s: %v", volumePluginPath, err)
+		}
+		for _, volumeDir := range volumeDirs {
+			volumes = append(volumes, filepath.Join(volumePluginPath, volumeDir))
+		}
+	}
+	return volumes, nil
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -31,6 +31,9 @@ type Runtime interface {
 	// it is useful when doing SIGKILL for hard eviction scenarios, or max grace period during soft eviction scenarios.
 	KillPod(pod *v1.Pod, runningPod Pod, gracePeriodOverride *int64) error
 
+	// Delete a container. If the container is still running, an error is returned.
+	DeleteContainer(containerID ContainerID) error
+
 
 	GetPods(all bool) ([]*Pod, error)
 }
