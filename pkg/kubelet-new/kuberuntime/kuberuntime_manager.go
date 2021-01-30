@@ -95,6 +95,7 @@ type podActions struct {
 func (m *kubeGenericRuntimeManager) computePodActions(pod *v1.Pod, podStatus *kubecontainer.PodStatus) podActions {
 	pa := podActions {
 		ContainersToStart: 	make([]int, 0),
+		Attempt: -1,
 	}
 	if podStatus == nil {
 		podStatus = &kubecontainer.PodStatus{}
@@ -104,8 +105,13 @@ func (m *kubeGenericRuntimeManager) computePodActions(pod *v1.Pod, podStatus *ku
 		pa.Attempt = pa.Attempt + 1
 	} else {
 		sandboxStatus := podStatus.SandboxStatuses[0]
-		pa.SandboxID = sandboxStatus.Id
-		pa.Attempt  =  sandboxStatus.Metadata.Attempt
+		if sandboxStatus.State == runtimeapi.PodSandboxState_SANDBOX_NOTREADY {
+			pa.CreateSandbox = true
+			pa.Attempt = sandboxStatus.Metadata.Attempt + 1
+		} else {
+			pa.SandboxID = sandboxStatus.Id
+			pa.Attempt  =  sandboxStatus.Metadata.Attempt
+		}
 	}
 	for i := range pod.Spec.Containers {
 		container := pod.Spec.Containers[i]
