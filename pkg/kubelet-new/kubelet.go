@@ -544,11 +544,12 @@ func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mir
 	}
 
 	for {
+		fmt.Printf("=====>podUid: %v dispatchWork to syncPod podStatus: %v\n", pod.UID, podStatus)
 		err := kl.syncPod(opt)
 		if err == nil {
 			return
 		}
-		time.Sleep(time.Minute)
+		time.Sleep(5 * time.Minute)
 	}
 }
 
@@ -558,9 +559,9 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
 	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus)
 
-	fmt.Printf("=====>status manager before setting podStatus: %v\n", podStatus)
+	fmt.Printf("status manager before setting podStatus: %v\n", podStatus)
 	kl.statusManager.SetPodStatus(pod, apiPodStatus)
-	fmt.Printf("=====>status manager after status manager and syncpod podStatus: %v\n", podStatus)
+	fmt.Printf("status manager after status manager and syncpod podStatus: %v\n", podStatus)
 	result := kl.containerRuntime.SyncPod(pod, podStatus)
 	if err := result.Error(); err != nil {
 		// Do not return error if the only failures were pods in backoff
