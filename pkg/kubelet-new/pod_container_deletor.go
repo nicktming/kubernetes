@@ -30,6 +30,7 @@ func newPodContainerDeletor(runtime kubecontainer.Runtime, containersToKeep int)
 	go wait.Until(func() {
 		for {
 			id := <-buffer
+			klog.Infof("+++++++++++kubelet container runtime is going to delete container id: %v\n", id)
 			runtime.DeleteContainer(id)
 		}
 	}, 0, wait.NeverStop)

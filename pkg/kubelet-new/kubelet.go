@@ -308,6 +308,7 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
 
 	// TODO pleg.ContainerDied
 		if e.Type == pleg.ContainerDied {
+			klog.Infof("======>e.containerdied: %v\n", e)
 			if containID, ok := e.Data.(string); ok {
 				kl.cleanUpContainersInPod(e.ID, containID)
 			}
@@ -323,6 +324,7 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
 
 // Delete the eligible dead container instances in a pod.
 func (kl *Kubelet) cleanUpContainersInPod(podID types.UID, exitedContainerID string) {
+	klog.Infof("======>cleanUpContainersInPod podID: %v, exitedContainerID: %v\n", podID, exitedContainerID)
 	if podStatus, err := kl.podCache.Get(podID); err == nil {
 		removeAll := false
 		if syncedPod, ok := kl.podManager.GetPodByUID(podID); ok {
@@ -332,6 +334,8 @@ func (kl *Kubelet) cleanUpContainersInPod(podID types.UID, exitedContainerID str
 			// TODO eviction.PodIsEvicted(syncedPod.Status)
 			removeAll = (syncedPod.DeletionTimestamp != nil && notRunning(apiPodStatus.ContainerStatuses))
 		}
+		klog.Infof("======>cleanUpContainersInPod podID: %v, exitedContainerID: %v, podStatus: %v, removeAll: %v\n",
+			podID, exitedContainerID, podStatus, removeAll)
 		kl.containerDeletor.deleteContainersInPod(exitedContainerID, podStatus, removeAll)
 	}
 }
