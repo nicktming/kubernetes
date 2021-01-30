@@ -530,6 +530,7 @@ func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mir
 
 	podStatus, _ := kl.podCache.Get(pod.UID)
 
+	fmt.Printf("=====>podUid: %v dispatchWork got podStatus: %v\n", pod.UID, podStatus)
 	if podStatus == nil {
 		fmt.Printf("=====>podUid: %v dispatchWork got podStatus nil\n", pod.UID)
 	}

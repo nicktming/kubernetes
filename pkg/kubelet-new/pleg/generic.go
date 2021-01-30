@@ -183,7 +183,7 @@ func (g *GenericPLEG) relist() {
 		if err != nil {
 			klog.Warningf("error get pod status: %v\n", err)
 		} else {
-			fmt.Printf("setting podStatus: %v\n", string(pretty_podstatus))
+			fmt.Printf("========>setting podStatus: %v\n", string(pretty_podstatus))
 			g.cache.Set(pid, podstatus, nil, time.Now())
 		}
 
