@@ -127,7 +127,7 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Contai
 		Args:        args,
 		WorkingDir:  container.WorkingDir,
 		Labels:      newContainerLabels(container, pod),
-		//Annotations: newContainerAnnotations(container, pod, restartCount, opts),
+		Annotations: newContainerAnnotations(container, pod, restartCount),
 		//Devices:     makeDevices(opts),
 		//Mounts:      m.makeMounts(opts, container),
 		LogPath:     containerLogsPath,
