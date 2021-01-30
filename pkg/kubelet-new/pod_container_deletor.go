@@ -53,6 +53,12 @@ func getContainersToDeleteInPod(filterContainerID string, podStatus *kubecontain
 				return containerStatus
 			}
 		}
+		// TODO TMING add
+		for _, containerStatus := range podStatus.SandboxStatuses {
+			if containerStatus.Id == filterContainerId {
+				return containerStatus
+			}
+		}
 		return nil
 	}(filterContainerID, podStatus)
 
@@ -68,6 +74,15 @@ func getContainersToDeleteInPod(filterContainerID string, podStatus *kubecontain
 			continue
 		}
 		if matchedContainer == nil || matchedContainer.Name == containerStatus.Name {
+			candidates = append(candidates, containerStatus)
+		}
+	}
+	// TODO TMING add
+	for _, containerStatus := range podStatus.SandboxStatuses {
+		if containerStatus.State != kubecontainer.ContainerStateExited {
+			continue
+		}
+		if matchedContainer == nil || matchedContainer.ID == containerStatus.Id {
 			candidates = append(candidates, containerStatus)
 		}
 	}
