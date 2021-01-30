@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/kubelet-new/config"
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
 )
 
 func (kl *Kubelet) getRootDir() string {
@@ -63,5 +64,11 @@ func (kl *Kubelet) getPluginsRegistrationDir() string {
 func (kl *Kubelet) getPodResourcesDir() string {
 	return filepath.Join(kl.getRootDir(), config.DefaultKubeletPodResourcesDirName)
 }
+
+// getRuntime returns the current Runtime implementation in use by the kubelet.
+func (kl *Kubelet) getRuntime() kubecontainer.Runtime {
+	return kl.containerRuntime
+}
+
 
 

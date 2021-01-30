@@ -30,3 +30,48 @@ func HashContainer(container *v1.Container) uint64 {
 	return uint64(hash.Sum32())
 }
 
+
+// GetContainerSpec gets the container spec by containerName.
+func GetContainerSpec(pod *v1.Pod, containerName string) *v1.Container {
+	for i, c := range pod.Spec.Containers {
+		if containerName == c.Name {
+			return &pod.Spec.Containers[i]
+		}
+	}
+	for i, c := range pod.Spec.InitContainers {
+		if containerName == c.Name {
+			return &pod.Spec.InitContainers[i]
+		}
+	}
+	return nil
+}
+
+func ConvertPodStatusToRunningPod(runtimeName string, podStatus *PodStatus) Pod {
+	runningPod := Pod {
+		ID: 		podStatus.ID,
+		Name: 		podStatus.Name,
+		Namespace: 	podStatus.Namespace,
+	}
+	for _, containerStatus := range podStatus.ContainerStatuses {
+		if containerStatus.State != ContainerStateRunning {
+			continue
+		}
+		container := &Container {
+			ID: 		containerStatus.ID,
+			Name: 		containerStatus.Name,
+			Image: 		containerStatus.Image,
+			ImageID: 	containerStatus.ImageID,
+			Hash: 		containerStatus.Hash,
+			State:		containerStatus.State,
+		}
+		runningPod.Containers = append(runningPod.Containers, container)
+	}
+	for _, sandbox := range podStatus.SandboxStatuses {
+		runningPod.Sandboxes = append(runningPod.Sandboxes, &Container{
+			ID: 		ContainerID{Type: runtimeName, ID: sandbox.Id},
+			State: 		SandboxToContainerState(sandbox.State),
+		})
+	}
+	return runningPod
+}
+

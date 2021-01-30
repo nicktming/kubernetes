@@ -3,6 +3,7 @@ package kuberuntime
 import (
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
 	v1 "k8s.io/api/core/v1"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"errors"
 	"sort"
 	"time"
+	"sync"
 )
 
 var (
@@ -27,6 +29,62 @@ var (
 	// ErrPostStartHook - failed to execute PostStartHook
 	ErrPostStartHook = errors.New("PostStartHookError")
 )
+
+// killContainer kills a container through the following steps:
+// * Run the pre-stop lifecycle hooks (if applicable).
+// * Stop the container.
+func (m *kubeGenericRuntimeManager) killContainer(pod *v1.Pod, containerID kubecontainer.ContainerID, containerName string, message string, gracePeriodOverride *int64) error {
+	var containerSpec *v1.Container
+	if containerSpec = kubecontainer.GetContainerSpec(pod, containerName); containerSpec == nil {
+		return fmt.Errorf("failed to get containerSpec %q(id=%q) in pod %q when killing container for reason %q",
+			containerName, containerID.String(), format.Pod(pod), message)
+	}
+	// TODO grace period
+	gracePeriod := int64(minimumGracePeriodInSeconds)
+
+	if len(message) == 0 {
+		message = fmt.Sprintf("Stopping container %s", containerSpec.Name)
+	}
+	m.recordContainerEvent(pod, containerSpec, containerID.ID, v1.EventTypeNormal, events.KillingContainer, message)
+
+	// TODO innternal lifecycle prestop container and cotainer pre stop hook
+
+	err := m.runtimeService.StopContainer(containerID.ID, gracePeriod)
+	if err != nil {
+		klog.Errorf("Container %q termination failed with gracePeriod %d: %v", containerID.String(), gracePeriod, err)
+	} else {
+		klog.V(3).Infof("Container %q exited normally", containerID.String())
+	}
+
+	// TODO containerRefContainerManager
+	return err
+}
+
+func (m *kubeGenericRuntimeManager) killContainersWithSyncResult(pod *v1.Pod, runningPod kubecontainer.Pod, gracePeriodOverride *int64) (syncResults []*kubecontainer.SyncResult) {
+	containerResults := make(chan *kubecontainer.SyncResult, len(runningPod.Containers))
+	wg := sync.WaitGroup{}
+
+	wg.Add(len(runningPod.Containers))
+	for _, container := range runningPod.Containers {
+		go func(container *kubecontainer.Container) {
+			defer utilruntime.HandleCrash()
+			defer wg.Done()
+
+			killContainerResult := kubecontainer.NewSyncResult(kubecontainer.KillContainer, container.Name)
+			if err := m.killContainer(pod, container.ID, container.Name, "", gracePeriodOverride); err != nil {
+				killContainerResult.Fail(kubecontainer.ErrKillContainer, err.Error())
+			}
+			containerResults <- killContainerResult
+		}(container)
+	}
+	wg.Wait()
+	close(containerResults)
+
+	for containerResult := range containerResults {
+		syncResults = append(syncResults, containerResult)
+	}
+	return
+}
 
 // getKubeletContainers lists containers managed by kubelet.
 // The boolean parameter specifies whether returns all containers including

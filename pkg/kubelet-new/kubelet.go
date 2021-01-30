@@ -6,6 +6,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeletconfiginternal "k8s.io/kubernetes/pkg/kubelet/apis/config"
+	"k8s.io/kubernetes/pkg/kubelet/events"
 	"k8s.io/klog"
 	"k8s.io/apimachinery/pkg/types"
 	clientset "k8s.io/client-go/kubernetes"
@@ -19,6 +20,7 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
 	"k8s.io/kubernetes/pkg/kubelet/dockershim"
 	dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"fmt"
 	"os"
 	"path"
@@ -82,7 +84,7 @@ type Bootstrap interface {
 
 type SyncHandler interface {
 	HandlePodAdditions(pods []*v1.Pod)
-	//HandlePodUpdates(pods []*v1.Pod)
+	HandlePodUpdates(pods []*v1.Pod)
 	//HandlePodReconcile(pods []*v1.Pod)
 	HandlePodSyncs(pods []*v1.Pod)
 }
@@ -273,6 +275,10 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
 		case kubetypes.RECONCILE:
 			klog.Infof("SyncLoop (RECONCILE, %q): %q", u.Source, format.Pods(u.Pods))
 			//handler.HandlePodReconcile(u.Pods)
+
+		case kubetypes.DELETE:
+			klog.Infof("SyncLoop (DELETE, %q): %q", u.Source, format.Pods(u.Pods))
+			handler.HandlePodUpdates(u.Pods)
 		}
 	case e := <-plegCh:
 		//if isSyncPodWorthy(e) {
@@ -526,18 +532,23 @@ func (kl *Kubelet) HandlePodSyncs(pods []*v1.Pod) {
 	}
 }
 
+func (kl *Kubelet) HandlePodUpdates(pods []*v1.Pod) {
+	start := kl.clock.Now()
+	for _, pod := range pods {
+		kl.podManager.UpdatePod(pod)
+		kl.dispatchWork(pod, kubetypes.SyncPodUpdate, nil, start)
+	}
+}
+
 
 func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mirrorPod *v1.Pod, start time.Time) {
-
-
-
 	for {
 		podStatus, _ := kl.podCache.Get(pod.UID)
 
-		fmt.Printf("=====>podUid: %v dispatchWork got podStatus: %v\n", pod.UID, podStatus)
-		if podStatus == nil {
-			fmt.Printf("=====>podUid: %v dispatchWork got podStatus nil\n", pod.UID)
-		}
+		//fmt.Printf("=====>podUid: %v dispatchWork got podStatus: %v\n", pod.UID, podStatus)
+		//if podStatus == nil {
+		//	fmt.Printf("=====>podUid: %v dispatchWork got podStatus nil\n", pod.UID)
+		//}
 
 		opt := syncPodOptions{
 			mirrorPod:      mirrorPod,
@@ -547,12 +558,12 @@ func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mir
 			updateType:     syncType,
 		}
 
-		fmt.Printf("=====>podUid: %v dispatchWork to syncPod podStatus: %v\n", pod.UID, podStatus)
+		//fmt.Printf("=====>podUid: %v dispatchWork to syncPod podStatus: %v\n", pod.UID, podStatus)
 		err := kl.syncPod(opt)
 		if err == nil {
 			return
 		}
-		time.Sleep(5 * time.Minute)
+		time.Sleep(time.Minute)
 	}
 }
 
@@ -562,9 +573,29 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
 	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus)
 
-	fmt.Printf("status manager before setting podStatus: %v\n", podStatus)
+	//fmt.Printf("status manager before setting podStatus: %v\n", podStatus)
 	kl.statusManager.SetPodStatus(pod, apiPodStatus)
-	fmt.Printf("status manager after status manager and syncpod podStatus: %v\n", podStatus)
+	//fmt.Printf("status manager after status manager and syncpod podStatus: %v\n", podStatus)
+
+	if pod.DeletionTimestamp != nil {
+
+		klog.Infof("kubelet is going to delete pod(%v/%v)\n", pod.Namespace, pod.Name)
+
+		var syncErr error
+		if err := kl.killPod(pod, nil, podStatus, nil); err != nil {
+			kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToKillPod, "error killing pod: %v", err)
+			syncErr = fmt.Errorf("error killing pod: %v", err)
+			utilruntime.HandleError(syncErr)
+		}
+		return syncErr
+	}
+
+	// Make data directories for the pod
+	if err := kl.makePodDataDirs(pod); err != nil {
+		kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToMakePodDataDirectories, "error making pod data directories: %v", err)
+		klog.Errorf("Unable to make pod data directories for pod %q: %v", format.Pod(pod), err)
+		return err
+	}
 	result := kl.containerRuntime.SyncPod(pod, podStatus)
 	if err := result.Error(); err != nil {
 		// Do not return error if the only failures were pods in backoff

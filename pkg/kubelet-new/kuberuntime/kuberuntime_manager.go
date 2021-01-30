@@ -334,6 +334,43 @@ func (m *kubeGenericRuntimeManager) GetPodStatus(uid kubetypes.UID, name, namesp
 }
 
 
+// KillPod kills all the containers of a pod. Pod may be nil, running pod must not be.
+// gracePeriodOverride if specified allows the caller to override the pod default grace period.
+// only hard kill paths are allowed to specify a gracePeriodOverride in the kubelet in order to not corrupt user data.
+// it is useful when doing SIGKILL for hard eviction scenarios, or max grace period during soft eviction scenarios.
+func (m *kubeGenericRuntimeManager) KillPod(pod *v1.Pod, runningPod kubecontainer.Pod, gracePeriodOverride *int64) error {
+	err := m.killPodWithSyncResult(pod, runningPod, gracePeriodOverride)
+	return err.Error()
+}
+
+// killPodWithSyncResult kills a runningPod and returns SyncResult.
+// Note: The pod passed in could be *nil* when kubelet restarted.
+func (m *kubeGenericRuntimeManager) killPodWithSyncResult(pod *v1.Pod, runningPod kubecontainer.Pod, gracePeriodOverride *int64) (result kubecontainer.PodSyncResult) {
+	killContainerResults := m.killContainersWithSyncResult(pod, runningPod, gracePeriodOverride)
+	for _, containerResult := range killContainerResults {
+		result.AddSyncResult(containerResult)
+	}
+
+	// stop sandbox, the sandbox will be removed in GarbageCollect
+	killSandboxResult := kubecontainer.NewSyncResult(kubecontainer.KillPodSandbox, runningPod.ID)
+	result.AddSyncResult(killSandboxResult)
+	// Stop all sandboxes belongs to same pod
+	for _, podSandbox := range runningPod.Sandboxes {
+		if err := m.runtimeService.StopPodSandbox(podSandbox.ID.ID); err != nil {
+			killSandboxResult.Fail(kubecontainer.ErrKillPodSandbox, err.Error())
+			klog.Errorf("Failed to stop sandbox %q", podSandbox.ID)
+		}
+	}
+
+	return
+}
+
+
+// Type returns the type of the container runtime.
+func (m *kubeGenericRuntimeManager) Type() string {
+	return m.runtimeName
+}
+
 
 
 

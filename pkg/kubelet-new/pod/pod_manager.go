@@ -12,6 +12,9 @@ type Manager interface {
 	// AddPod adds the given pod to the manager.
 	AddPod(pod *v1.Pod)
 
+	// UpdatePod updates the given pod in the manager.
+	UpdatePod(pod *v1.Pod)
+
 	// GetPodByUID provides the (non-mirror) pod that matches pod UID, as well as
 	// whether the pod is found.
 	GetPodByUID(types.UID) (*v1.Pod, bool)
@@ -30,6 +33,10 @@ func NewBasicPodManager() Manager {
 }
 
 func (pm *basicManager) AddPod(pod *v1.Pod) {
+	pm.podByUID[pod.UID] = pod
+}
+
+func (pm *basicManager) UpdatePod(pod *v1.Pod) {
 	pm.podByUID[pod.UID] = pod
 }
 

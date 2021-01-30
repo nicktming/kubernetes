@@ -4,6 +4,8 @@ import (
 	"k8s.io/api/core/v1"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"os"
+	"fmt"
 )
 
 func getPhase(spec *v1.PodSpec, info []v1.ContainerStatus) v1.PodPhase {
@@ -82,4 +84,37 @@ func (kl *Kubelet) convertToAPIContainerStatuses(pod *v1.Pod, podStatus *kubecon
 	}
 
 	return apiPodStatus
+}
+
+// makePodDataDirs creates the dirs for the pod datas.
+func (kl *Kubelet) makePodDataDirs(pod *v1.Pod) error {
+	uid := pod.UID
+	if err := os.MkdirAll(kl.getPodDir(uid), 0750); err != nil && !os.IsExist(err) {
+		return err
+	}
+	if err := os.MkdirAll(kl.getPodVolumesDir(uid), 0750); err != nil && !os.IsExist(err) {
+		return err
+	}
+	if err := os.MkdirAll(kl.getPodPluginsDir(uid), 0750); err != nil && !os.IsExist(err) {
+		return err
+	}
+	return nil
+}
+
+
+func (kl *Kubelet) killPod(pod *v1.Pod, runningPod *kubecontainer.Pod, status *kubecontainer.PodStatus, gracePeriodOverride *int64) error {
+	var p kubecontainer.Pod
+	if runningPod != nil {
+		p = *runningPod
+	} else if status != nil {
+		p = kubecontainer.ConvertPodStatusToRunningPod(kl.getRuntime().Type(), status)
+	} else {
+		return fmt.Errorf("one of the two arguments must be non-nil: runningPod, status")
+	}
+	// Call the container runtime KillPod method which stops all running containers of the pod
+	if err := kl.containerRuntime.KillPod(pod, p, gracePeriodOverride); err != nil {
+		return err
+	}
+	// qos cgroup
+	return nil
 }
