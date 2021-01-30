@@ -536,7 +536,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	klet.podManager = kubepod.NewBasicPodManager()
 	klet.containerDeletor = newPodContainerDeletor(klet.containerRuntime, 0)
-	klet.statusManager = status.NewManager(klet.kubeClient, klet)
+	klet.statusManager = status.NewManager(klet.kubeClient, klet, klet.podManager)
 	// Generating the status funcs should be the last thing we do,
 	// since this relies on the rest of the Kubelet having been constructed.
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
