@@ -139,7 +139,8 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod,
 	podContainerChanges := m.computePodActions(pod, podStatus)
 
 	pretty_podContainerChanges, _ := json.MarshalIndent(podContainerChanges, "", "\t")
-	fmt.Printf("compute pod actions: %v\n", string(pretty_podContainerChanges))
+	pretty_podStatus, _ := json.MarshalIndent(podStatus, "", "\t")
+	fmt.Printf("podStatus: %v\ncompute pod actions: %v\n", string(pretty_podStatus), string(pretty_podContainerChanges))
 
 	podSandboxID := podContainerChanges.SandboxID
 	var podIP string
