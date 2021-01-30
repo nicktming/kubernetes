@@ -156,11 +156,6 @@ func (g *GenericPLEG) relist() {
 		return
 	}
 
-	for _, pod := range pods {
-		pretty_pod, _ := json.MarshalIndent(pod, "", "\t")
-		fmt.Printf("relist pod : %v\n", string(pretty_pod))
-	}
-
 	g.podRecords.setCurrent(pods)
 
 	eventsByPodID := make(map[types.UID][]*PodLifecycleEvent)
@@ -176,6 +171,12 @@ func (g *GenericPLEG) relist() {
 	}
 
 	for pid, events := range eventsByPodID {
+
+		for _, pod := range pods {
+			pretty_pod, _ := json.MarshalIndent(pod, "", "\t")
+			fmt.Printf("relist pod : %v\n", string(pretty_pod))
+		}
+		
 		pod := g.podRecords.getCurrent(pid)
 		podstatus, err := g.runtime.GetPodStatus(pid, pod.Name, pod.Namespace)
 		pretty_podstatus, _ := json.MarshalIndent(podstatus, "", "\t")
