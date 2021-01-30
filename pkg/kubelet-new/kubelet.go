@@ -551,10 +551,10 @@ func (kl *Kubelet) getLastObservedNodeAddresses() []v1.NodeAddress {
 	return kl.lastObservedNodeAddresses
 }
 
-func (kl *Kubelet) HandlePodRemove(pods []*v1.Pod) {
+func (kl *Kubelet) HandlePodRemoves(pods []*v1.Pod) {
 	for _, pod := range pods {
 		// TODO podManager
-		kl.podManager(pod)
+		kl.podManager.DeletePod(pod)
 
 		if err := kl.deletePod(pod); err != nil {
 			klog.Infof("delete pod %v with err: %v", format.Pod(pod), err)
