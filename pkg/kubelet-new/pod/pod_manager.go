@@ -8,6 +8,8 @@ import (
 )
 
 type Manager interface {
+	// GetPods returns the regular pods bound to the kubelet and their spec.
+	GetPods() []*v1.Pod
 
 	// AddPod adds the given pod to the manager.
 	AddPod(pod *v1.Pod)
@@ -49,6 +51,13 @@ func (pm *basicManager) DeletePod(pod *v1.Pod) {
 	delete(pm.podByUID, pod.UID)
 }
 
+func (m *basicManager) GetPods() []*v1.Pod {
+	var pods []*v1.Pod
+	for _, pod := range m.podByUID {
+		pods = append(pods, pod)
+	}
+	return pods
+}
 
 func (pm *basicManager) GetPodByUID(pid types.UID) (*v1.Pod, bool) {
 	p, ok := pm.podByUID[pid]
