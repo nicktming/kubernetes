@@ -193,5 +193,14 @@ func (ps *PodStatus) GetContainerStatusFromPodStatus(name string) *ContainerStat
 	return nil
 }
 
+func (ps *PodStatus) FindContainerStatusByName(name string) *ContainerStatus {
+	for _, cs := range ps.ContainerStatuses {
+		if cs.Name == name {
+			return cs
+		}
+	}
+	return nil
+}
+
 
 

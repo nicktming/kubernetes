@@ -196,7 +196,7 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod,
 			result.AddSyncResult(startContainerResult)
 
 			klog.Infof("Creating container %+v in pod %v", container, format.Pod(pod))
-			if msg, err := m.startContainer(podSandboxID, podSandboxConfig, container, pod, podIP); err != nil {
+			if msg, err := m.startContainer(podSandboxID, podSandboxConfig, container, pod, podIP, podStatus); err != nil {
 				startContainerResult.Fail(err, msg)
 				// known errors that are logged in other places are logged at higher levels here to avoid
 				// repetitive log spam
@@ -224,9 +224,9 @@ func (m *kubeGenericRuntimeManager) GetPods(all bool) ([]*kubecontainer.Pod, err
 
 	for i := range sandboxes {
 		s := sandboxes[i]
-		pretty_sandbox, _ := json.MarshalIndent(s, "", "\t")
-		fmt.Printf("kubeGenericRuntimeManager GetPods pretty sandbox: %s\n, s.metadata: %v, s.Metadata == nil (%v)\n",
-			string(pretty_sandbox), s.Metadata, (s.Metadata == nil))
+		//pretty_sandbox, _ := json.MarshalIndent(s, "", "\t")
+		//fmt.Printf("kubeGenericRuntimeManager GetPods pretty sandbox: %s\n, s.metadata: %v, s.Metadata == nil (%v)\n",
+		//	string(pretty_sandbox), s.Metadata, (s.Metadata == nil))
 		if s.Metadata == nil {
 			klog.Infof("Sandbox does not have metadata: %+v", s)
 			continue
