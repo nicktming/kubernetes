@@ -17,6 +17,12 @@ type Manager interface {
 	SetPodStatus(pod *v1.Pod, status v1.PodStatus)
 }
 
+// An object which provides guarantees that a pod can be safely deleted.
+type PodDeletionSafetyProvider interface {
+	// A function which returns true if the pod can safely be deleted.
+	PodResourcesAreReclaimed(pod *v1.Pod, status v1.PodStatus) bool
+}
+
 type manager struct {
 	kubeClient clientset.Interface
 	podStatusesLock  sync.RWMutex

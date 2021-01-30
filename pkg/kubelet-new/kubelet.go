@@ -36,6 +36,7 @@ import (
 	"net/http"
 	"k8s.io/kubernetes/pkg/kubelet-new/pleg"
 	"k8s.io/kubernetes/pkg/kubelet-new/status"
+	"k8s.io/kubernetes/pkg/kubelet/container"
 )
 
 const (
@@ -146,6 +147,9 @@ type Kubelet struct {
 
 	// Syncs pods statuses with apiserver; also used as a cache of statuses.
 	statusManager status.Manager
+
+	// trigger deleting containers in a pod
+	containerDeletor *podContainerDeletor
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -292,13 +296,28 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
 		//}
 
 	// TODO pleg.ContainerDied
-	//if e.Type == pleg.ContainerDied {
-	//	if containID, ok := e.Data.(string); ok {
-	//		kl.cle
-	//	}
-	//}
+		if e.Type == pleg.ContainerDied {
+			if containID, ok := e.Data.(string); ok {
+				kl.cleanUpContainersInPod(e.ID, containID)
+			}
+		}
 	}
 	return true
+}
+
+// Delete the eligible dead container instances in a pod.
+func (kl *Kubelet) cleanUpContainersInPod(podID types.UID, exitedContainerID string) {
+	if podStatus, err := kl.podCache.Get(podID); err == nil {
+		removeAll := false
+		if syncedPod, ok := kl.podManager.GetPodByUID(podID); ok {
+			// generate the api status using the cached runtime status to get up-to-date ContainerStatuses
+			apiPodStatus := kl.generateAPIPodStatus(syncedPod, podStatus)
+			// When an evicted or deleted pod has already synced, all containers can be removed.
+			// TODO eviction.PodIsEvicted(syncedPod.Status)
+			removeAll = (syncedPod.DeletionTimestamp != nil && notRunning(apiPodStatus.ContainerStatuses))
+		}
+		kl.containerDeletor.deleteContainersInPod(exitedContainerID, podStatus, removeAll)
+	}
 }
 
 
@@ -497,6 +516,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	klet.podManager = kubepod.NewBasicPodManager()
 	klet.statusManager = status.NewManager(klet.kubeClient)
+
+	klet.containerDeletor = newPodContainerDeletor(klet.containerRuntime, 100)
 
 	// Generating the status funcs should be the last thing we do,
 	// since this relies on the rest of the Kubelet having been constructed.
