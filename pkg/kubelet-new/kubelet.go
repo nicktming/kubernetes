@@ -232,6 +232,7 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	//
 	//// Start the pod lifecycle event generator.
 	kl.pleg.Start()
+	time.Sleep(5 * time.Second)
 	kl.syncLoop(updates, kl)
 }
 
@@ -528,22 +529,24 @@ func (kl *Kubelet) HandlePodSyncs(pods []*v1.Pod) {
 
 func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mirrorPod *v1.Pod, start time.Time) {
 
-	podStatus, _ := kl.podCache.Get(pod.UID)
 
-	fmt.Printf("=====>podUid: %v dispatchWork got podStatus: %v\n", pod.UID, podStatus)
-	if podStatus == nil {
-		fmt.Printf("=====>podUid: %v dispatchWork got podStatus nil\n", pod.UID)
-	}
-
-	opt := syncPodOptions{
-		mirrorPod:      mirrorPod,
-		pod:            pod,
-		podStatus:      podStatus,
-		killPodOptions: nil,
-		updateType:     syncType,
-	}
 
 	for {
+		podStatus, _ := kl.podCache.Get(pod.UID)
+
+		fmt.Printf("=====>podUid: %v dispatchWork got podStatus: %v\n", pod.UID, podStatus)
+		if podStatus == nil {
+			fmt.Printf("=====>podUid: %v dispatchWork got podStatus nil\n", pod.UID)
+		}
+
+		opt := syncPodOptions{
+			mirrorPod:      mirrorPod,
+			pod:            pod,
+			podStatus:      podStatus,
+			killPodOptions: nil,
+			updateType:     syncType,
+		}
+
 		fmt.Printf("=====>podUid: %v dispatchWork to syncPod podStatus: %v\n", pod.UID, podStatus)
 		err := kl.syncPod(opt)
 		if err == nil {
