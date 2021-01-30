@@ -529,6 +529,11 @@ func (kl *Kubelet) HandlePodSyncs(pods []*v1.Pod) {
 func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mirrorPod *v1.Pod, start time.Time) {
 
 	podStatus, _ := kl.podCache.Get(pod.UID)
+
+	if podStatus == nil {
+		fmt.Printf("=====>podUid: %v dispatchWork got podStatus nil\n", pod.UID)
+	}
+
 	opt := syncPodOptions{
 		mirrorPod:      mirrorPod,
 		pod:            pod,
