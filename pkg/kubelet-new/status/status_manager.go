@@ -30,12 +30,12 @@ type PodDeletionSafetyProvider interface {
 }
 
 type manager struct {
-	kubeClient clientset.Interface
-	podStatusesLock  sync.RWMutex
-	podDeletionSafetyProvider PodDeletionSafetyProvider
-	podStatusChannel chan podStatusSyncRequest
-	podManager kubepod.Manager
-	podStatuses      map[types.UID]v1.PodStatus
+	kubeClient 			clientset.Interface
+	podStatusesLock  		sync.RWMutex
+	podDeletionSafetyProvider 	PodDeletionSafetyProvider
+	podStatusChannel 		chan podStatusSyncRequest
+	podManager 			kubepod.Manager
+	podStatuses      		map[types.UID]v1.PodStatus
 }
 
 type podStatusSyncRequest struct {
@@ -43,12 +43,13 @@ type podStatusSyncRequest struct {
 	status 		v1.PodStatus
 }
 
-func NewManager(kubeClient clientset.Interface, podDeletionSafetyProvider PodDeletionSafetyProvider) Manager {
+func NewManager(kubeClient clientset.Interface, podDeletionSafetyProvider PodDeletionSafetyProvider, podManager kubepod.Manager) Manager {
 	return &manager {
 		kubeClient: 			kubeClient,
 		podDeletionSafetyProvider: 	podDeletionSafetyProvider,
 		podStatusChannel: 		make(chan podStatusSyncRequest),
 		podStatuses: 			make(map[types.UID]v1.PodStatus),
+		podManager: 			podManager,
 	}
 }
 
