@@ -145,7 +145,10 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 	}
 
 	if isCache && isPodStatusByKubeletEqual(&oldStatus, &status) {
-		klog.Infof("Ignoring same status for pod %q", format.Pod(pod))
+		pretty_cachedStatus, _ := json.MarshalIndent(oldStatus, "", "\t")
+		pretty_status, _ := json.MarshalIndent(status, "", "\t")
+		klog.Infof("Ignoring same status for pod %q, cachedstatus: %v, statusfrompleg: %v",
+			format.Pod(pod), string(pretty_cachedStatus), string(pretty_status))
 		return false // No new status.
 	}
 
