@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	kubepod "k8s.io/kubernetes/pkg/kubelet-new/pod"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"time"
 )
 
@@ -130,23 +131,32 @@ func (m *manager) SetPodStatus(pod *v1.Pod, status v1.PodStatus) {
 	// needs to be able to trigger an update and/or deletion.
 	//m.updateStatusInternal(pod, status, pod.DeletionTimestamp != nil)
 
-	oldStatus, ok := m.podStatuses[pod.UID]
-	if !ok {
-		oldStatus = versionedPodStatus{
-		}
+
+
+	m.updateStatusInternal(pod, status, pod.DeletionTimestamp != nil)
+}
+
+func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUpdate bool) bool {
+	var oldStatus v1.PodStatus
+	cacheStatus, isCache := m.podStatuses[pod.UID]
+	if isCache {
+		oldStatus = cacheStatus.podStatus
+	} else {
+		oldStatus = pod.Status
+	}
+
+	if isCache && isPodStatusByKubeletEqual(oldStatus, &status) {
+		klog.Infof("Ignoring same status for pod %q, status: %+v", format.Pod(pod), status)
+		return false // No new status.
 	}
 
 	newStatus := versionedPodStatus{
-		version: 	oldStatus.version + 1,
+		version: 	cacheStatus.version + 1,
 		podStatus: 	status,
 	}
 
 	m.podStatuses[pod.UID] = newStatus
 
-	m.updateStatusInternal(pod, newStatus, pod.DeletionTimestamp != nil)
-}
-
-func (m *manager) updateStatusInternal(pod *v1.Pod, status versionedPodStatus, forceUpdate bool) bool {
 	select {
 	case m.podStatusChannel <- podStatusSyncRequest{pod.UID, status}:
 		klog.V(5).Infof("Status Manager: adding pod: %q, with status: (%v) to podStatusChannel",
@@ -230,6 +240,23 @@ func (m *manager) canBeDeleted(pod *v1.Pod, status v1.PodStatus) bool {
 //}
 
 
+// isPodStatusByKubeletEqual returns true if the given pod statuses are equal when non-kubelet-owned
+// pod conditions are excluded.
+// This method normalizes the status before comparing so as to make sure that meaningless
+// changes will be ignored.
+func isPodStatusByKubeletEqual(oldStatus, status *v1.PodStatus) bool {
+	oldCopy := oldStatus.DeepCopy()
+	//for _, c := range status.Conditions {
+	//	if kubetypes.PodConditionByKubelet(c.Type) {
+	//		_, oc := podutil.GetPodCondition(oldCopy, c.Type)
+	//		if oc == nil || oc.Status != c.Status || oc.Message != c.Message || oc.Reason != c.Reason {
+	//			return false
+	//		}
+	//	}
+	//}
+	oldCopy.Conditions = status.Conditions
+	return apiequality.Semantic.DeepEqual(oldCopy, status)
+}
 
 
 
