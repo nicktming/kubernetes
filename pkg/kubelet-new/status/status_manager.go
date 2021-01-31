@@ -54,7 +54,7 @@ func NewManager(kubeClient clientset.Interface, podDeletionSafetyProvider PodDel
 		kubeClient: 			kubeClient,
 		podDeletionSafetyProvider: 	podDeletionSafetyProvider,
 		podStatusChannel: 		make(chan podStatusSyncRequest),
-		podStatuses: 			make(map[types.UID]v1.PodStatus),
+		podStatuses: 			make(map[types.UID]versionedPodStatus),
 		podManager: 			podManager,
 		apiStatusVersions: 		make(map[types.UID]uint64),
 	}
