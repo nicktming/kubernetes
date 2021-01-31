@@ -101,10 +101,7 @@ func (m *manager) syncBatch() {
 // This method is not thread safe, and must only be accessed by the sync thread.
 func (m *manager) needsUpdate(uid types.UID, status versionedPodStatus) bool {
 	latest, ok := m.apiStatusVersions[uid]
-	if !ok {
-		return false
-	}
-	if latest < status.version {
+	if !ok || latest < status.version {
 		return true
 	}
 	pod, ok := m.podManager.GetPodByUID(uid)
@@ -196,7 +193,7 @@ func (m *manager) syncPod(podUID types.UID, status versionedPodStatus) {
 		return
 	}
 	pod = newPod
-	m.podStatuses[pod.UID] = status
+	m.apiStatusVersions[pod.UID] = status.version
 
 	klog.Infof("Status for pod %q updated successfully: (%d, %+v)", format.Pod(pod), status.version, status.podStatus)
 
