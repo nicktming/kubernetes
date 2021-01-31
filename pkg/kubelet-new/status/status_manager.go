@@ -87,6 +87,8 @@ func (m *manager) syncBatch() {
 	for podUID, status := range m.podStatuses {
 		if m.needsUpdate(podUID, status) {
 			updatedStatuses = append(updatedStatuses, podStatusSyncRequest{podUID, status})
+		} else {
+			klog.Infof("syncBatch Status for pod %q is up-to-date; skipping", podUID)
 		}
 	}
 	for _, update := range updatedStatuses {
@@ -115,6 +117,8 @@ func (m *manager) needsUpdate(uid types.UID, status versionedPodStatus) bool {
 func (m *manager) SetPodStatus(pod *v1.Pod, status v1.PodStatus) {
 	m.podStatusesLock.Lock()
 	defer m.podStatusesLock.Unlock()
+
+	klog.Infof("setting pod %v status: %v", pod.UID, status)
 
 	//for _, c := range pod.Status.Conditions {
 	//	if !kubetypes.PodConditionByKubelet(c.Type) {
@@ -163,7 +167,7 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status versionedPodStatus, f
 
 func (m *manager) syncPod(podUID types.UID, status versionedPodStatus) {
 	if !m.needsUpdate(podUID, status) {
-		klog.V(1).Infof("Status for pod %q is up-to-date; skipping", podUID)
+		klog.Infof("syncPod Status for pod %q is up-to-date; skipping", podUID)
 		return
 	}
 
