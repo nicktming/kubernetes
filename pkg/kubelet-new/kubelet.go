@@ -88,7 +88,7 @@ type Bootstrap interface {
 type SyncHandler interface {
 	HandlePodAdditions(pods []*v1.Pod)
 	HandlePodUpdates(pods []*v1.Pod)
-	//HandlePodReconcile(pods []*v1.Pod)
+	HandlePodReconcile(pods []*v1.Pod)
 	HandlePodSyncs(pods []*v1.Pod)
 	HandlePodRemoves(pods []*v1.Pod)
 	HandlePodCleanups() error
@@ -285,7 +285,7 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
 
 		case kubetypes.RECONCILE:
 			klog.Infof("SyncLoop (RECONCILE, %q): %q", u.Source, format.Pods(u.Pods))
-			//handler.HandlePodReconcile(u.Pods)
+			handler.HandlePodReconcile(u.Pods)
 
 		case kubetypes.DELETE:
 			klog.Infof("SyncLoop (DELETE, %q): %q", u.Source, format.Pods(u.Pods))
@@ -585,6 +585,14 @@ func (kl *Kubelet) HandlePodSyncs(pods []*v1.Pod) {
 }
 
 func (kl *Kubelet) HandlePodUpdates(pods []*v1.Pod) {
+	start := kl.clock.Now()
+	for _, pod := range pods {
+		kl.podManager.UpdatePod(pod)
+		kl.dispatchWork(pod, kubetypes.SyncPodUpdate, nil, start)
+	}
+}
+
+func (kl *Kubelet) HandlePodReconcile(pods []*v1.Pod) {
 	start := kl.clock.Now()
 	for _, pod := range pods {
 		kl.podManager.UpdatePod(pod)
