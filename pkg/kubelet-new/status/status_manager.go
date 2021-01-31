@@ -145,7 +145,7 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 		oldStatus = pod.Status
 	}
 
-	if isCache && isPodStatusByKubeletEqual(oldStatus, &status) {
+	if isCache && isPodStatusByKubeletEqual(&oldStatus, &status) {
 		klog.Infof("Ignoring same status for pod %q, status: %+v", format.Pod(pod), status)
 		return false // No new status.
 	}
@@ -158,7 +158,7 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 	m.podStatuses[pod.UID] = newStatus
 
 	select {
-	case m.podStatusChannel <- podStatusSyncRequest{pod.UID, status}:
+	case m.podStatusChannel <- podStatusSyncRequest{pod.UID, newStatus}:
 		klog.V(5).Infof("Status Manager: adding pod: %q, with status: (%v) to podStatusChannel",
 			pod.UID, status)
 		return true
