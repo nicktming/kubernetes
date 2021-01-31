@@ -207,10 +207,10 @@ func (g *GenericPLEG) relist() {
 		return
 	}
 
-	for _, pod := range podList {
-		pretty_pod, _ := json.MarshalIndent(pod, "", "\t")
-		fmt.Printf("relist pod : %v\n", string(pretty_pod))
-	}
+	//for _, pod := range podList {
+	//	pretty_pod, _ := json.MarshalIndent(pod, "", "\t")
+	//	fmt.Printf("relist pod : %v\n", string(pretty_pod))
+	//}
 
 	g.updateRelistTime(timestamp)
 
