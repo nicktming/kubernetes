@@ -9,19 +9,22 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"fmt"
+	"sync"
 )
 
 type GenericPLEG struct {
 	// The period for relisting.
-	relistPeriod time.Duration
+	relistPeriod 	time.Duration
 
-	runtime kubecontainer.Runtime
+	runtime 	kubecontainer.Runtime
 
-	podRecords PodRecords
+	podRecords 	PodRecords
 
-	eventChannel chan*PodLifecycleEvent
+	eventChannel 	chan*PodLifecycleEvent
 
-	cache kubecontainer.Cache
+	cache 		kubecontainer.Cache
+
+	reListLock 	sync.RWMutex
 }
 
 type PodRecord struct {
@@ -149,6 +152,9 @@ func updateEvents(eventsByPodID map[types.UID][]*PodLifecycleEvent, event *PodLi
 }
 
 func (g *GenericPLEG) relist() {
+	g.reListLock.Lock()
+	defer g.reListLock.Unlock()
+	
 	klog.Infof("GenericPLEG: Relisting")
 	pods, err := g.runtime.GetPods(true)
 	if err != nil {
