@@ -35,12 +35,18 @@ type manager struct {
 	podDeletionSafetyProvider 	PodDeletionSafetyProvider
 	podStatusChannel 		chan podStatusSyncRequest
 	podManager 			kubepod.Manager
-	podStatuses      		map[types.UID]v1.PodStatus
+	podStatuses      		map[types.UID]versionedPodStatus
+	apiStatusVersions 		map[types.UID]uint64
+}
+
+type versionedPodStatus struct {
+	version 	uint64
+	podStatus 	v1.PodStatus
 }
 
 type podStatusSyncRequest struct {
 	podUID 		types.UID
-	status 		v1.PodStatus
+	status 		versionedPodStatus
 }
 
 func NewManager(kubeClient clientset.Interface, podDeletionSafetyProvider PodDeletionSafetyProvider, podManager kubepod.Manager) Manager {
@@ -50,6 +56,7 @@ func NewManager(kubeClient clientset.Interface, podDeletionSafetyProvider PodDel
 		podStatusChannel: 		make(chan podStatusSyncRequest),
 		podStatuses: 			make(map[types.UID]v1.PodStatus),
 		podManager: 			podManager,
+		apiStatusVersions: 		make(map[types.UID]uint64),
 	}
 }
 
@@ -90,12 +97,19 @@ func (m *manager) syncBatch() {
 
 // needsUpdate returns whether the status is stale for the given pod UID.
 // This method is not thread safe, and must only be accessed by the sync thread.
-func (m *manager) needsUpdate(uid types.UID, status v1.PodStatus) bool {
+func (m *manager) needsUpdate(uid types.UID, status versionedPodStatus) bool {
+	latest, ok := m.apiStatusVersions[uid]
+	if !ok {
+		return false
+	}
+	if latest < status.version {
+		return true
+	}
 	pod, ok := m.podManager.GetPodByUID(uid)
 	if !ok {
 		return false
 	}
-	return m.canBeDeleted(pod, status)
+	return m.canBeDeleted(pod, status.podStatus)
 }
 
 func (m *manager) SetPodStatus(pod *v1.Pod, status v1.PodStatus) {
@@ -116,10 +130,23 @@ func (m *manager) SetPodStatus(pod *v1.Pod, status v1.PodStatus) {
 	// needs to be able to trigger an update and/or deletion.
 	//m.updateStatusInternal(pod, status, pod.DeletionTimestamp != nil)
 
-	m.updateStatusInternal(pod, status, pod.DeletionTimestamp != nil)
+	oldStatus, ok := m.podStatuses[pod.UID]
+	if !ok {
+		oldStatus = versionedPodStatus{
+		}
+	}
+
+	newStatus := versionedPodStatus{
+		version: 	oldStatus.version + 1,
+		podStatus: 	status,
+	}
+
+	m.podStatuses[pod.UID] = newStatus
+
+	m.updateStatusInternal(pod, newStatus, pod.DeletionTimestamp != nil)
 }
 
-func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUpdate bool) bool {
+func (m *manager) updateStatusInternal(pod *v1.Pod, status versionedPodStatus, forceUpdate bool) bool {
 	select {
 	case m.podStatusChannel <- podStatusSyncRequest{pod.UID, status}:
 		klog.V(5).Infof("Status Manager: adding pod: %q, with status: (%v) to podStatusChannel",
@@ -134,7 +161,7 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 	}
 }
 
-func (m *manager) syncPod(podUID types.UID, status v1.PodStatus) {
+func (m *manager) syncPod(podUID types.UID, status versionedPodStatus) {
 	if !m.needsUpdate(podUID, status) {
 		klog.V(1).Infof("Status for pod %q is up-to-date; skipping", podUID)
 		return
@@ -158,7 +185,7 @@ func (m *manager) syncPod(podUID types.UID, status v1.PodStatus) {
 		return
 	}
 	oldStatus := pod.Status.DeepCopy()
-	newPod, patchBytes, err := statusutil.PatchPodStatus(m.kubeClient, pod.Namespace, pod.Name, *oldStatus, status)
+	newPod, patchBytes, err := statusutil.PatchPodStatus(m.kubeClient, pod.Namespace, pod.Name, *oldStatus, status.podStatus)
 	klog.Infof("Patch status for pod %q with %q", format.Pod(pod), patchBytes)
 	if err != nil {
 		klog.Warningf("Failed to update status for pod %q: %v", format.Pod(pod), err)
@@ -167,9 +194,9 @@ func (m *manager) syncPod(podUID types.UID, status v1.PodStatus) {
 	pod = newPod
 	m.podStatuses[pod.UID] = status
 
-	klog.Infof("Status for pod %q updated successfully: (, %+v)", format.Pod(pod), status)
+	klog.Infof("Status for pod %q updated successfully: (%d, %+v)", format.Pod(pod), status.version, status.podStatus)
 
-	if m.canBeDeleted(pod, status) {
+	if m.canBeDeleted(pod, status.podStatus) {
 		deleteOptions := metav1.NewDeleteOptions(0)
 		deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pod.UID))
 		err = m.kubeClient.CoreV1().Pods(pod.Namespace).Delete(pod.Name, deleteOptions)
