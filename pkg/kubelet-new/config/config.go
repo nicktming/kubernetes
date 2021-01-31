@@ -113,14 +113,15 @@ func (s *podStorage) Merge(source string, change interface{}) error {
 		if len(updates.Pods) > 0 {
 			s.updates <- *updates
 		}
+		if len(deletes.Pods) > 0 {
+			s.updates <- *deletes
+		}
 		if len(restores.Pods) > 0 {
 			s.updates <- *restores
 		}
-
 		if firstSet && len(adds.Pods) == 0 && len(updates.Pods) == 0 && len(deletes.Pods) == 0 {
 			s.updates <- *adds
 		}
-
 		if len(reconciles.Pods) > 0 {
 			s.updates <- *reconciles
 		}
