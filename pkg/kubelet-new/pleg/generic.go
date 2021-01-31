@@ -154,7 +154,7 @@ func updateEvents(eventsByPodID map[types.UID][]*PodLifecycleEvent, event *PodLi
 func (g *GenericPLEG) relist() {
 	g.reListLock.Lock()
 	defer g.reListLock.Unlock()
-	
+
 	klog.Infof("GenericPLEG: Relisting")
 	pods, err := g.runtime.GetPods(true)
 	if err != nil {
@@ -176,13 +176,12 @@ func (g *GenericPLEG) relist() {
 		}
 	}
 
+	for _, pod := range pods {
+		pretty_pod, _ := json.MarshalIndent(pod, "", "\t")
+		fmt.Printf("relist pod : %v\n", string(pretty_pod))
+	}
+
 	for pid, events := range eventsByPodID {
-
-		for _, pod := range pods {
-			pretty_pod, _ := json.MarshalIndent(pod, "", "\t")
-			fmt.Printf("relist pod : %v\n", string(pretty_pod))
-		}
-
 		pod := g.podRecords.getCurrent(pid)
 		podstatus, err := g.runtime.GetPodStatus(pid, pod.Name, pod.Namespace)
 		pretty_podstatus, _ := json.MarshalIndent(podstatus, "", "\t")
