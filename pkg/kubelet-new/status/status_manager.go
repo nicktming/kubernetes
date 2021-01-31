@@ -15,6 +15,7 @@ import (
 	kubepod "k8s.io/kubernetes/pkg/kubelet-new/pod"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"time"
+	"gopkg.in/square/go-jose.v2/json"
 )
 
 type Manager interface {
@@ -115,7 +116,7 @@ func (m *manager) SetPodStatus(pod *v1.Pod, status v1.PodStatus) {
 	m.podStatusesLock.Lock()
 	defer m.podStatusesLock.Unlock()
 
-	klog.Infof("setting pod %v status: %v", pod.UID, status)
+	//klog.Infof("setting pod %v status: %v", pod.UID, status)
 
 	//for _, c := range pod.Status.Conditions {
 	//	if !kubetypes.PodConditionByKubelet(c.Type) {
@@ -131,8 +132,6 @@ func (m *manager) SetPodStatus(pod *v1.Pod, status v1.PodStatus) {
 	// needs to be able to trigger an update and/or deletion.
 	//m.updateStatusInternal(pod, status, pod.DeletionTimestamp != nil)
 
-
-
 	m.updateStatusInternal(pod, status, pod.DeletionTimestamp != nil)
 }
 
@@ -146,7 +145,7 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 	}
 
 	if isCache && isPodStatusByKubeletEqual(&oldStatus, &status) {
-		klog.Infof("Ignoring same status for pod %q, status: %+v", format.Pod(pod), status)
+		klog.Infof("Ignoring same status for pod %q", format.Pod(pod))
 		return false // No new status.
 	}
 
@@ -181,6 +180,9 @@ func (m *manager) syncPod(podUID types.UID, status versionedPodStatus) {
 	if pod == nil {
 		panic("this should not happen")
 	}
+
+	pretty_status, _ := json.MarshalIndent(status.podStatus, "", "\t")
+	klog.Infof("setting pod %v status: %v", pod.UID, string(pretty_status))
 
 	// TODO: make me easier to express from client code
 	pod, err := m.kubeClient.CoreV1().Pods(pod.Namespace).Get(pod.Name, metav1.GetOptions{})
