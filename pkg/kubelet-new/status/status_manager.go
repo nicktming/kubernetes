@@ -17,7 +17,6 @@ import (
 )
 
 type Manager interface {
-
 	Start()
 	// SetPodStatus caches updates the cached status for the given pod, and triggers a status update.
 	SetPodStatus(pod *v1.Pod, status v1.PodStatus)
@@ -221,7 +220,9 @@ func (m *manager) canBeDeleted(pod *v1.Pod, status v1.PodStatus) bool {
 	if pod.DeletionTimestamp == nil {
 		return false
 	}
-	return m.podDeletionSafetyProvider.PodResourcesAreReclaimed(pod, status)
+	delete := m.podDeletionSafetyProvider.PodResourcesAreReclaimed(pod, status)
+	klog.Infof("can be deleted return %v\n", delete)
+	return delete
 }
 
 //func mergePodStatus(oldPodStatus, newPodStatus v1.PodStatus) v1.PodStatus {
