@@ -124,11 +124,6 @@ func (s *podStorage) Merge(source string, change interface{}) error {
 		if len(reconciles.Pods) > 0 {
 			s.updates <- *reconciles
 		}
-		// TMING ADD TODO
-		if len(deletes.Pods) > 0 {
-			s.updates <- *deletes
-		}
-
 	}
 	return nil
 }

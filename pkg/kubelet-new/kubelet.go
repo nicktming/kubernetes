@@ -21,6 +21,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/dockershim"
 	dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"fmt"
 	"os"
 	"path"
@@ -36,6 +37,7 @@ import (
 	"net/http"
 	"k8s.io/kubernetes/pkg/kubelet-new/pleg"
 	"k8s.io/kubernetes/pkg/kubelet-new/status"
+	"k8s.io/kubernetes/pkg/kubelet/util/queue"
 )
 
 const (
@@ -154,6 +156,8 @@ type Kubelet struct {
 
 	// trigger deleting containers in a pod
 	containerDeletor *podContainerDeletor
+
+	workQueue queue.WorkQueue
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -250,11 +254,14 @@ func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHand
 	klog.Infof("Starting kubelet main sync loop.")
 	plegCh := kl.pleg.Watch()
 
+	syncTicker := time.NewTicker(time.Second)
+	defer syncTicker.Stop()
+
 	housekeepingTicker := time.NewTicker(housekeepingPeriod)
 	defer housekeepingTicker.Stop()
 
 	for {
-		if !kl.syncLoopIteration(updates, kl, plegCh, housekeepingTicker.C) {
+		if !kl.syncLoopIteration(updates, kl, plegCh, housekeepingTicker.C, syncTicker.C) {
 			break
 		}
 		//time.Sleep(time.Minute)
@@ -268,7 +275,8 @@ func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHand
 func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
 			handler SyncHandler,
 			plegCh chan*pleg.PodLifecycleEvent,
-			housekeepingCh <-chan time.Time) bool {
+			housekeepingCh <-chan time.Time,
+			syncCh <-chan time.Time) bool {
 	select {
 	case u, open := <- configCh:
 		if !open {
@@ -314,10 +322,15 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
 			}
 		}
 
-	case <-housekeepingCh:
-		if err := handler.HandlePodCleanups(); err != nil {
-			klog.Infof("house keeping with err: %v\n", err)
+	case <-syncCh:
+	// Sync pods waiting for sync
+		podsToSync := kl.getPodsToSync()
+		if len(podsToSync) == 0 {
+			break
 		}
+		klog.V(4).Infof("SyncLoop (SYNC): %d pods; %s", len(podsToSync), format.Pods(podsToSync))
+		handler.HandlePodSyncs(podsToSync)
+
 	}
 	return true
 }
@@ -537,6 +550,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	klet.podManager = kubepod.NewBasicPodManager()
 	klet.containerDeletor = newPodContainerDeletor(klet.containerRuntime, 0)
 	klet.statusManager = status.NewManager(klet.kubeClient, klet, klet.podManager)
+
+	klet.workQueue = queue.NewBasicWorkQueue(klet.clock)
 	// Generating the status funcs should be the last thing we do,
 	// since this relies on the rest of the Kubelet having been constructed.
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
@@ -565,6 +580,31 @@ func (kl *Kubelet) HandlePodRemoves(pods []*v1.Pod) {
 		}
 		// TODO probemanager
 	}
+}
+
+func (kl *Kubelet) getPodsToSync() []*v1.Pod {
+	allPods := kl.podManager.GetPods()
+	podUIDs := kl.workQueue.GetWork()
+	podUIDSet := sets.NewString()
+	for _, podUID := range podUIDs {
+		podUIDSet.Insert(string(podUID))
+	}
+	var podsToSync []*v1.Pod
+	for _, pod := range allPods {
+		if podUIDSet.Has(string(pod.UID)) {
+			// The work of the pod is ready
+			podsToSync = append(podsToSync, pod)
+			continue
+		}
+		// TODO PodSyncLoopHandlers
+		//for _, podSyncLoopHandler := range kl.PodSyncLoopHandlers {
+		//	if podSyncLoopHandler.ShouldSync(pod) {
+		//		podsToSync = append(podsToSync, pod)
+		//		break
+		//	}
+		//}
+	}
+	return podsToSync
 }
 
 
@@ -602,28 +642,28 @@ func (kl *Kubelet) HandlePodReconcile(pods []*v1.Pod) {
 
 
 func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mirrorPod *v1.Pod, start time.Time) {
-	for {
-		podStatus, _ := kl.podCache.Get(pod.UID)
+	podStatus, _ := kl.podCache.Get(pod.UID)
 
-		//fmt.Printf("=====>podUid: %v dispatchWork got podStatus: %v\n", pod.UID, podStatus)
-		//if podStatus == nil {
-		//	fmt.Printf("=====>podUid: %v dispatchWork got podStatus nil\n", pod.UID)
-		//}
+	//fmt.Printf("=====>podUid: %v dispatchWork got podStatus: %v\n", pod.UID, podStatus)
+	//if podStatus == nil {
+	//	fmt.Printf("=====>podUid: %v dispatchWork got podStatus nil\n", pod.UID)
+	//}
 
-		opt := syncPodOptions{
-			mirrorPod:      mirrorPod,
-			pod:            pod,
-			podStatus:      podStatus,
-			killPodOptions: nil,
-			updateType:     syncType,
-		}
+	opt := syncPodOptions{
+		mirrorPod:      mirrorPod,
+		pod:            pod,
+		podStatus:      podStatus,
+		killPodOptions: nil,
+		updateType:     syncType,
+	}
 
-		//fmt.Printf("=====>podUid: %v dispatchWork to syncPod podStatus: %v\n", pod.UID, podStatus)
-		err := kl.syncPod(opt)
-		if err == nil {
-			return
-		}
-		time.Sleep(time.Minute)
+	//fmt.Printf("=====>podUid: %v dispatchWork to syncPod podStatus: %v\n", pod.UID, podStatus)
+	err := kl.syncPod(opt)
+	if err == nil {
+		kl.workQueue.Enqueue(pod.UID, 2 * time.Second)
+		return
+	} else {
+		kl.workQueue.Enqueue(pod.UID, 5 * time.Second)
 	}
 }
 
