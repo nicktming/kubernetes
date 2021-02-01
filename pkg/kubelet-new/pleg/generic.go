@@ -129,7 +129,7 @@ func computeEventType(oldState, curState kubecontainer.ContainerState, pod *kube
 	case kubecontainer.ContainerStateExited:
 		return &PodLifecycleEvent{ID: pod.ID, Type: ContainerDied, Data: c.ID}
 	case kubecontainer.ContainerStateUnknown:
-		return []*PodLifecycleEvent{{ID: pod.ID, Type: ContainerChanged, Data: cid}}
+		return &PodLifecycleEvent{{ID: pod.ID, Type: ContainerChanged, Data: c.ID}}
 	default:
 		panic(fmt.Sprintf("unrecognized container state: %v", curState))
 	}
