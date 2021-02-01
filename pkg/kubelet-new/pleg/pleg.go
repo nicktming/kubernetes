@@ -9,6 +9,8 @@ type PodLifeCycleEventType string
 const (
 	ContainerStarted PodLifeCycleEventType = "ContainerStarted"
 	ContainerDied PodLifeCycleEventType = "ContainerDied"
+	// ContainerChanged - event type when the new state of container is unknown.
+	ContainerChanged PodLifeCycleEventType = "ContainerChanged"
 )
 
 type PodLifecycleEvent struct {

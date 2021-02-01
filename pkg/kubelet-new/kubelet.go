@@ -158,6 +158,9 @@ type Kubelet struct {
 	containerDeletor *podContainerDeletor
 
 	workQueue queue.WorkQueue
+
+	// podWorkers handle syncing Pods in response to events.
+	podWorkers PodWorkers
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -552,6 +555,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	klet.statusManager = status.NewManager(klet.kubeClient, klet, klet.podManager)
 
 	klet.workQueue = queue.NewBasicWorkQueue(klet.clock)
+	klet.podWorkers = newPodWorkers(klet.syncPod, kubeDeps.Recorder, klet.workQueue, 5 * time.Second, backOffPeriod, klet.podCache)
 	// Generating the status funcs should be the last thing we do,
 	// since this relies on the rest of the Kubelet having been constructed.
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
@@ -642,29 +646,36 @@ func (kl *Kubelet) HandlePodReconcile(pods []*v1.Pod) {
 
 
 func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mirrorPod *v1.Pod, start time.Time) {
-	podStatus, _ := kl.podCache.Get(pod.UID)
+	//podStatus, _ := kl.podCache.Get(pod.UID)
 
 	//fmt.Printf("=====>podUid: %v dispatchWork got podStatus: %v\n", pod.UID, podStatus)
 	//if podStatus == nil {
 	//	fmt.Printf("=====>podUid: %v dispatchWork got podStatus nil\n", pod.UID)
 	//}
 
-	opt := syncPodOptions{
-		mirrorPod:      mirrorPod,
-		pod:            pod,
-		podStatus:      podStatus,
-		killPodOptions: nil,
-		updateType:     syncType,
-	}
+	// Run the sync in an async worker.
+	kl.podWorkers.UpdatePod(&UpdatePodOptions{
+		Pod:        pod,
+		MirrorPod:  mirrorPod,
+		UpdateType: syncType,
+	})
+
+	//opt := syncPodOptions{
+	//	mirrorPod:      mirrorPod,
+	//	pod:            pod,
+	//	podStatus:      podStatus,
+	//	killPodOptions: nil,
+	//	updateType:     syncType,
+	//}
 
 	//fmt.Printf("=====>podUid: %v dispatchWork to syncPod podStatus: %v\n", pod.UID, podStatus)
-	err := kl.syncPod(opt)
-	if err == nil {
-		kl.workQueue.Enqueue(pod.UID, 2 * time.Second)
-		return
-	} else {
-		kl.workQueue.Enqueue(pod.UID, 5 * time.Second)
-	}
+	//err := kl.syncPod(opt)
+	//if err == nil {
+	//	kl.workQueue.Enqueue(pod.UID, 2 * time.Second)
+	//	return
+	//} else {
+	//	kl.workQueue.Enqueue(pod.UID, 5 * time.Second)
+	//}
 }
 
 func (kl *Kubelet) syncPod(o syncPodOptions) error {
