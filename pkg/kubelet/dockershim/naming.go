@@ -24,6 +24,7 @@ import (
 
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 	"k8s.io/kubernetes/pkg/kubelet/leaky"
+	"encoding/json"
 )
 
 // Container "names" are implementation details that do not concern
@@ -56,6 +57,9 @@ const (
 )
 
 func makeSandboxName(s *runtimeapi.PodSandboxConfig) string {
+	pretty_podsandboxConfig, _ := json.MarshalIndent(s, "", "\t")
+	fmt.Printf("===>prettty pod sandbox config: %v\n", string(pretty_podsandboxConfig))
+
 	return strings.Join([]string{
 		kubePrefix,                            // 0
 		sandboxContainerName,                  // 1

@@ -177,8 +177,8 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod,
 			return
 		}
 
-		pretty_podSandboxStatus, _ := json.MarshalIndent(podSandboxStatus, "", "\t")
-		fmt.Printf("pretty sand box status: %v\n", string(pretty_podSandboxStatus))
+		//pretty_podSandboxStatus, _ := json.MarshalIndent(podSandboxStatus, "", "\t")
+		//fmt.Printf("pretty sand box status: %v\n", string(pretty_podSandboxStatus))
 
 		// If we ever allow updating a pod from non-host-network to
 		// host-network, we may use a stale IP.

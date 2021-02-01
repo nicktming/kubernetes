@@ -177,17 +177,17 @@ func (g *GenericPLEG) relist() {
 	}
 
 	for _, pod := range pods {
-		pretty_pod, _ := json.MarshalIndent(pod, "", "\t")
-		fmt.Printf("relist pod : %v\n", string(pretty_pod))
+		//pretty_pod, _ := json.MarshalIndent(pod, "", "\t")
+		//fmt.Printf("relist pod : %v\n", string(pretty_pod))
 
 		pid := pod.ID
 		pod := g.podRecords.getCurrent(pid)
 		podstatus, err := g.runtime.GetPodStatus(pid, pod.Name, pod.Namespace)
-		pretty_podstatus, _ := json.MarshalIndent(podstatus, "", "\t")
+		//pretty_podstatus, _ := json.MarshalIndent(podstatus, "", "\t")
 		if err != nil {
 			klog.Warningf("error get pod status: %v\n", err)
 		} else {
-			fmt.Printf("========>setting podStatus: %v\n", string(pretty_podstatus))
+			//fmt.Printf("========>setting podStatus: %v\n", string(pretty_podstatus))
 			g.cache.Set(pid, podstatus, nil, time.Now())
 		}
 	}
