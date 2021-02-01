@@ -5,7 +5,7 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
 	"time"
 	"k8s.io/klog"
-	"encoding/json"
+	//"encoding/json"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"fmt"
