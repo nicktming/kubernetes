@@ -608,6 +608,7 @@ func (ds *dockerService) makeSandboxDockerConfig(c *runtimeapi.PodSandboxConfig,
 		},
 		HostConfig: hc,
 	}
+	klog.Infof("====>got createConfig name: %v for image: %v\n", createConfig.Name, image)
 
 	// Apply linux-specific options.
 	if err := ds.applySandboxLinuxOptions(hc, c.GetLinux(), createConfig, image, securityOptSeparator); err != nil {

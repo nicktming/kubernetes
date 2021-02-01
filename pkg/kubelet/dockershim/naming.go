@@ -58,7 +58,7 @@ const (
 
 func makeSandboxName(s *runtimeapi.PodSandboxConfig) string {
 	pretty_podsandboxConfig, _ := json.MarshalIndent(s, "", "\t")
-	fmt.Printf("===>prettty pod sandbox config: %v\n", string(pretty_podsandboxConfig))
+	fmt.Printf("===>prettty pod sandbox config: %v\n, attempt: %d\n", string(pretty_podsandboxConfig), s.Metadata.Attempt)
 
 	return strings.Join([]string{
 		kubePrefix,                            // 0

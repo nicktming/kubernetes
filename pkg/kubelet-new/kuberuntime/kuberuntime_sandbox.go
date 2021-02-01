@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"gopkg.in/square/go-jose.v2/json"
 )
 
 
@@ -50,6 +51,8 @@ func (m *kubeGenericRuntimeManager) createPodSandbox(pod *v1.Pod, attempt uint32
 	}
 	runtimeHandler := ""
 	// TODO runtimeHandler
+	pretty_podSandboxConfig, _ := json.MarshalIndent(podSandboxConfig, "", "\t")
+	fmt.Printf("======>kuberuntime manager sandbox config: %v\n", string(pretty_podSandboxConfig))
 	podSandBoxID, err := m.runtimeService.RunPodSandbox(podSandboxConfig, runtimeHandler)
 	if err != nil {
 		message := fmt.Sprintf("CreatePodSandbox for pod %q failed: %v", format.Pod(pod), err)
