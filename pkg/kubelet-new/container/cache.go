@@ -32,7 +32,9 @@ func NewCache() Cache {
 func (c *cache) Get(pid types.UID) (*PodStatus, error) {
 	ps, ok := c.pods[pid]
 	if !ok {
-		return nil, fmt.Errorf("Not Found")
+		return &PodStatus{
+			ID: pid,
+		}, nil
 	}
 	return ps, nil
 }
