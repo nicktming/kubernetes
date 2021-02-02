@@ -707,6 +707,7 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 		klog.Errorf("Unable to make pod data directories for pod %q: %v", format.Pod(pod), err)
 		return err
 	}
+	klog.Infof("calling containRuntime syncPod")
 	result := kl.containerRuntime.SyncPod(pod, podStatus)
 	if err := result.Error(); err != nil {
 		// Do not return error if the only failures were pods in backoff
