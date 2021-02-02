@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
-	"fmt"
 )
 
 type Cache interface {
