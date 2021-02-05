@@ -154,11 +154,11 @@ func updateLastTransitionTime(oldStatus, status *v1.PodStatus, conditionType v1.
 	}
 
 	condition.LastTransitionTime = lastTransitionTime
-	pretty_status, _ := json.MarshalIndent(status, "", "\t")
-	if oldCondition != nil {
-		klog.Infof("===>conditionType: %v, oldCondition.Status: %v, condition.Status: %v, time: %v\n, pretty status: %v",
-			conditionType, oldCondition.Status, condition.Status, lastTransitionTime, string(pretty_status))
-	}
+	//pretty_status, _ := json.MarshalIndent(status, "", "\t")
+	//if oldCondition != nil {
+	//	klog.Infof("===>conditionType: %v, oldCondition.Status: %v, condition.Status: %v, time: %v\n, pretty status: %v",
+	//		conditionType, oldCondition.Status, condition.Status, lastTransitionTime, string(pretty_status))
+	//}
 }
 
 func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUpdate bool) bool {

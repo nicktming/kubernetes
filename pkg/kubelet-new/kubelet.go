@@ -38,6 +38,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-new/pleg"
 	"k8s.io/kubernetes/pkg/kubelet-new/status"
 	"k8s.io/kubernetes/pkg/kubelet/util/queue"
+	"k8s.io/kubernetes/pkg/kubelet-new/prober"
 )
 
 const (
@@ -161,6 +162,8 @@ type Kubelet struct {
 
 	// podWorkers handle syncing Pods in response to events.
 	podWorkers PodWorkers
+
+	probeManager prober.Manager
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -557,6 +560,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	klet.podManager = kubepod.NewBasicPodManager()
 	klet.containerDeletor = newPodContainerDeletor(klet.containerRuntime, 0)
 	klet.statusManager = status.NewManager(klet.kubeClient, klet, klet.podManager)
+
+	klet.probeManager = prober.NewManager()
 
 	klet.workQueue = queue.NewBasicWorkQueue(klet.clock)
 	klet.podWorkers = newPodWorkers(klet.syncPod, kubeDeps.Recorder, klet.workQueue, 5 * time.Second, backOffPeriod, klet.podCache)
