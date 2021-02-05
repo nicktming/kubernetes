@@ -9,6 +9,7 @@ import (
 	"os"
 	"fmt"
 	"k8s.io/klog"
+	"k8s.io/kubernetes_tming/_output/local/go/src/k8s.io/kubernetes/pkg/kubelet-new/status"
 )
 
 func getPhase(spec *v1.PodSpec, info []v1.ContainerStatus) v1.PodPhase {
@@ -52,6 +53,14 @@ func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.Po
 	spec := &pod.Spec
 	s.Phase = getPhase(spec, allStatus)
 
+	s.Conditions = append(s.Conditions, status.GeneratePodInitializedCondition(spec, s.InitContainerStatuses, s.Phase))
+	s.Conditions = append(s.Conditions, status.GeneratePodReadyCondition(spec, s.Conditions, s.ContainerStatuses, s.Phase))
+	s.Conditions = append(s.Conditions, status.GenerateContainersReadyCondition(spec, s.ContainerStatuses, s.Phase))
+
+	s.Conditions = append(s.Conditions, v1.PodCondition{
+		Type: 	v1.PodScheduled,
+		Status: v1.ConditionTrue,
+	})
 	return s
 }
 
@@ -76,6 +85,19 @@ func (kl *Kubelet) convertToAPIContainerStatuses(pod *v1.Pod, podStatus *kubecon
 			status.State.Running = &v1.ContainerStateRunning{
 				StartedAt: metav1.NewTime(cs.StartedAt),
 			}
+		case kubecontainer.ContainerStateCreated:
+			fallthrough
+		case kubecontainer.ContainerStateExited:
+			status.State.Terminated = &v1.ContainerStateTerminated{
+				ExitCode: 	int32(cs.ExitCode),
+				Reason: 	cs.Reason,
+				Message: 	cs.Message,
+				StartedAt: 	metav1.NewTime(cs.StartedAt),
+				FinishedAt:  	metav1.NewTime(cs.FinishedAt),
+				ContainerID: 	cid,
+			}
+		default:
+			status.State.Waiting = &v1.ContainerStateWaiting{}
 		}
 		return status
 	}
