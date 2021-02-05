@@ -65,7 +65,7 @@ func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.Po
 	return s
 }
 
-func (kl *Kubelet) convertToAPIContainerStatuses(pod *v1.Pod, podStatus *kubecontainer.PodStatus) v1.PodStatus {
+func (kl *Kubelet) convertToAPIContainerStatuses(pod *v1.Pod, podStatus *kubecontainer.PodStatus) *v1.PodStatus {
 	var apiPodStatus v1.PodStatus
 
 	if podStatus == nil {
@@ -109,7 +109,7 @@ func (kl *Kubelet) convertToAPIContainerStatuses(pod *v1.Pod, podStatus *kubecon
 		apiPodStatus.ContainerStatuses[i] = covertContainerStatus(containerStatus)
 	}
 
-	return apiPodStatus
+	return &apiPodStatus
 }
 
 // makePodDataDirs creates the dirs for the pod datas.
