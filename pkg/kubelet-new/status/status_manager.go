@@ -148,12 +148,15 @@ func updateLastTransitionTime(oldStatus, status *v1.PodStatus, conditionType v1.
 	lastTransitionTime := metav1.Now()
 	_, oldCondition := podutil.GetPodCondition(oldStatus, conditionType)
 
-	klog.Infof("===>conditionType: %v, oldCondition.Status: %v, condition.Status: %v", conditionType, oldCondition.Status, condition.Status)
 
 	if oldCondition != nil && oldCondition.Status == condition.Status {
 		lastTransitionTime = oldCondition.LastTransitionTime
 	}
+
 	condition.LastTransitionTime = lastTransitionTime
+	pretty_status, _ := json.MarshalIndent(status, "", "\t")
+	klog.Infof("===>conditionType: %v, oldCondition.Status: %v, condition.Status: %v, time: %v\n, pretty status: %v",
+		conditionType, oldCondition.Status, condition.Status, lastTransitionTime, string(pretty_status))
 }
 
 func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUpdate bool) bool {
@@ -174,6 +177,7 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 	updateLastTransitionTime(&oldStatus, &status, v1.PodScheduled)
 
 
+
 	if oldStatus.StartTime != nil && !oldStatus.StartTime.IsZero() {
 		status.StartTime = oldStatus.StartTime
 	} else if status.StartTime == nil || status.StartTime.IsZero() {
@@ -181,7 +185,7 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 		status.StartTime = &now
 	}
 
-	normalizeStatus(pod, &status)
+	//normalizeStatus(pod, &status)
 
 	if isCache && isPodStatusByKubeletEqual(&oldStatus, &status) {
 		//pretty_cachedStatus, _ := json.MarshalIndent(oldStatus, "", "\t")
