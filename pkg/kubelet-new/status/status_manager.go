@@ -15,8 +15,11 @@ import (
 	kubepod "k8s.io/kubernetes/pkg/kubelet-new/pod"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
+	kubetypes "k8s.io/kubernetes/pkg/kubelet-new/types"
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
 	"time"
 	"gopkg.in/square/go-jose.v2/json"
+	"sort"
 )
 
 type Manager interface {
@@ -145,7 +148,7 @@ func updateLastTransitionTime(status, oldStatus *v1.PodStatus, conditionType v1.
 	lastTransitionTime := metav1.Now()
 	_, oldCondition := podutil.GetPodCondition(oldStatus, conditionType)
 
-	klog.Infof("===>oldCondition.Status: %v, condition.Status: %v", oldCondition.Status, condition.Status)
+	klog.Infof("===>conditionType: %v, oldCondition.Status: %v, condition.Status: %v", conditionType, oldCondition.Status, condition.Status)
 
 	if oldCondition != nil && oldCondition.Status == condition.Status {
 		lastTransitionTime = oldCondition.LastTransitionTime
@@ -169,6 +172,15 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 	updateLastTransitionTime(&oldStatus, &status, v1.PodInitialized)
 
 	updateLastTransitionTime(&oldStatus, &status, v1.PodScheduled)
+
+
+	if oldStatus.StartTime != nil && !oldStatus.StartTime.IsZero() {
+		status.StartTime = oldStatus.String()
+	} else if status.StartTime == nil || status.StartTime.IsZero() {
+		now := metav1.Now()
+		status.StartTime = &now
+	}
+
 
 	if isCache && isPodStatusByKubeletEqual(&oldStatus, &status) {
 		//pretty_cachedStatus, _ := json.MarshalIndent(oldStatus, "", "\t")
@@ -198,6 +210,57 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 		return false
 	}
 }
+
+func normalizeStatus(pod *v1.Pod, status *v1.PodStatus) *v1.PodStatus {
+	bytesPerStatus := kubecontainer.MaxPodTerminationMessageLogLength
+	if containers := len(pod.Spec.Containers) + len(pod.Spec.InitContainers); containers > 0 {
+		bytesPerStatus = bytesPerStatus / containers
+	}
+	normalizeTimeStamp := func(t *metav1.Time) {
+		*t = t.Rfc3339Copy()
+	}
+	normalizeContainerState := func(c *v1.ContainerState) {
+		if c.Running != nil {
+			normalizeTimeStamp(&c.Running.StartedAt)
+		}
+		if c.Terminated != nil {
+			normalizeTimeStamp(&c.Terminated.StartedAt)
+			normalizeTimeStamp(&c.Terminated.FinishedAt)
+			if len(c.Terminated.Message) > bytesPerStatus {
+				c.Terminated.Message = c.Terminated.Message[:bytesPerStatus]
+			}
+		}
+	}
+
+	if status.StartTime != nil {
+		normalizeTimeStamp(status.StartTime)
+	}
+	for i := range status.Conditions {
+		condition := &status.Conditions[i]
+		normalizeTimeStamp(&condition.LastProbeTime)
+		normalizeTimeStamp(&condition.LastTransitionTime)
+	}
+
+	// update container statuses
+	for i := range status.ContainerStatuses {
+		cstatus := &status.ContainerStatuses[i]
+		normalizeContainerState(&cstatus.State)
+		normalizeContainerState(&cstatus.LastTerminationState)
+	}
+	// Sort the container statuses, so that the order won't affect the result of comparison
+	sort.Sort(kubetypes.SortedContainerStatuses(status.ContainerStatuses))
+
+	// update init container statuses
+	for i := range status.InitContainerStatuses {
+		cstatus := &status.InitContainerStatuses[i]
+		normalizeContainerState(&cstatus.State)
+		normalizeContainerState(&cstatus.LastTerminationState)
+	}
+	// Sort the container statuses, so that the order won't affect the result of comparison
+	kubetypes.SortInitContainerStatuses(pod, status.InitContainerStatuses)
+	return status
+}
+
 
 func (m *manager) syncPod(podUID types.UID, status versionedPodStatus) {
 	if !m.needsUpdate(podUID, status) {

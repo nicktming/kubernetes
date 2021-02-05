@@ -216,4 +216,21 @@ func (ps *PodStatus) FindContainerStatusByName(name string) *ContainerStatus {
 }
 
 
+const (
+	// MaxPodTerminationMessageLogLength is the maximum bytes any one pod may have written
+	// as termination message output across all containers. Containers will be evenly truncated
+	// until output is below this limit.
+	MaxPodTerminationMessageLogLength = 1024 * 12
+	// MaxContainerTerminationMessageLength is the upper bound any one container may write to
+	// its termination message path. Contents above this length will be truncated.
+	MaxContainerTerminationMessageLength = 1024 * 4
+	// MaxContainerTerminationMessageLogLength is the maximum bytes any one container will
+	// have written to its termination message when the message is read from the logs.
+	MaxContainerTerminationMessageLogLength = 1024 * 2
+	// MaxContainerTerminationMessageLogLines is the maximum number of previous lines of
+	// log output that the termination message can contain.
+	MaxContainerTerminationMessageLogLines = 80
+)
+
+
 
