@@ -159,13 +159,13 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 		oldStatus = pod.Status
 	}
 
-	updateLastTransitionTime(oldStatus, status, v1.ContainersReady)
+	updateLastTransitionTime(&oldStatus, &status, v1.ContainersReady)
 
-	updateLastTransitionTime(oldStatus, status, v1.PodReady)
+	updateLastTransitionTime(&oldStatus, &status, v1.PodReady)
 
-	updateLastTransitionTime(oldStatus, status, v1.PodInitialized)
+	updateLastTransitionTime(&oldStatus, &status, v1.PodInitialized)
 
-	updateLastTransitionTime(oldStatus, status, v1.PodScheduled)
+	updateLastTransitionTime(&oldStatus, &status, v1.PodScheduled)
 
 	if isCache && isPodStatusByKubeletEqual(&oldStatus, &status) {
 		//pretty_cachedStatus, _ := json.MarshalIndent(oldStatus, "", "\t")
