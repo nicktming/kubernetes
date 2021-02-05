@@ -144,6 +144,9 @@ func updateLastTransitionTime(status, oldStatus *v1.PodStatus, conditionType v1.
 	// Need to set LastTransitionTime
 	lastTransitionTime := metav1.Now()
 	_, oldCondition := podutil.GetPodCondition(oldStatus, conditionType)
+
+	klog.Infof("===>oldCondition.Status: %v, condition.Status: %v", oldCondition.Status, condition.Status)
+
 	if oldCondition != nil && oldCondition.Status == condition.Status {
 		lastTransitionTime = oldCondition.LastTransitionTime
 	}
