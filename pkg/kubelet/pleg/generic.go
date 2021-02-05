@@ -29,7 +29,6 @@ import (
 	"k8s.io/klog"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
-	"encoding/json"
 )
 
 // GenericPLEG is an extremely simple generic PLEG that relies solely on
