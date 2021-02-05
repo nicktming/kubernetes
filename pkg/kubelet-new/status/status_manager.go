@@ -175,7 +175,7 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 
 
 	if oldStatus.StartTime != nil && !oldStatus.StartTime.IsZero() {
-		status.StartTime = oldStatus.String()
+		status.StartTime = oldStatus.StartTime
 	} else if status.StartTime == nil || status.StartTime.IsZero() {
 		now := metav1.Now()
 		status.StartTime = &now
