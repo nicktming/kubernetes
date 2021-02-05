@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	kubepod "k8s.io/kubernetes/pkg/kubelet-new/pod"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 	"time"
 	"gopkg.in/square/go-jose.v2/json"
 )
@@ -135,6 +136,20 @@ func (m *manager) SetPodStatus(pod *v1.Pod, status v1.PodStatus) {
 	m.updateStatusInternal(pod, status, pod.DeletionTimestamp != nil)
 }
 
+func updateLastTransitionTime(status, oldStatus *v1.PodStatus, conditionType v1.PodConditionType) {
+	_, condition := podutil.GetPodCondition(status, conditionType)
+	if condition == nil {
+		return
+	}
+	// Need to set LastTransitionTime
+	lastTransitionTime := metav1.Now()
+	_, oldCondition := podutil.GetPodCondition(oldStatus, conditionType)
+	if oldCondition != nil && oldCondition.Status == condition.Status {
+		lastTransitionTime = oldCondition.LastTransitionTime
+	}
+	condition.LastTransitionTime = lastTransitionTime
+}
+
 func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUpdate bool) bool {
 	var oldStatus v1.PodStatus
 	cacheStatus, isCache := m.podStatuses[pod.UID]
@@ -144,11 +159,19 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 		oldStatus = pod.Status
 	}
 
+	updateLastTransitionTime(oldStatus, status, v1.ContainersReady)
+
+	updateLastTransitionTime(oldStatus, status, v1.PodReady)
+
+	updateLastTransitionTime(oldStatus, status, v1.PodInitialized)
+
+	updateLastTransitionTime(oldStatus, status, v1.PodScheduled)
+
 	if isCache && isPodStatusByKubeletEqual(&oldStatus, &status) {
-		pretty_cachedStatus, _ := json.MarshalIndent(oldStatus, "", "\t")
-		pretty_status, _ := json.MarshalIndent(status, "", "\t")
-		klog.Infof("Ignoring same status for pod %q, cachedstatus: %v, statusfrompleg: %v",
-			format.Pod(pod), string(pretty_cachedStatus), string(pretty_status))
+		//pretty_cachedStatus, _ := json.MarshalIndent(oldStatus, "", "\t")
+		//pretty_status, _ := json.MarshalIndent(status, "", "\t")
+		//klog.Infof("Ignoring same status for pod %q, cachedstatus: %v, statusfrompleg: %v",
+		//	format.Pod(pod), string(pretty_cachedStatus), string(pretty_status))
 		return false // No new status.
 	}
 
