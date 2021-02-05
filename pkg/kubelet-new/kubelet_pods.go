@@ -62,14 +62,14 @@ func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.Po
 		Type: 	v1.PodScheduled,
 		Status: v1.ConditionTrue,
 	})
-	return s
+	return *s
 }
 
 func (kl *Kubelet) convertToAPIContainerStatuses(pod *v1.Pod, podStatus *kubecontainer.PodStatus) *v1.PodStatus {
 	var apiPodStatus v1.PodStatus
 
 	if podStatus == nil {
-		return apiPodStatus
+		return &apiPodStatus
 	}
 
 	covertContainerStatus := func(cs *kubecontainer.ContainerStatus) v1.ContainerStatus {
