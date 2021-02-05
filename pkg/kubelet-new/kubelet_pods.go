@@ -9,7 +9,7 @@ import (
 	"os"
 	"fmt"
 	"k8s.io/klog"
-	"k8s.io/kubernetes_tming/_output/local/go/src/k8s.io/kubernetes/pkg/kubelet-new/status"
+	"k8s.io/kubernetes/pkg/kubelet-new/status"
 )
 
 func getPhase(spec *v1.PodSpec, info []v1.ContainerStatus) v1.PodPhase {
