@@ -334,6 +334,10 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
 		klog.V(4).Infof("SyncLoop (SYNC): %d pods; %s", len(podsToSync), format.Pods(podsToSync))
 		handler.HandlePodSyncs(podsToSync)
 
+	case <-housekeepingCh:
+		// TODO sources ready
+
+
 	}
 	return true
 }
@@ -679,9 +683,11 @@ func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mir
 }
 
 func (kl *Kubelet) syncPod(o syncPodOptions) error {
+
+
 	pod := o.pod
 	podStatus := o.podStatus
-
+	klog.Infof("++++++++++++++++++kubelet syncPod pod(%v/%v)\n", pod.Namespace, pod.Name)
 	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus)
 
 	//fmt.Printf("status manager before setting podStatus: %v\n", podStatus)
