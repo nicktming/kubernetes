@@ -181,6 +181,7 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 		status.StartTime = &now
 	}
 
+	normalizeStatus(pod, &status)
 
 	if isCache && isPodStatusByKubeletEqual(&oldStatus, &status) {
 		//pretty_cachedStatus, _ := json.MarshalIndent(oldStatus, "", "\t")
