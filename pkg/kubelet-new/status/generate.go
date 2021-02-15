@@ -37,7 +37,7 @@ func GenerateContainersReadyCondition(spec *v1.PodSpec, containerStatuses []v1.C
 			unknowContainers = append(unknowContainers, containerStatus.Name)
 		}
 	}
-	if unreadyContainers > 0 {
+	if len(unreadyContainers) > 0 {
 		return v1.PodCondition{
 			Type: v1.ContainersReady,
 			Status: v1.ConditionFalse,
