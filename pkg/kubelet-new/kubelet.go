@@ -171,6 +171,9 @@ type Kubelet struct {
 
 	// Policy for handling garbage collection of dead containers.
 	containerGC kubecontainer.ContainerGC
+
+	// Optional, defaults to simple Docker implementation
+	runner kubecontainer.ContainerCommandRunner
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -560,6 +563,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		return nil, err
 	}
 	klet.containerRuntime = runtime
+	klet.runner = runtime
 
 	klet.podCache = kubecontainer.NewCache()
 
@@ -641,6 +645,7 @@ func (kl *Kubelet) HandlePodAdditions(pods []*v1.Pod) {
 		// TODO podManager
 		kl.podManager.AddPod(pod)
 		go kl.dispatchWork(pod, kubetypes.SyncPodCreate, nil, start)
+		kl.probeManager.AddPod(pod)
 	}
 }
 

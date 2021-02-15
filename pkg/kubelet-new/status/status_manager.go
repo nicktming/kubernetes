@@ -28,6 +28,10 @@ type Manager interface {
 	Start()
 	// SetPodStatus caches updates the cached status for the given pod, and triggers a status update.
 	SetPodStatus(pod *v1.Pod, status v1.PodStatus)
+
+	// SetContainerReadiness updates the cached container status with the given readiness, and
+	// triggers a status update.
+	SetContainerReadiness(podUID types.UID, containerID kubecontainer.ContainerID, ready bool)
 }
 
 // An object which provides guarantees that a pod can be safely deleted.
@@ -383,10 +387,83 @@ func (m *manager) GetPodStatus(uid types.UID) (v1.PodStatus, bool) {
 }
 
 
+func (m *manager) SetContainerReadiness(podUID types.UID, containerID kubecontainer.ContainerID, ready bool) {
+	m.podStatusesLock.Lock()
+	defer m.podStatusesLock.Unlock()
+
+	pod, ok := m.podManager.GetPodByUID(podUID)
+	if !ok {
+		klog.V(4).Infof("Pod %q has been deleted, no need to update readiness", string(podUID))
+		return
+	}
+
+	oldStatus, found := m.podStatuses[pod.UID]
+	if !found {
+		klog.Warningf("Container readiness changed before pod has synced: %q - %q",
+			format.Pod(pod), containerID.String())
+		return
+	}
+
+	// Find the container to update.
+	containerStatus, _, ok := findContainerStatus(&oldStatus.podStatus, containerID.String())
+	if !ok {
+		klog.Warningf("Container readiness changed for unknown container: %q - %q",
+			format.Pod(pod), containerID.String())
+		return
+	}
+
+	if containerStatus.Ready == ready {
+		klog.V(4).Infof("Container readiness unchanged (%v): %q - %q", ready,
+			format.Pod(pod), containerID.String())
+		return
+	}
+
+	// Make sure we're not updating the cached version.
+	status := *oldStatus.podStatus.DeepCopy()
+	containerStatus, _, _ = findContainerStatus(&status, containerID.String())
+	containerStatus.Ready = ready
+
+	// updateConditionFunc updates the corresponding type of condition
+	updateConditionFunc := func(conditionType v1.PodConditionType, condition v1.PodCondition) {
+		conditionIndex := -1
+		for i, condition := range status.Conditions {
+			if condition.Type == conditionType {
+				conditionIndex = i
+				break
+			}
+		}
+		if conditionIndex != -1 {
+			status.Conditions[conditionIndex] = condition
+		} else {
+			klog.Warningf("PodStatus missing %s type condition: %+v", conditionType, status)
+			status.Conditions = append(status.Conditions, condition)
+		}
+	}
+	updateConditionFunc(v1.PodReady, GeneratePodReadyCondition(&pod.Spec, status.Conditions, status.ContainerStatuses, status.Phase))
+	updateConditionFunc(v1.ContainersReady, GenerateContainersReadyCondition(&pod.Spec, status.ContainerStatuses, status.Phase))
+	m.updateStatusInternal(pod, status, false)
+}
 
 
 
 
+func findContainerStatus(status *v1.PodStatus, containerID string) (containerStatus *v1.ContainerStatus, init bool, ok bool) {
+	// Find the container to update.
+	for i, c := range status.ContainerStatuses {
+		if c.ContainerID == containerID {
+			return &status.ContainerStatuses[i], false, true
+		}
+	}
+
+	for i, c := range status.InitContainerStatuses {
+		if c.ContainerID == containerID {
+			return &status.InitContainerStatuses[i], true, true
+		}
+	}
+
+	return nil, false, false
+
+}
 
 
 

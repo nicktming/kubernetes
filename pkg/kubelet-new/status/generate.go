@@ -5,7 +5,7 @@ import (
 	//"strings"
 
 	"k8s.io/api/core/v1"
-	//podutil "k8s.io/kubernetes/pkg/api/v1/pod"
+	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 )
 
 const (
@@ -26,20 +26,18 @@ func GenerateContainersReadyCondition(spec *v1.PodSpec, containerStatuses []v1.C
 			Status: v1.ConditionUnknown,
 		}
 	}
-	unready := 0
-	success := 0
-	for _, cs := range containerStatuses {
-		if cs.State.Waiting != nil {
-			unready++
-		} else if cs.State.Terminated != nil {
-			if cs.State.Terminated.ExitCode == 0 {
-				success++
-			} else {
-				unready++
+	unknowContainers := []string{}
+	unreadyContainers := []string{}
+	for _, container := range spec.Containers{
+		if containerStatus, ok := podutil.GetContainerStatus(containerStatuses, container.Name); ok {
+			if !containerStatus.Ready {
+				unreadyContainers = append(unreadyContainers, containerStatus.Name)
 			}
+		} else {
+			unknowContainers = append(unknowContainers, containerStatus.Name)
 		}
 	}
-	if unready > 0 {
+	if unreadyContainers > 0 {
 		return v1.PodCondition{
 			Type: v1.ContainersReady,
 			Status: v1.ConditionFalse,

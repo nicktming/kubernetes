@@ -4,6 +4,7 @@ import (
 	"k8s.io/api/core/v1"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 	hashutil "k8s.io/kubernetes/pkg/util/hash"
+	"k8s.io/kubernetes/third_party/forked/golang/expansion"
 	"hash/fnv"
 )
 
@@ -74,4 +75,30 @@ func ConvertPodStatusToRunningPod(runtimeName string, podStatus *PodStatus) Pod 
 	}
 	return runningPod
 }
+
+// V1EnvVarsToMap constructs a map of environment name to value from a slice
+// of env vars.
+func V1EnvVarsToMap(envs []v1.EnvVar) map[string]string {
+	result := map[string]string{}
+	for _, env := range envs {
+		result[env.Name] = env.Value
+	}
+
+	return result
+}
+
+
+// ExpandContainerCommandOnlyStatic substitutes only static environment variable values from the
+// container environment definitions. This does *not* include valueFrom substitutions.
+// TODO: callers should use ExpandContainerCommandAndArgs with a fully resolved list of environment.
+func ExpandContainerCommandOnlyStatic(containerCommand []string, envs []v1.EnvVar) (command []string) {
+	mapping := expansion.MappingFuncFor(V1EnvVarsToMap(envs))
+	if len(containerCommand) != 0 {
+		for _, cmd := range containerCommand {
+			command = append(command, expansion.Expand(cmd, mapping))
+		}
+	}
+	return command
+}
+
 

@@ -3,30 +3,204 @@ package prober
 import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/api/core/v1"
+	"sync"
+	"k8s.io/klog"
+	"k8s.io/kubernetes/pkg/kubelet/util/format"
+	"k8s.io/kubernetes/pkg/kubelet-new/prober/results"
+	"k8s.io/kubernetes/pkg/kubelet-new/status"
+	"k8s.io/apimachinery/pkg/util/wait"
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 type Manager interface {
 	// Update Pod Status
 	UpdatePodStatus(types.UID, *v1.PodStatus)
+
+	// AddPod creates new probe workers for every container probe. This should be called for every
+	// pod created.
+	AddPod(pod *v1.Pod)
+
+	// RemovePod handles cleaning up the removed pod state, including terminating probe workers and
+	// deleting cached results.
+	RemovePod(pod *v1.Pod)
+
+	// CleanupPods handles cleaning up pods which should no longer be running.
+	// It takes a list of "active pods" which should not be cleaned up.
+	CleanupPods(activePods []*v1.Pod)
+
+	// Start starts the Manager sync loops.
+	Start()
 }
 
+type probeKey struct {
+	podUID 	types.UID
+	containerName string
+	probeType probeType
+}
+
+// Type of probe (readiness or liveness)
+type probeType int
+
+const (
+	liveness probeType = iota
+	readiness
+
+	probeResultSuccessful string = "successful"
+	probeResultFailed     string = "failed"
+	probeResultUnknown    string = "unknown"
+)
+
+// For debugging
+func (t probeType) String() string {
+	switch t {
+	case readiness:
+		return "Readiness"
+	case liveness:
+		return "Liveness"
+	default:
+		return "UNKNOWN"
+	}
+}
+
+func (m *manager) AddPod(pod *v1.Pod) {
+	m.workerLock.Lock()
+	defer m.workerLock.Unlock()
+
+	key := probeKey{podUID: pod.UID}
+	for _, c := range pod.Spec.Containers {
+		key.containerName = c.Name
+
+		if c.ReadinessProbe != nil {
+			key.probeType = readiness
+			if _, ok := m.workers[key]; ok {
+				klog.Errorf("Readiness probe already exists! %v - %v",
+					format.Pod(pod), c.Name)
+				return
+			}
+			w := newWorker(m, readiness, pod, c)
+			m.workers[key] = w
+			go w.run()
+		}
+
+	}
+}
+
+func (m *manager) RemovePod(pod *v1.Pod) {
+	m.workerLock.RLock()
+	defer m.workerLock.RUnlock()
+
+	key := probeKey{podUID: pod.UID}
+	for _, c := range pod.Spec.Containers {
+		key.containerName = c.Name
+		for _, probeType := range [...]probeType{readiness, liveness} {
+			key.probeType = probeType
+			if worker, ok := m.workers[key]; ok {
+				worker.stop()
+			}
+		}
+	}
+}
+
+func (m *manager) CleanupPods(activePods []*v1.Pod) {
+	desiredPods := make(map[types.UID]sets.Empty)
+	for _, pod := range activePods {
+		desiredPods[pod.UID] = sets.Empty{}
+	}
+
+	m.workerLock.RLock()
+	defer m.workerLock.RUnlock()
+
+	for key, worker := range m.workers {
+		if _, ok := desiredPods[key.podUID]; !ok {
+			worker.stop()
+		}
+	}
+}
 
 type manager struct {
+	// Map of active workers for probes
+	workers map[probeKey]*worker
+	// Lock for accessing & mutating workers
+	workerLock sync.RWMutex
 
+	// readinessManager manages the results of readiness probes
+	readinessManager results.Manager
+
+	// The statusManager cache provides pod IP and container IDs for probing.
+	statusManager status.Manager
+
+	// prober executes the probe actions.
+	prober *prober
 }
 
-func NewManager() Manager {
-	return &manager{}
+func NewManager(
+	statusManager status.Manager,
+	runner kubecontainer.ContainerCommandRunner,
+	recorder record.EventRecorder) Manager {
+
+	// TODO refManager, livenessManager
+	prober := newProber(runner, recorder)
+	readinessManager := results.NewManager()
+
+	return &manager{
+		statusManager: 	statusManager,
+		prober: 		prober,
+		readinessManager: readinessManager,
+		workers:          make(map[probeKey]*worker),
+	}
 }
+
+
+// Start syncing probe status. This should only be called once.
+func (m *manager) Start() {
+	// Start syncing readiness.
+	go wait.Forever(m.updateReadiness, 0)
+}
+
 
 func (m *manager) UpdatePodStatus(podUID types.UID, podStatus *v1.PodStatus) {
 	for i, c := range podStatus.ContainerStatuses {
 		var ready bool
-		if c.State.Running != nil {
-			ready = true
+		if c.State.Running == nil {
+			ready = false
+		} else if result, ok := m.readinessManager.Get(kubecontainer.ParseContainerID(c.ContainerID)); ok {
+			ready = result == results.Success
+		} else {
+			// The check whether there is a probe which hasn't run yet.
+			_, exists := m.getWorker(podUID, c.Name, readiness)
+			ready = !exists
 		}
 		podStatus.ContainerStatuses[i].Ready = ready
 	}
 	// TODO initcontainer
 }
 
+// Called by the worker after exiting.
+func (m *manager) removeWorker(podUID types.UID, containerName string, probeType probeType) {
+	m.workerLock.Lock()
+	defer m.workerLock.Unlock()
+	delete(m.workers, probeKey{podUID, containerName, probeType})
+}
+
+func (m *manager) getWorker(podUID types.UID, containerName string, probeType probeType) (*worker, bool) {
+	m.workerLock.RLock()
+	defer m.workerLock.RUnlock()
+	worker, ok := m.workers[probeKey{podUID, containerName, probeType}]
+	return worker, ok
+}
+
+// workerCount returns the total number of probe workers. For testing.
+func (m *manager) workerCount() int {
+	m.workerLock.RLock()
+	defer m.workerLock.RUnlock()
+	return len(m.workers)
+}
+
+func (m *manager) updateReadiness() {
+	update := <-m.readinessManager.Updates()
+
+	ready := update.Result == results.Success
+	m.statusManager.SetContainerReadiness(update.PodUID, update.ContainerID, ready)
+}
