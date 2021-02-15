@@ -64,7 +64,7 @@ type kubeGenericRuntimeManager struct {
 type KubeGenericRuntime interface {
 	kubecontainer.Runtime
 	//kubecontainer.StreamingRuntime
-	//kubecontainer.ContainerCommandRunner
+	kubecontainer.ContainerCommandRunner
 }
 
 func NewKubeGenericRuntimeManager(
