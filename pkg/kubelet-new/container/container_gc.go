@@ -1,6 +1,5 @@
 package container
 
-import "fmt"
 
 // Manages garbage collection of dead containers.
 //
