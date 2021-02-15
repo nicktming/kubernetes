@@ -179,6 +179,10 @@ func (w *worker) doProbe() (keepGoing bool) {
 	// the full container environment here, OR we must make a call to the CRI in order to get those environment
 	// values from the running container.
 	result, err := w.probeManager.prober.probe(w.probeType, w.pod, status, w.container, w.containerID)
+
+	klog.Infof("=====>probe containerid: %v, result %v, err: %v",
+		w.containerID, result, err)
+
 	if err != nil {
 		// Prober error, throw away the result.
 		return true
