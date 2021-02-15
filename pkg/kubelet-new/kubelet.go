@@ -39,6 +39,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-new/status"
 	"k8s.io/kubernetes/pkg/kubelet/util/queue"
 	"k8s.io/kubernetes/pkg/kubelet-new/prober"
+	"k8s.io/kubernetes/pkg/kubelet-new/cm"
 )
 
 const (
@@ -83,6 +84,7 @@ type Dependencies struct {
 	OSInterface 		kubecontainer.OSInterface
 	DockerClientConfig      *dockershim.ClientConfig
 
+	ContainerManager 	cm.ContainerManager
 }
 
 
@@ -174,6 +176,9 @@ type Kubelet struct {
 
 	// Optional, defaults to simple Docker implementation
 	runner kubecontainer.ContainerCommandRunner
+
+	// Manager of non-Runtime containers.
+	containerManager cm.ContainerManager
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -488,7 +493,6 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	klet := &Kubelet{
 		kubeClient: 					kubeDeps.KubeClient,
 		heartbeatClient:  				kubeDeps.HeartbeatClient,
-
 		nodeName:   					nodeName,
 		hostname:   					string(nodeName),
 		rootDirectory:					rootDirectory,
@@ -498,6 +502,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		clock: 						clock.RealClock{},
 		recorder:                                	kubeDeps.Recorder,
 		nodeRef: 					nodeRef,
+		containerManager:                        	kubeDeps.ContainerManager,
 	}
 
 	pluginSettings := dockershim.NetworkPluginSettings{
@@ -612,6 +617,7 @@ func (kl *Kubelet) HandlePodRemoves(pods []*v1.Pod) {
 			klog.Infof("delete pod %v with err: %v", format.Pod(pod), err)
 		}
 		// TODO probemanager
+		kl.probeManager.RemovePod(pod)
 	}
 }
 

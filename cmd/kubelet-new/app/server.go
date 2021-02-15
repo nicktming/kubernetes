@@ -71,7 +71,7 @@ import (
 	kubeletconfigvalidation "k8s.io/kubernetes/pkg/kubelet/apis/config/validation"
 	kubeletcertificate "k8s.io/kubernetes/pkg/kubelet/certificate"
 	"k8s.io/kubernetes/pkg/kubelet/certificate/bootstrap"
-	//"k8s.io/kubernetes/pkg/kubelet-tming/cm"
+	"k8s.io/kubernetes/pkg/kubelet-new/cm"
 	"k8s.io/kubernetes/pkg/kubelet-new/config"
 	"k8s.io/kubernetes/pkg/kubelet/dockershim"
 	//dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
@@ -90,10 +90,10 @@ import (
 	"k8s.io/kubernetes/pkg/version/verflag"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet-new/types"
 	//"k8s.io/kubernetes/pkg/kubelet-tming/cadvisor"
-	//"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/sets"
 	//"k8s.io/kubernetes/pkg/kubelet/eviction"
 	//
-	//evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
+	evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
 	//
 	//"k8s.io/client-go/tools/record"
 	//"k8s.io/kubernetes/pkg/api/legacyscheme"
@@ -635,33 +635,34 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 	//	kubeDeps.Auth = auth
 	//}
 
-	//var cgroupRoots []string
+	var cgroupRoots []string
 	//
 	//klog.Infof("init cgroups s.CgroupRoot:%s, s.CgroupDriver:%s, s.KubeletCgroups:%s, s.RuntimeCgroups:%s, s.SystemCgroups:%s",
 	//		s.CgroupRoot, s.CgroupDriver, s.KubeletCgroups, s.RuntimeCgroups, s.SystemCgroups)
 
-	//cgroupRoots = append(cgroupRoots, cm.NodeAllocatableRoot(s.CgroupRoot, s.CgroupDriver))
-	//kubeletCgroup, err := cm.GetKubeletContainer(s.KubeletCgroups)
-	//if err != nil {
-	//	klog.Warningf("failed to get the kubelet's cgroup: %v.  Kubelet system container metrics may be missing.", err)
-	//} else if kubeletCgroup != "" {
-	//	cgroupRoots = append(cgroupRoots, kubeletCgroup)
-	//}
+	cgroupRoots = append(cgroupRoots, cm.NodeAllocatableRoot(s.CgroupRoot, s.CgroupDriver))
+	kubeletCgroup, err := cm.GetKubeletContainer(s.KubeletCgroups)
+	if err != nil {
+		klog.Warningf("failed to get the kubelet's cgroup: %v.  Kubelet system container metrics may be missing.", err)
+	} else if kubeletCgroup != "" {
+		cgroupRoots = append(cgroupRoots, kubeletCgroup)
+	}
 	//
-	//runtimeCgroup, err := cm.GetRuntimeContainer(s.ContainerRuntime, s.RuntimeCgroups)
-	//if err != nil {
-	//	klog.Warningf("failed to get the container runtime's cgroup: %v. Runtime system container metrics may be missing.", err)
-	//} else if runtimeCgroup != "" {
-	//	// RuntimeCgroups is optional, so ignore if it isn't specified
-	//	cgroupRoots = append(cgroupRoots, runtimeCgroup)
-	//}
+	runtimeCgroup, err := cm.GetRuntimeContainer(s.ContainerRuntime, s.RuntimeCgroups)
+	if err != nil {
+		klog.Warningf("failed to get the container runtime's cgroup: %v. Runtime system container metrics may be missing.", err)
+	} else if runtimeCgroup != "" {
+		// RuntimeCgroups is optional, so ignore if it isn't specified
+		cgroupRoots = append(cgroupRoots, runtimeCgroup)
+	}
+
+	if s.SystemCgroups != "" {
+		// SystemCgroups is optional, so ignore if it isn't specified
+		cgroupRoots = append(cgroupRoots, s.SystemCgroups)
+	}
 	//
-	//if s.SystemCgroups != "" {
-	//	// SystemCgroups is optional, so ignore if it isn't specified
-	//	cgroupRoots = append(cgroupRoots, s.SystemCgroups)
-	//}
-	//
-	//klog.Infof("result nodeallocatableRoot:%v, kubeletCgroup: %s, runtimeCgroup: %v", cm.NodeAllocatableRoot(s.CgroupRoot, s.CgroupDriver), kubeletCgroup, runtimeCgroup)
+	klog.Infof("result nodeallocatableRoot:%v, kubeletCgroup: %s, runtimeCgroup: %v, SystemCgroups: %v",
+		cm.NodeAllocatableRoot(s.CgroupRoot, s.CgroupDriver), kubeletCgroup, runtimeCgroup, s.SystemCgroups)
 	//
 	//klog.Infof("init cadvisor interface RootDirectory: %s, cgroupRoots: %v", s.RootDirectory, cgroupRoots)
 
@@ -676,75 +677,75 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 	// Setup event recorder if required.
 	makeEventRecorder(kubeDeps, nodeName)
 
-	//if kubeDeps.ContainerManager == nil {
-	//	if s.CgroupsPerQOS && s.CgroupRoot == "" {
-	//		klog.Info("--cgroups-per-qos enabled, but --cgroup-root was not specified.  defaulting to /")
-	//		s.CgroupRoot = "/"
-	//	}
-	//	kubeReserved, err := parseResourceList(s.KubeReserved)
-	//	if err != nil {
-	//		return err
-	//	}
-	//	systemReserved, err := parseResourceList(s.SystemReserved)
-	//	if err != nil {
-	//		return err
-	//	}
-	//	var hardEvictionThresholds []evictionapi.Threshold
-	//	// If the user requested to ignore eviction thresholds, then do not set valid values for hardEvictionThresholds here.
-	//	if !s.ExperimentalNodeAllocatableIgnoreEvictionThreshold {
-	//		hardEvictionThresholds, err = eviction.ParseThresholdConfig([]string{}, s.EvictionHard, nil, nil, nil)
-	//		if err != nil {
-	//			return err
-	//		}
-	//	}
-	//	experimentalQOSReserved, err := cm.ParseQOSReserved(s.QOSReserved)
-	//	if err != nil {
-	//		return err
-	//	}
-	//
-	//	devicePluginEnabled := utilfeature.DefaultFeatureGate.Enabled(features.DevicePlugins)
-	//
-	//	klog.Infof("server.go s.RuntimeCgroups: %v, s.SystemCgroups: %v, s.KubeletCgroups: %v, s.ContainerRuntime: %v, " +
-	//		"s.CgroupsPerQOS: %v, s.CgroupRoot: %v, s.CgroupDriver: %v, s.RootDirectory: %v, " +
-	//		"s.ProtectKernelDefaults: %v", s.RuntimeCgroups, s.SystemCgroups, s.KubeletCgroups, s.ContainerRuntime, s.CgroupsPerQOS,
-	//		s.CgroupRoot, s.CgroupDriver, s.RootDirectory, s.ProtectKernelDefaults)
-	//
-	//	kubeDeps.ContainerManager, err = cm.NewContainerManager(
-	//		kubeDeps.Mounter,
-	//		kubeDeps.CAdvisorInterface,
-	//		cm.NodeConfig{
-	//			RuntimeCgroupsName:    s.RuntimeCgroups,
-	//			SystemCgroupsName:     s.SystemCgroups,
-	//			KubeletCgroupsName:    s.KubeletCgroups,
-	//			ContainerRuntime:      s.ContainerRuntime,
-	//			CgroupsPerQOS:         s.CgroupsPerQOS,
-	//			CgroupRoot:            s.CgroupRoot,
-	//			CgroupDriver:          s.CgroupDriver,
-	//			KubeletRootDir:        s.RootDirectory,
-	//			ProtectKernelDefaults: s.ProtectKernelDefaults,
-	//			NodeAllocatableConfig: cm.NodeAllocatableConfig{
-	//				KubeReservedCgroupName:   s.KubeReservedCgroup,
-	//				SystemReservedCgroupName: s.SystemReservedCgroup,
-	//				EnforceNodeAllocatable:   sets.NewString(s.EnforceNodeAllocatable...),
-	//				KubeReserved:             kubeReserved,
-	//				SystemReserved:           systemReserved,
-	//				HardEvictionThresholds:   hardEvictionThresholds,
-	//			},
-	//			QOSReserved:                           *experimentalQOSReserved,
-	//			ExperimentalCPUManagerPolicy:          s.CPUManagerPolicy,
-	//			ExperimentalCPUManagerReconcilePeriod: s.CPUManagerReconcilePeriod.Duration,
-	//			ExperimentalPodPidsLimit:              s.PodPidsLimit,
-	//			EnforceCPULimits:                      s.CPUCFSQuota,
-	//			CPUCFSQuotaPeriod:                     s.CPUCFSQuotaPeriod.Duration,
-	//		},
-	//		s.FailSwapOn,
-	//		devicePluginEnabled,
-	//		kubeDeps.Recorder)
-	//
-	//	if err != nil {
-	//		return err
-	//	}
-	//}
+	if kubeDeps.ContainerManager == nil {
+		if s.CgroupsPerQOS && s.CgroupRoot == "" {
+			klog.Info("--cgroups-per-qos enabled, but --cgroup-root was not specified.  defaulting to /")
+			s.CgroupRoot = "/"
+		}
+		kubeReserved, err := parseResourceList(s.KubeReserved)
+		if err != nil {
+			return err
+		}
+		systemReserved, err := parseResourceList(s.SystemReserved)
+		if err != nil {
+			return err
+		}
+		//var hardEvictionThresholds []evictionapi.Threshold
+		// If the user requested to ignore eviction thresholds, then do not set valid values for hardEvictionThresholds here.
+		//if !s.ExperimentalNodeAllocatableIgnoreEvictionThreshold {
+		//	hardEvictionThresholds, err = eviction.ParseThresholdConfig([]string{}, s.EvictionHard, nil, nil, nil)
+		//	if err != nil {
+		//		return err
+		//	}
+		//}
+		experimentalQOSReserved, err := cm.ParseQOSReserved(s.QOSReserved)
+		if err != nil {
+			return err
+		}
+
+		devicePluginEnabled := utilfeature.DefaultFeatureGate.Enabled(features.DevicePlugins)
+
+		klog.Infof("server.go s.RuntimeCgroups: %v, s.SystemCgroups: %v, s.KubeletCgroups: %v, s.ContainerRuntime: %v, " +
+			"s.CgroupsPerQOS: %v, s.CgroupRoot: %v, s.CgroupDriver: %v, s.RootDirectory: %v, " +
+			"s.ProtectKernelDefaults: %v", s.RuntimeCgroups, s.SystemCgroups, s.KubeletCgroups, s.ContainerRuntime, s.CgroupsPerQOS,
+			s.CgroupRoot, s.CgroupDriver, s.RootDirectory, s.ProtectKernelDefaults)
+
+		kubeDeps.ContainerManager, err = cm.NewContainerManager(
+			//kubeDeps.Mounter,
+			//kubeDeps.CAdvisorInterface,
+			cm.NodeConfig{
+				//RuntimeCgroupsName:    s.RuntimeCgroups,
+				//SystemCgroupsName:     s.SystemCgroups,
+				//KubeletCgroupsName:    s.KubeletCgroups,
+				//ContainerRuntime:      s.ContainerRuntime,
+				//CgroupsPerQOS:         s.CgroupsPerQOS,
+				//CgroupRoot:            s.CgroupRoot,
+				//CgroupDriver:          s.CgroupDriver,
+				//KubeletRootDir:        s.RootDirectory,
+				//ProtectKernelDefaults: s.ProtectKernelDefaults,
+				NodeAllocatableConfig: cm.NodeAllocatableConfig{
+					KubeReservedCgroupName:   s.KubeReservedCgroup,
+					SystemReservedCgroupName: s.SystemReservedCgroup,
+					EnforceNodeAllocatable:   sets.NewString(s.EnforceNodeAllocatable...),
+					KubeReserved:             kubeReserved,
+					SystemReserved:           systemReserved,
+					//HardEvictionThresholds:   hardEvictionThresholds,
+				},
+				QOSReserved:                           *experimentalQOSReserved,
+				//ExperimentalCPUManagerPolicy:          s.CPUManagerPolicy,
+				//ExperimentalCPUManagerReconcilePeriod: s.CPUManagerReconcilePeriod.Duration,
+				//ExperimentalPodPidsLimit:              s.PodPidsLimit,
+				//EnforceCPULimits:                      s.CPUCFSQuota,
+				//CPUCFSQuotaPeriod:                     s.CPUCFSQuotaPeriod.Duration,
+			},
+			s.FailSwapOn,
+			devicePluginEnabled,
+			kubeDeps.Recorder)
+
+		if err != nil {
+			return err
+		}
+	}
 
 	//if err := checkPermissions(); err != nil {
 	//	klog.Error(err)

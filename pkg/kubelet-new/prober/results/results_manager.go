@@ -46,6 +46,7 @@ func (r Result) String() string {
 		return "UNKNOWN"
 	}
 }
+
 // Manager implementation.
 type manager struct {
 	// guards the cache
