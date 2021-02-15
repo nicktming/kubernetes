@@ -121,8 +121,6 @@ func (cgc *containerGC) evictSandboxes(evictTerminatedPods bool) error {
 		sort.Sort(sandboxByCreated(sandboxesByPod[uid]))
 	}
 
-
-
 	for podUID, sandboxes := range sandboxesByPod {
 		// TODO || (cgc.podStateProvider.IsPodTerminated(podUID) && evictTerminatedPods)
 		if cgc.podStateProvider.IsPodDeleted(podUID) {

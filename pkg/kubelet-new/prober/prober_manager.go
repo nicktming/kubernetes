@@ -204,3 +204,5 @@ func (m *manager) updateReadiness() {
 	ready := update.Result == results.Success
 	m.statusManager.SetContainerReadiness(update.PodUID, update.ContainerID, ready)
 }
+
+
