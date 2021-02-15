@@ -41,6 +41,12 @@ var (
 	ErrVersionNotSupported = errors.New("Runtime api version is not supported")
 )
 
+// podStateProvider can determine if a pod is deleted ir terminated
+type podStateProvider interface {
+	IsPodDeleted(kubetypes.UID) bool
+	//IsPodTerminated(kubetypes.UID) bool
+}
+
 type kubeGenericRuntimeManager struct {
 	runtimeName string
 
@@ -48,6 +54,10 @@ type kubeGenericRuntimeManager struct {
 	imageService internalapi.ImageManagerService
 	osInterface kubecontainer.OSInterface
 	recorder            record.EventRecorder
+
+
+	// Container GC manager
+	containerGC *containerGC
 }
 
 // KubeGenericRuntime is a interface contains interfaces for container runtime and command.
@@ -61,7 +71,8 @@ func NewKubeGenericRuntimeManager(
 	recorder	record.EventRecorder,
 	osInterface 	kubecontainer.OSInterface,
 	runtimeService 	internalapi.RuntimeService,
-	imageService 	internalapi.ImageManagerService) (KubeGenericRuntime, error) {
+	imageService 	internalapi.ImageManagerService,
+	podStateProvider podStateProvider) (KubeGenericRuntime, error) {
 
 	kubeRuntimeManager := &kubeGenericRuntimeManager{
 		recorder: 		recorder,
@@ -76,6 +87,7 @@ func NewKubeGenericRuntimeManager(
 			klog.Errorf("Failed to create directory %q: %v", podLogsRootDirectory, err)
 		}
 	}
+	kubeRuntimeManager.containerGC = newContainerGC(runtimeService, podStateProvider, kubeRuntimeManager)
 
 	return kubeRuntimeManager, nil
 }
@@ -369,6 +381,12 @@ func (m *kubeGenericRuntimeManager) killPodWithSyncResult(pod *v1.Pod, runningPo
 // Type returns the type of the container runtime.
 func (m *kubeGenericRuntimeManager) Type() string {
 	return m.runtimeName
+}
+
+// TODO gcPolicy, allSourcesReady
+// GarbageCollect removes dead containers using the specified container gc policy.
+func (m *kubeGenericRuntimeManager) GarbageCollect(evictNonDeletedPods bool) error {
+	return m.containerGC.GarbageCollect(evictNonDeletedPods)
 }
 
 

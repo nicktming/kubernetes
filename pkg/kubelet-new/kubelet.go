@@ -68,6 +68,9 @@ const (
 
 	// Period for performing global cleanup tasks.
 	housekeepingPeriod = time.Second * 2
+
+	// ContainerGCPeriod is the period for performing container garbage collection.
+	ContainerGCPeriod = time.Minute
 )
 
 type Dependencies struct {
@@ -86,6 +89,7 @@ type Dependencies struct {
 type Bootstrap interface {
 	BirthCry()
 	Run(<-chan kubetypes.PodUpdate)
+	StartGarbageCollection()
 }
 
 type SyncHandler interface {
@@ -164,6 +168,9 @@ type Kubelet struct {
 	podWorkers PodWorkers
 
 	probeManager prober.Manager
+
+	// Policy for handling garbage collection of dead containers.
+	containerGC kubecontainer.ContainerGC
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -547,6 +554,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		kubeDeps.OSInterface,
 		runtimeService,
 		imageService,
+		klet,
 	)
 	if err != nil {
 		return nil, err
@@ -562,6 +570,12 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	klet.statusManager = status.NewManager(klet.kubeClient, klet, klet.podManager)
 
 	klet.probeManager = prober.NewManager()
+	// TODO
+	containerGC, err := kubecontainer.NewContainerGC(klet.containerRuntime)
+	if err != nil {
+		return nil, err
+	}
+	klet.containerGC = containerGC
 
 	klet.workQueue = queue.NewBasicWorkQueue(klet.clock)
 	klet.podWorkers = newPodWorkers(klet.syncPod, kubeDeps.Recorder, klet.workQueue, 5 * time.Second, backOffPeriod, klet.podCache)
@@ -769,7 +783,24 @@ func (kl *Kubelet) deletePod(pod *v1.Pod) error {
 }
 
 
+func (kl *Kubelet) StartGarbageCollection() {
+	loggedContainerGCFailure := false
+	go wait.Until(func() {
+		if err := kl.containerGC.GarbageCollect(); err != nil {
+			klog.Errorf("Container garbage collection failed: %v", err)
+			kl.recorder.Eventf(kl.nodeRef, v1.EventTypeWarning, events.ContainerGCFailed, err.Error())
+			loggedContainerGCFailure = true
+		} else {
+			var vLevel klog.Level = 4
+			if loggedContainerGCFailure {
+				vLevel = 1
+				loggedContainerGCFailure = false
+			}
 
+			klog.V(vLevel).Infof("Container garbage collection succeeded")
+		}
+	}, ContainerGCPeriod, wait.NeverStop)
+}
 
 
 

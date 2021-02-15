@@ -23,6 +23,8 @@ import (
 )
 
 type Manager interface {
+	PodStatusProvider
+
 	Start()
 	// SetPodStatus caches updates the cached status for the given pod, and triggers a status update.
 	SetPodStatus(pod *v1.Pod, status v1.PodStatus)
@@ -32,6 +34,14 @@ type Manager interface {
 type PodDeletionSafetyProvider interface {
 	// A function which returns true if the pod can safely be deleted.
 	PodResourcesAreReclaimed(pod *v1.Pod, status v1.PodStatus) bool
+}
+
+// PodStatusProvider knows how to provide status for a pod. It's intended to be used by other components
+// that need to introspect status.
+type PodStatusProvider interface {
+	// GetPodStatus returns the cached status for the provided pod UID, as well as whether it
+	// was a cache hit.
+	GetPodStatus(uid types.UID) (v1.PodStatus, bool)
 }
 
 type manager struct {
@@ -363,6 +373,14 @@ func isPodStatusByKubeletEqual(oldStatus, status *v1.PodStatus) bool {
 
 
 
+func (m *manager) GetPodStatus(uid types.UID) (v1.PodStatus, bool) {
+	m.podStatusesLock.RLock()
+	defer m.podStatusesLock.RUnlock()
+	//status, ok := m.podStatuses[types.UID(m.podManager.TranslatePodUID(uid))]
+	// TODO TranslatePodUID
+	status, ok := m.podStatuses[types.UID(uid)]
+	return status.podStatus, ok
+}
 
 
 

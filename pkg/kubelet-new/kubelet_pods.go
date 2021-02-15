@@ -198,6 +198,33 @@ func (kl *Kubelet) HandlePodCleanups() error {
 	return nil
 }
 
+// IsPodTerminated returns true if the pod with the provided UID is in a terminated state ("Failed" or "Succeeded")
+// or if the pod has been deleted or removed
+//func (kl *Kubelet) IsPodTerminated(uid types.UID) bool {
+//	pod, podFound := kl.podManager.GetPodByUID(uid)
+//	if !podFound {
+//		return true
+//	}
+//	return kl.podIsTerminated(pod)
+//}
+
+func (kl *Kubelet) IsPodDeleted(uid types.UID) bool {
+	pod, podFound := kl.podManager.GetPodByUID(uid)
+	if !podFound {
+		return true
+	}
+	status, statusFound := kl.statusManager.GetPodStatus(uid)
+	if !statusFound {
+		status = pod.Status
+	}
+	// TODO status evicted
+	return pod.DeletionTimestamp != nil && notRunning(status.ContainerStatuses)
+}
+
+
+
+
+
 
 
 

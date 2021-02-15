@@ -36,6 +36,18 @@ type Runtime interface {
 
 
 	GetPods(all bool) ([]*Pod, error)
+
+
+	// GarbageCollect removes dead containers using the specified container gc policy
+	// If allSourcesReady is not true, it means that kubelet doesn't have the
+	// complete list of pods from all avialble sources (e.g., apiserver, http,
+	// file). In this case, garbage collector should refrain itself from aggressive
+	// behavior such as removing all containers of unrecognized pods (yet).
+	// If evictNonDeletedPods is set to true, containers and sandboxes belonging to pods
+	// that are terminated, but not deleted will be evicted.  Otherwise, only deleted pods will be GC'd.
+	// TODO: Revisit this method and make it cleaner.
+	// TODO gcPolicy ContainerGCPolicy allSourcesReady bool
+	GarbageCollect(evictNonDeletedPods bool) error
 }
 
 type PodStatus struct {

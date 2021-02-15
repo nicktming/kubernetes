@@ -1201,7 +1201,7 @@ func createAndInitKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	k.BirthCry()
 
-	//k.StartGarbageCollection()
+	k.StartGarbageCollection()
 
 	return k, nil
 }
