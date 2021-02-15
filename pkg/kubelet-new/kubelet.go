@@ -573,7 +573,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	klet.containerDeletor = newPodContainerDeletor(klet.containerRuntime, 0)
 	klet.statusManager = status.NewManager(klet.kubeClient, klet, klet.podManager)
 
-	klet.probeManager = prober.NewManager()
+	klet.probeManager = prober.NewManager(klet.statusManager, klet.runner, klet.recorder)
 	// TODO
 	containerGC, err := kubecontainer.NewContainerGC(klet.containerRuntime)
 	if err != nil {
