@@ -93,7 +93,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	//"k8s.io/kubernetes/pkg/kubelet/eviction"
 	//
-	evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
+	//evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
 	//
 	//"k8s.io/client-go/tools/record"
 	//"k8s.io/kubernetes/pkg/api/legacyscheme"
