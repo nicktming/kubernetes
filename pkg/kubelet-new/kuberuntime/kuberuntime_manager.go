@@ -15,7 +15,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/kubelet/events"
-	"encoding/json"
+	//"encoding/json"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	kubetypes "k8s.io/apimachinery/pkg/types"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
