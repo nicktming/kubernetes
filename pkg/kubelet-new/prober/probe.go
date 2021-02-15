@@ -113,9 +113,9 @@ func (pb *prober) runProbeWithRetries(probeType probeType, p *v1.Probe, pod *v1.
 func (pb *prober) runProbe(probeType probeType, p *v1.Probe, pod *v1.Pod, status v1.PodStatus, container v1.Container, containerID kubecontainer.ContainerID) (probe.Result, string, error) {
 	timeout := time.Duration(p.TimeoutSeconds) * time.Second
 	if p.Exec != nil {
-		klog.Infof("Exec-Probe Pod: %v, Container: %v, Command: %v", pod, container, p.Exec.Command)
+		klog.Infof("+++++++++++Exec-Probe Pod: %v, Container: %v, Command: %v", pod, container, p.Exec.Command)
 		command := kubecontainer.ExpandContainerCommandOnlyStatic(p.Exec.Command, container.Env)
-		klog.Infof("Exec-Probe Pod: %v, Container: %v, after expand Command: %v", pod, container, command)
+		klog.Infof("+++++++Exec-Probe Pod: %v, Container: %v, after expand Command: %v", pod, container, command)
 		return pb.exec.Probe(pb.newExecInContainer(container, containerID, command, timeout))
 	}
 	//if p.HTTPGet != nil {
