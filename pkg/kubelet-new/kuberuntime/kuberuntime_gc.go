@@ -94,6 +94,8 @@ func (cgc *containerGC) evictSandboxes(evictTerminatedPods bool) error {
 		return err
 	}
 
+	klog.Infof("++++++++++evictSandboxes sandboxIDs: %v, sandboxes: %v", sandboxIDs, sandboxes)
+
 	sandboxesByPod := make(sandboxesByPodUID)
 	for _, sandbox := range sandboxes {
 		podUID := types.UID(sandbox.Metadata.Uid)
@@ -118,6 +120,8 @@ func (cgc *containerGC) evictSandboxes(evictTerminatedPods bool) error {
 	for uid := range sandboxesByPod {
 		sort.Sort(sandboxByCreated(sandboxesByPod[uid]))
 	}
+
+
 
 	for podUID, sandboxes := range sandboxesByPod {
 		// TODO || (cgc.podStateProvider.IsPodTerminated(podUID) && evictTerminatedPods)
