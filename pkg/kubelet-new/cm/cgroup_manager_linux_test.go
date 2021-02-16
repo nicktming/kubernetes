@@ -2,6 +2,7 @@ package cm
 
 import (
 	"testing"
+	"fmt"
 )
 
 func TestNewCgroupName(t *testing.T) {
@@ -29,4 +30,10 @@ func TestNewCgroupName(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	err = cgroupManager.Destroy(config)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("Destroy Done")
 }

@@ -41,5 +41,10 @@ type CgroupManager interface {
 	// It just creates the leaf cgroups.
 	// It expects the parent cgroup to already exist.
 	Create(*CgroupConfig) error
+
+	// Destroy the cgroup.
+	Destroy(*CgroupConfig) error
+	// Update cgroup configuration.
+	Update(*CgroupConfig) error
 }
 

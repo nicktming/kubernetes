@@ -218,6 +218,21 @@ func (m *cgroupManagerImpl) Update(cgroupConfig *CgroupConfig) error {
 	return nil
 }
 
+func (m *cgroupManagerImpl) Destroy(cgroupConfig *CgroupConfig) error {
+	libcontainerCgroupConfig := &libcontainerconfigs.Cgroup{
+		Path:   cgroupConfig.Name.ToCgroupfs(),
+	}
+	cgroupPaths := m.buildCgroupPaths(cgroupConfig.Name)
+	manager, err := m.adapter.newManager(libcontainerCgroupConfig, cgroupPaths)
+	if err != nil {
+		return err
+	}
+	if err := manager.Destroy(); err != nil {
+		return err
+	}
+	return nil
+}
+
 
 
 
