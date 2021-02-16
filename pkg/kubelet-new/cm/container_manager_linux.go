@@ -40,7 +40,9 @@ func NewContainerManager(nodeConfig NodeConfig, failSwapOn bool, devicePluginEna
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mounted cgroup subsystems: %v", err)
 	}
-	// TODO subsystems
+	// TODO failswapon
+
+
 	cm := &containerManagerImpl{
 		subsystems: 		subsystems,
 	}

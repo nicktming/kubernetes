@@ -2,8 +2,23 @@ package cm
 
 import (
 	libcontainercgroups "github.com/opencontainers/runc/libcontainer/cgroups"
+	libcontainerconfigs "github.com/opencontainers/runc/libcontainer/configs"
+	cgroupfs "github.com/opencontainers/runc/libcontainer/cgroups/fs"
 	"strings"
 	"path"
+	"fmt"
+)
+
+// libcontainerCgroupManagerType defines how to interface with libcontainer
+type libcontainerCgroupManagerType string
+
+const (
+	// libcontainerCgroupfs means use libcontainer with cgroupfs
+	libcontainerCgroupfs libcontainerCgroupManagerType = "cgroupfs"
+	// libcontainerSystemd means use libcontainer with systemd
+	libcontainerSystemd libcontainerCgroupManagerType = "systemd"
+	// systemdSuffix is the cgroup name suffix for systemd
+	systemdSuffix string = ".slice"
 )
 
 // CgroupSubsystems holds information about the mounted cgroup subsystems
@@ -28,4 +43,137 @@ func ParseCgroupfsToCgroupName(name string) CgroupName {
 func (cgroupName CgroupName) ToCgroupfs() string {
 	return "/" + path.Join(cgroupName...)
 }
+
+// libcontainerAdapter provides a simplified interface to libcontainer based on libcontainer type.
+type libcontainerAdapter struct {
+	// cgroupManagerType defines how to interface with libcontainer
+	cgroupManagerType libcontainerCgroupManagerType
+}
+
+// newLibcontainerAdapter returns a configured libcontainerAdapter for specified manager.
+// it does any initialization required by that manager to function.
+func newLibcontainerAdapter(cgroupManagerType libcontainerCgroupManagerType) *libcontainerAdapter {
+	return &libcontainerAdapter{cgroupManagerType: cgroupManagerType}
+}
+
+// newManager returns an implementation of cgroups.Manager
+func (l *libcontainerAdapter) newManager(cgroups *libcontainerconfigs.Cgroup, paths map[string]string) (libcontainercgroups.Manager, error) {
+	switch l.cgroupManagerType {
+	case libcontainerCgroupfs:
+		return &cgroupfs.Manager{
+			Cgroups: cgroups,
+			Paths:   paths,
+		}, nil
+	//case libcontainerSystemd:
+	//	// this means you asked systemd to manage cgroups, but systemd was not on the host, so all you can do is panic...
+	//	if !cgroupsystemd.UseSystemd() {
+	//		panic("systemd cgroup manager not available")
+	//	}
+	//	return &cgroupsystemd.Manager{
+	//		Cgroups: cgroups,
+	//		Paths:   paths,
+	//	}, nil
+	}
+	return nil, fmt.Errorf("invalid cgroup manager configuration")
+}
+
+
+type cgroupManagerImpl struct {
+	// subsystems holds information about all the mounted cgroup subsystems on the node.
+	subsystems *CgroupSubsystems
+
+	// simplifies interaction with libcontainer and its cgroup managers
+	adapter *libcontainerAdapter
+}
+
+func NewCgroupManager(cs *CgroupSubsystems, cgroupDriver string) CgroupManager {
+	managerType := libcontainerCgroupfs
+	if cgroupDriver == string(libcontainerSystemd) {
+		managerType = libcontainerSystemd
+	}
+	return &cgroupManagerImpl{
+		subsystems: cs,
+		adapter:    newLibcontainerAdapter(managerType),
+	}
+}
+
+
+// Create creates the specified cgroup
+func (m *cgroupManagerImpl) Create(cgroupConfig *CgroupConfig) error {
+	resources := m.toResources(cgroupConfig.ResourceParameters)
+	libcontainerCgroupConfig := &libcontainerconfigs.Cgroup{
+		Resources: resources,
+	}
+	libcontainerCgroupConfig.Path = cgroupConfig.Name.ToCgroupfs()
+	// TODO pid limit
+	// get the manager with the specified cgroup configuration
+	manager, err := m.adapter.newManager(libcontainerCgroupConfig, nil)
+	if err != nil {
+		return err
+	}
+	// Apply(-1) is a hack to create the cgroup directories for each resource
+	// subsystem. The function [cgroups.Manager.apply()] applies cgroup
+	// configuration to the process with the specified pid.
+	// It creates cgroup files for each subsystems and writes the pid
+	// in the tasks file. We use the function to create all the required
+	// cgroup files but not attach any "real" pid to the cgroup.
+	if err := manager.Apply(-1); err != nil {
+		return err
+	}
+
+	// TODO update
+	return nil
+}
+
+func (m *cgroupManagerImpl) toResources(resourceConfig *ResourceConfig) *libcontainerconfigs.Resources {
+	resources := &libcontainerconfigs.Resources{}
+	if resourceConfig == nil {
+		return resources
+	}
+	if resourceConfig.Memory != nil {
+		resources.Memory = *resourceConfig.Memory
+	}
+	// TODO cpu quota huge page limit
+	return resources
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
