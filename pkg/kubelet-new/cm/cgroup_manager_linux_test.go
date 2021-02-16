@@ -15,9 +15,9 @@ func TestNewCgroupName(t *testing.T) {
 	cgroupManager := NewCgroupManager(subsystems, CgroupDriver)
 
 	config := &CgroupConfig{
-		Name: 	"nicktming",
+		Name: 	[]string{"nicktming"},
 		ResourceParameters: &ResourceConfig{
-			Memory: 	"50MB",
+			Memory: 	50 * 1024 * 1024,
 		},
 	}
 
