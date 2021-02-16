@@ -14,10 +14,12 @@ func TestNewCgroupName(t *testing.T) {
 	CgroupDriver := "cgroupfs"
 	cgroupManager := NewCgroupManager(subsystems, CgroupDriver)
 
+	size := int64(50 * 1024 * 1024)
+
 	config := &CgroupConfig{
 		Name: 	[]string{"nicktming"},
 		ResourceParameters: &ResourceConfig{
-			Memory: 	50 * 1024 * 1024,
+			Memory: 	&size,
 		},
 	}
 
