@@ -7,6 +7,7 @@ import (
 	"strings"
 	"path"
 	"fmt"
+	"k8s.io/klog"
 )
 
 // libcontainerCgroupManagerType defines how to interface with libcontainer
@@ -122,6 +123,10 @@ func (m *cgroupManagerImpl) Create(cgroupConfig *CgroupConfig) error {
 	}
 
 	// TODO update
+
+	if err := m.Update(cgroupConfig); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -136,6 +141,135 @@ func (m *cgroupManagerImpl) toResources(resourceConfig *ResourceConfig) *libcont
 	// TODO cpu quota huge page limit
 	return resources
 }
+
+func (m *cgroupManagerImpl) Name(name CgroupName) string {
+	// TODO systemd
+	return name.ToCgroupfs()
+}
+
+type subsystem interface {
+	// Name returns the name of the subsystem.
+	Name() string
+	// Set the cgroup represented by cgroup.
+	Set(path string, cgroup *libcontainerconfigs.Cgroup) error
+	// GetStats returns the statistics associated with the cgroup
+	GetStats(path string, stats *libcontainercgroups.Stats) error
+}
+
+// TODO
+
+func getSupportedSubsystems() map[subsystem]bool {
+	supportedSubsystems := map[subsystem]bool {
+		&cgroupfs.MemoryGroup{}: true,
+		&cgroupfs.CpuGroup{}:    true,
+		&cgroupfs.PidsGroup{}:   false,
+	}
+	// TODO huge
+	return supportedSubsystems
+}
+
+func setSupportedSubsystems(cgroupConfig *libcontainerconfigs.Cgroup) error {
+	for sys, required := range getSupportedSubsystems() {
+		if _, ok := cgroupConfig.Paths[sys.Name()]; !ok {
+			if required {
+				return fmt.Errorf("Failed to find subsystem mount for required subsystem: %v", sys.Name())
+			}
+			// the cgroup is not mounted, but its not required so continue...
+			klog.Infof("Unable to find subsystem mount for optional subsystem: %v", sys.Name())
+			continue
+		}
+		if err := sys.Set(cgroupConfig.Paths[sys.Name()], cgroupConfig); err != nil {
+			return fmt.Errorf("Failed to set config for supported subsystems : %v", err)
+		}
+	}
+	return nil
+}
+
+func (m *cgroupManagerImpl) buildCgroupPaths(name CgroupName) map[string]string {
+	cgroupFsAdapterName := m.Name(name)
+	cgroupPaths := make(map[string]string, len(m.subsystems.MountPoints))
+	for key, val := range m.subsystems.MountPoints {
+		cgroupPaths[key] = path.Join(val, cgroupFsAdapterName)
+	}
+	return cgroupPaths
+}
+
+// Update updates the cgroup with the specified Cgroup Configuration
+func (m *cgroupManagerImpl) Update(cgroupConfig *CgroupConfig) error {
+
+	// Extract the cgroup resource parameters
+	resourceConfig := cgroupConfig.ResourceParameters
+	resources := m.toResources(resourceConfig)
+
+	cgroupPaths := m.buildCgroupPaths(cgroupConfig.Name)
+
+	libcontainerCgroupConfig := &libcontainerconfigs.Cgroup {
+		Resources: 	resources,
+		Paths: 		cgroupPaths,
+	}
+	libcontainerCgroupConfig.Path = cgroupConfig.Name.ToCgroupfs()
+
+	// TODO pid limit
+
+	if err := setSupportedSubsystems(libcontainerCgroupConfig); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
