@@ -17,7 +17,7 @@ func TestNewCgroupName(t *testing.T) {
 	size := int64(50 * 1024 * 1024)
 
 	config := &CgroupConfig{
-		Name: 	[]string{"nicktming"},
+		Name: 	[]string{"nicktming", "test1"},
 		ResourceParameters: &ResourceConfig{
 			Memory: 	&size,
 		},
