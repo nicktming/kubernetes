@@ -12,12 +12,21 @@ type ActivePodsFunc func() []*v1.Pod
 
 // Manages the containers running on a machine.
 type ContainerManager interface {
-
 }
 
 type NodeConfig struct {
+	RuntimeCgroupsName    string
+	SystemCgroupsName     string
+	KubeletCgroupsName    string
+	ContainerRuntime      string
+	CgroupsPerQOS         bool
+	CgroupRoot            string
+	CgroupDriver          string
+	KubeletRootDir        string
+	ProtectKernelDefaults bool
 	NodeAllocatableConfig
 	QOSReserved                           map[v1.ResourceName]int64
+
 }
 
 type NodeAllocatableConfig struct {

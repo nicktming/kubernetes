@@ -1,6 +1,7 @@
 package cm
 
 import (
+	libcontainercgroups "github.com/opencontainers/runc/libcontainer/cgroups"
 	"strings"
 	"fmt"
 	"os"
@@ -57,4 +58,77 @@ func GetRuntimeContainer(containerRuntime, runtimeCgroups string) (string, error
 	}
 	return runtimeCgroups, nil
 }
+
+// GetCgroupSubsystems returns information about the mounted cgroup subsystems.
+func GetCgroupSubsystems() (*CgroupSubsystems, error) {
+	// get all cgroup mounts.
+	allCgroups, err := libcontainercgroups.GetCgroupMounts(true)
+	if err != nil {
+		return &CgroupSubsystems{}, err
+	}
+	if len(allCgroups) == 0 {
+		return &CgroupSubsystems{}, fmt.Errorf("failed to find cgroup mounts")
+	}
+	mountPoints := make(map[string]string, len(allCgroups))
+	for _, mount := range allCgroups {
+		for _, subsystem := range mount.Subsystems {
+			mountPoints[subsystem] = mount.Mountpoint
+		}
+	}
+	fmt.Printf("======>allCgroups: %v, MountPoints: %v\n", allCgroups, mountPoints)
+	return &CgroupSubsystems{
+		Mounts:      allCgroups,
+		MountPoints: mountPoints,
+	}, nil
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

@@ -3,9 +3,10 @@ package cm
 import (
 	"k8s.io/client-go/tools/record"
 	"github.com/opencontainers/runc/libcontainer/cgroups"
-	"fmt"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/util/procfs"
+	"k8s.io/api/core/v1"
+	"fmt"
 	"os"
 	"io/ioutil"
 	"strconv"
@@ -17,7 +18,10 @@ const (
 )
 
 type containerManagerImpl struct {
+	// Holds all the mounted cgroup subsystems
+	subsystems *CgroupSubsystems
 
+	nodeInfo   *v1.Node
 }
 
 // TODO(vmarmol): Add limits to the system containers.
@@ -32,7 +36,14 @@ func NewContainerManager(nodeConfig NodeConfig, failSwapOn bool, devicePluginEna
 	// and https://github.com/kubernetes/kubernetes/pull/78495
 	// for more info.
 
-	cm := &containerManagerImpl{}
+	subsystems, err := GetCgroupSubsystems()
+	if err != nil {
+		return nil, fmt.Errorf(("failed to get mounted cgroup subsystems: %v", err)
+	}
+	// TODO subsystems
+	cm := &containerManagerImpl{
+		subsystems: 		subsystems,
+	}
 
 	return cm, nil
 }

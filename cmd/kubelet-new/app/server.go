@@ -705,6 +705,17 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 
 		devicePluginEnabled := utilfeature.DefaultFeatureGate.Enabled(features.DevicePlugins)
 
+
+		// s.RuntimeCgroups: ,
+		// s.SystemCgroups: ,
+		// s.KubeletCgroups: ,
+		// s.ContainerRuntime: docker,
+		// s.CgroupsPerQOS: true,
+		// s.CgroupRoot: /,
+		// s.CgroupDriver: cgroupfs,
+		// s.RootDirectory: /var/lib/kubelet,
+		// s.ProtectKernelDefaults: false
+
 		klog.Infof("server.go s.RuntimeCgroups: %v, s.SystemCgroups: %v, s.KubeletCgroups: %v, s.ContainerRuntime: %v, " +
 			"s.CgroupsPerQOS: %v, s.CgroupRoot: %v, s.CgroupDriver: %v, s.RootDirectory: %v, " +
 			"s.ProtectKernelDefaults: %v", s.RuntimeCgroups, s.SystemCgroups, s.KubeletCgroups, s.ContainerRuntime, s.CgroupsPerQOS,
@@ -714,15 +725,15 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 			//kubeDeps.Mounter,
 			//kubeDeps.CAdvisorInterface,
 			cm.NodeConfig{
-				//RuntimeCgroupsName:    s.RuntimeCgroups,
-				//SystemCgroupsName:     s.SystemCgroups,
-				//KubeletCgroupsName:    s.KubeletCgroups,
-				//ContainerRuntime:      s.ContainerRuntime,
-				//CgroupsPerQOS:         s.CgroupsPerQOS,
-				//CgroupRoot:            s.CgroupRoot,
-				//CgroupDriver:          s.CgroupDriver,
-				//KubeletRootDir:        s.RootDirectory,
-				//ProtectKernelDefaults: s.ProtectKernelDefaults,
+				RuntimeCgroupsName:    s.RuntimeCgroups,
+				SystemCgroupsName:     s.SystemCgroups,
+				KubeletCgroupsName:    s.KubeletCgroups,
+				ContainerRuntime:      s.ContainerRuntime,
+				CgroupsPerQOS:         s.CgroupsPerQOS,
+				CgroupRoot:            s.CgroupRoot,
+				CgroupDriver:          s.CgroupDriver,
+				KubeletRootDir:        s.RootDirectory,
+				ProtectKernelDefaults: s.ProtectKernelDefaults,
 				NodeAllocatableConfig: cm.NodeAllocatableConfig{
 					KubeReservedCgroupName:   s.KubeReservedCgroup,
 					SystemReservedCgroupName: s.SystemReservedCgroup,
