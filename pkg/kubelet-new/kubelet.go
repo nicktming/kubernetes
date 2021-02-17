@@ -179,6 +179,13 @@ type Kubelet struct {
 
 	// Manager of non-Runtime containers.
 	containerManager cm.ContainerManager
+
+	// updateRuntimeMux is a lock on updating runtime, because this path is not thread-safe.
+	// This lock is used by Kubelet.updateRuntimeUp function and shouldn't be used anywhere else.
+	updateRuntimeMux sync.Mutex
+
+	// oneTimeInitializer is used to initialize modules that are dependent on the runtime to be up.
+	oneTimeInitializer sync.Once
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -261,7 +268,7 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 		go wait.Until(kl.syncNodeStatus, kl.nodeStatusUpdateFrequency, wait.NeverStop)
 	}
 	//
-	//go wait.Until(kl.updateRuntimeUp, 5*time.Second, wait.NeverStop)
+	go wait.Until(kl.updateRuntimeUp, 5*time.Second, wait.NeverStop)
 	//
 	kl.statusManager.Start()
 	kl.probeManager.Start()
@@ -271,6 +278,27 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	kl.pleg.Start()
 	time.Sleep(5 * time.Second)
 	kl.syncLoop(updates, kl)
+}
+
+// updateRuntimeUp calls the container runtime status callback, initializing
+// the runtime dependent modules when the container runtime first comes up,
+// and returns an error if the status check fails.  If the status check is OK,
+// update the container runtime uptime in the kubelet runtimeState.
+func (kl *Kubelet) updateRuntimeUp() {
+	kl.updateRuntimeMux.Lock()
+	defer kl.updateRuntimeMux.Unlock()
+
+	kl.oneTimeInitializer.Do(kl.initializeRuntimeDependentModules)
+}
+
+// initializeRuntimeDependentModules will initialize internal modules that require the container runtime to be up.
+func (kl *Kubelet) initializeRuntimeDependentModules() {
+	// containerManager must start after cAdvisor because it needs filesystem capacity information
+	// TODO node source ready
+	if err := kl.containerManager.Start(nil, kl.GetActivePods, true, kl.statusManager, kl.runtimeService); err != nil {
+		// Fail kubelet and rely on the babysitter to retry starting kubelet.
+		klog.Fatalf("Failed to start ContainerManager %v", err)
+	}
 }
 
 func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHandler) {

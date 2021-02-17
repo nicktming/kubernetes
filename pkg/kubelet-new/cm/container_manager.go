@@ -6,12 +6,19 @@ import (
 	"strings"
 	"strconv"
 	"fmt"
+	"k8s.io/kubernetes/pkg/kubelet-new/status"
+	internalapi "k8s.io/cri-api/pkg/apis"
+	"k8s.io/kubernetes/pkg/kubelet-new/config"
 )
 
 type ActivePodsFunc func() []*v1.Pod
 
 // Manages the containers running on a machine.
 type ContainerManager interface {
+	// Runs the container manager's housekeeping.
+	// - Ensures that the Docker daemon is in a container.
+	// - Creates the system container where all non-containerized processes run.
+	Start(*v1.Node, ActivePodsFunc, config.SourcesReady, status.PodStatusProvider, internalapi.RuntimeService) error
 }
 
 type NodeConfig struct {

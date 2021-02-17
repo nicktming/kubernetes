@@ -5,6 +5,13 @@ import (
 	"strings"
 	"fmt"
 	"os"
+	"path/filepath"
+	"bufio"
+	"strconv"
+)
+
+const (
+	MinShares     = 2
 )
 
 // NewCgroupName composes a new cgroup name.
@@ -82,6 +89,34 @@ func GetCgroupSubsystems() (*CgroupSubsystems, error) {
 	}, nil
 }
 
+// getCgroupProcs takes a cgroup directory name as an argument
+// reads through the cgroup's procs file and returns a list of tgid's.
+// It returns an empty list if a procs file doesn't exists
+func getCgroupProcs(dir string) ([]int, error) {
+	procsFile := filepath.Join(dir, "cgroup.procs")
+	f, err := os.Open(procsFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// The procsFile does not exist, So no pids attached to this directory
+			return []int{}, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	s := bufio.NewScanner(f)
+	out := []int{}
+	for s.Scan() {
+		if t := s.Text(); t != "" {
+			pid, err := strconv.Atoi(t)
+			if err != nil {
+				return nil, fmt.Errorf("unexpected line in %v; could not convert to pid: %v", procsFile, err)
+			}
+			out = append(out, pid)
+		}
+	}
+	return out, nil
+}
 
 
 

@@ -10,6 +10,10 @@ import (
 	"os"
 	"io/ioutil"
 	"strconv"
+	"encoding/json"
+	"k8s.io/kubernetes/pkg/kubelet-new/status"
+	internalapi "k8s.io/cri-api/pkg/apis"
+	"k8s.io/kubernetes/pkg/kubelet-new/config"
 )
 
 const (
@@ -22,6 +26,12 @@ type containerManagerImpl struct {
 	subsystems *CgroupSubsystems
 
 	nodeInfo   *v1.Node
+
+	NodeConfig
+
+	// Absolute cgroupfs path to a cgroup that Kubelet needs to place all pods under.
+	// This path include a top level container for enforcing Node Allocatable.
+	cgroupRoot CgroupName
 }
 
 // TODO(vmarmol): Add limits to the system containers.
@@ -35,16 +45,45 @@ func NewContainerManager(nodeConfig NodeConfig, failSwapOn bool, devicePluginEna
 	// See https://github.com/opencontainers/runc/pull/2065
 	// and https://github.com/kubernetes/kubernetes/pull/78495
 	// for more info.
-
 	subsystems, err := GetCgroupSubsystems()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mounted cgroup subsystems: %v", err)
 	}
 	// TODO failswapon
 
+	// TODO pid limit
+
+	// Turn CgroupRoot from a string (in cgroupfs path format) to internal CgroupName
+	cgroupRoot := ParseCgroupfsToCgroupName(nodeConfig.CgroupRoot)
+	cgroupManager := NewCgroupManager(subsystems, nodeConfig.CgroupDriver)
+
+	if nodeConfig.CgroupsPerQOS {
+		// this does default to / when enabled, but this tests against regressions.
+		if nodeConfig.CgroupRoot == "" {
+			return nil, fmt.Errorf("invalid configuration: cgroups-per-qos was specified and cgroup-root was not specified. To enable the QoS cgroup hierarchy you need to specify a valid cgroup-root")
+		}
+
+		// we need to check that the cgroup root actually exists for each subsystem
+		// of note, we always use the cgroupfs driver when performing this check since
+		// the input is provided in that format.
+		// this is important because we do not want any name conversion to occur.
+		if !cgroupManager.Exists(cgroupRoot) {
+			return nil, fmt.Errorf("invalid configuration: cgroup-root %q doesn't exist", cgroupRoot)
+		}
+		klog.Infof("container manager verified user specified cgroup-root exists: %v", cgroupRoot)
+		// Include the top level cgroup for enforcing node allocatable into cgroup-root.
+		// This way, all sub modules can avoid having to understand the concept of node allocatable.
+		cgroupRoot = NewCgroupName(cgroupRoot, defaultNodeAllocatableCgroupName)
+	}
+
+	pretty_nodeconfig, _ := json.MarshalIndent(nodeConfig, "", "\t")
+	klog.Infof("Creating Container Manager object based on Node Config: %v\n cgroupRoot: %v",
+		string(pretty_nodeconfig), cgroupRoot)
 
 	cm := &containerManagerImpl{
 		subsystems: 		subsystems,
+		NodeConfig:		nodeConfig,
+		cgroupRoot: 		cgroupRoot,
 	}
 
 	return cm, nil
@@ -151,3 +190,90 @@ func getContainerNameForProcess(name, pidFile string) (string, error) {
 	}
 	return cont, nil
 }
+
+func (cm *containerManagerImpl) setupNode(activePods ActivePodsFunc) error {
+	// TODO validateSystemRequirements
+	// TODO ProtectKernelDefaults
+
+	return nil
+}
+
+func (cm *containerManagerImpl) Start(node *v1.Node,
+	activePods ActivePodsFunc,
+	sourcesReady config.SourcesReady,
+	podStatusProvider status.PodStatusProvider,
+	runtimeService internalapi.RuntimeService) error {
+
+	// TODO Initialize CPU manager
+
+	cm.nodeInfo = node
+
+	// TODO LocalStorageCapacityIsolation
+	// TODO validateNodeAllocatable
+
+	// Setup the node
+	if err := cm.setupNode(activePods); err != nil {
+		return err
+	}
+
+	// Enforce Node Allocatable (if required)
+	if err := cm.enforceNodeAllocatableCgroups(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

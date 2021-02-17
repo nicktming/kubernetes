@@ -8,6 +8,9 @@ import (
 	"path"
 	"fmt"
 	"k8s.io/klog"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"path/filepath"
+	"os"
 )
 
 // libcontainerCgroupManagerType defines how to interface with libcontainer
@@ -233,7 +236,136 @@ func (m *cgroupManagerImpl) Destroy(cgroupConfig *CgroupConfig) error {
 	return nil
 }
 
+func (m *cgroupManagerImpl) Exists(name CgroupName) bool {
+	cgroupPaths := m.buildCgroupPaths(name)
 
+	whitelistControllers := sets.NewString("cpu", "cpuacct", "cpuset", "memory", "systemd")
+	//if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.SupportPodPidsLimit) || utilfeature.DefaultFeatureGate.Enabled(kubefeatures.SupportNodePidsLimit) {
+	//	whitelistControllers.Insert("pids")
+	//}
+	var missingPaths []string
+	for controller, path := range cgroupPaths {
+		if !whitelistControllers.Has(controller) {
+			continue
+		}
+		if !libcontainercgroups.PathExists(path) {
+			missingPaths = append(missingPaths, path)
+		}
+	}
+	if len(missingPaths) > 0 {
+		klog.V(4).Infof("The Cgroup %v has some missing paths: %v", name, missingPaths)
+		return false
+	}
+	return true
+}
+
+// CgroupName converts the literal cgroupfs name on the host to an internal identifier.
+func (m *cgroupManagerImpl) CgroupName(name string) CgroupName {
+	//if m.adapter.cgroupManagerType == libcontainerSystemd {
+	//	return ParseSystemdToCgroupName(name)
+	//}
+	return ParseCgroupfsToCgroupName(name)
+}
+
+
+// Scans through all subsystems to find pids associated with specified cgroup.
+func (m *cgroupManagerImpl) Pids(name CgroupName) []int {
+	// we need the driver specific name
+	cgroupFsName := m.Name(name)
+
+	// Get a list of processes that we need to kill
+	pidsToKill := sets.NewInt()
+	var pids []int
+	for _, val := range m.subsystems.MountPoints {
+		dir := path.Join(val, cgroupFsName)
+		_, err := os.Stat(dir)
+		if os.IsNotExist(err) {
+			// The subsystem pod cgroup is already deleted
+			// do nothing, continue
+			continue
+		}
+		// Get a list of pids that are still charged to the pod's cgroup
+		pids, err = getCgroupProcs(dir)
+		if err != nil {
+			continue
+		}
+		pidsToKill.Insert(pids...)
+
+		// WalkFunc which is called for each file and directory in the pod cgroup dir
+		visitor := func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				klog.V(4).Infof("cgroup manager encountered error scanning cgroup path %q: %v", path, err)
+				return filepath.SkipDir
+			}
+			if !info.IsDir() {
+				return nil
+			}
+			pids, err = getCgroupProcs(path)
+			if err != nil {
+				klog.V(4).Infof("cgroup manager encountered error getting procs for cgroup path %q: %v", path, err)
+				return filepath.SkipDir
+			}
+			pidsToKill.Insert(pids...)
+			return nil
+		}
+		// Walk through the pod cgroup directory to check if
+		// container cgroups haven't been GCed yet. Get attached processes to
+		// all such unwanted containers under the pod cgroup
+		if err = filepath.Walk(dir, visitor); err != nil {
+			klog.V(4).Infof("cgroup manager encountered error scanning pids for directory: %q: %v", dir, err)
+		}
+	}
+	return pidsToKill.List()
+}
+
+
+func (m *cgroupManagerImpl) ReduceCPULimits(cgroupName CgroupName) error {
+	minimumCPUShares := uint64(MinShares)
+	cgroupConfig := &CgroupConfig {
+		Name: cgroupName,
+		ResourceParameters: &ResourceConfig{
+			CpuShares: &minimumCPUShares,
+		},
+	}
+	return m.Update(cgroupConfig)
+}
+
+
+func getStatsSupportedSubsystems(cgroupPaths map[string]string) (*libcontainercgroups.Stats, error) {
+	stats := libcontainercgroups.NewStats()
+	for sys, required := range getSupportedSubsystems() {
+		if _, ok := cgroupPaths[sys.Name()]; !ok {
+			if required {
+				return nil, fmt.Errorf("Failed to find subsystem mount for required subsystem: %v", sys.Name())
+			}
+			// the cgroup is not mounted, but its not required so continue...
+			klog.V(6).Infof("Unable to find subsystem mount for optional subsystem: %v", sys.Name())
+			continue
+		}
+		if err := sys.GetStats(cgroupPaths[sys.Name()], stats); err != nil {
+			return nil, fmt.Errorf("Failed to get stats for supported subsystems : %v", err)
+		}
+	}
+	return stats, nil
+}
+
+func toResourceStats(stats *libcontainercgroups.Stats) *ResourceStats {
+	return &ResourceStats{
+		MemoryStats: &MemoryStats{
+			Usage: int64(stats.MemoryStats.Usage.Usage),
+		},
+	}
+}
+
+// Get sets the ResourceParameters of the specified cgroup as read from the cgroup fs
+func (m *cgroupManagerImpl) GetResourceStats(name CgroupName) (*ResourceStats, error) {
+	cgroupPaths := m.buildCgroupPaths(name)
+	stats, err := getStatsSupportedSubsystems(cgroupPaths)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stats supported cgroup subsystems for cgroup %v: %v", name, err)
+	}
+	return toResourceStats(stats), nil
+}
 
 
 

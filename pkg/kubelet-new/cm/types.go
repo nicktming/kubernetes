@@ -46,5 +46,25 @@ type CgroupManager interface {
 	Destroy(*CgroupConfig) error
 	// Update cgroup configuration.
 	Update(*CgroupConfig) error
+	// Exists checks if the cgroup already exists
+	Exists(name CgroupName) bool
+
+	// Name returns the literal cgroupfs name on the host after any driver specific conversions.
+	// We would expect systemd implementation to make appropriate name conversion.
+	// For example, if we pass {"foo", "bar"}
+	// then systemd should convert the name to something like
+	// foo.slice/foo-bar.slice
+	Name(name CgroupName) string
+
+	// CgroupName converts the literal cgroupfs name on the host to an internal identifier.
+	CgroupName(name string) CgroupName
+
+	// Pids scans through all subsystems to find pids associated with specified cgroup.
+	Pids(name CgroupName) []int
+	// ReduceCPULimits reduces the CPU CFS values to the minimum amount of shares.
+	ReduceCPULimits(cgroupName CgroupName) error
+
+	// GetResourceStats returns statistics of the specified cgroup as read from the cgroup fs.
+	GetResourceStats(name CgroupName) (*ResourceStats, error)
 }
 

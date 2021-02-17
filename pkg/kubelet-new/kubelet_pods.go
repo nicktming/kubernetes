@@ -208,6 +208,19 @@ func (kl *Kubelet) HandlePodCleanups() error {
 //	return kl.podIsTerminated(pod)
 //}
 
+// podIsTerminated returns true if pod is in the terminated state ("Failed" or "Succeeded").
+func (kl *Kubelet) podIsTerminated(pod *v1.Pod) bool {
+	// Check the cached pod status which was set after the last sync.
+	status, ok := kl.statusManager.GetPodStatus(pod.UID)
+	if !ok {
+		// If there is no cached status, use the status from the
+		// apiserver. This is useful if kubelet has recently been
+		// restarted.
+		status = pod.Status
+	}
+	return status.Phase == v1.PodFailed || status.Phase == v1.PodSucceeded || (pod.DeletionTimestamp != nil && notRunning(status.ContainerStatuses))
+}
+
 func (kl *Kubelet) IsPodDeleted(uid types.UID) bool {
 	pod, podFound := kl.podManager.GetPodByUID(uid)
 	if !podFound {
@@ -221,6 +234,23 @@ func (kl *Kubelet) IsPodDeleted(uid types.UID) bool {
 	return pod.DeletionTimestamp != nil && notRunning(status.ContainerStatuses)
 }
 
+func (kl *Kubelet) filterOutTerminatedPods(pods []*v1.Pod) []*v1.Pod {
+	var filteredPods []*v1.Pod
+	for _, p := range pods {
+		if kl.podIsTerminated(p) {
+			continue
+		}
+		filteredPods = append(filteredPods, p)
+	}
+	return filteredPods
+}
+
+// GetActivePods returns non-terminal pods
+func (kl *Kubelet) GetActivePods() []*v1.Pod {
+	allPods := kl.podManager.GetPods()
+	activePods := kl.filterOutTerminatedPods(allPods)
+	return activePods
+}
 
 
 
