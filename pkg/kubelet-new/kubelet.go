@@ -765,7 +765,12 @@ func (kl *Kubelet) HandlePodReconcile(pods []*v1.Pod) {
 	start := kl.clock.Now()
 	for _, pod := range pods {
 		kl.podManager.UpdatePod(pod)
-		kl.dispatchWork(pod, kubetypes.SyncPodUpdate, nil, start)
+		// Reconcile Pod "Ready" condition if necessary. Trigger sync pod for reconciliation.
+		if status.NeedToReconcilePodReadiness(pod) {
+			//mirrorPod, _ := kl.podManager.GetMirrorPodByPod(pod)
+			//kl.dispatchWork(pod, kubetypes.SyncPodSync, mirrorPod, start)
+			kl.dispatchWork(pod, kubetypes.SyncPodSync, nil, start)
+		}
 	}
 }
 

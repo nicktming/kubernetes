@@ -465,6 +465,21 @@ func findContainerStatus(status *v1.PodStatus, containerID string) (containerSta
 
 }
 
+// NeedToReconcilePodReadiness returns if the pod "Ready" condition need to be reconcile
+func NeedToReconcilePodReadiness(pod *v1.Pod) bool {
+	if len(pod.Spec.ReadinessGates) == 0 {
+		return false
+	}
+	podReadyCondition := GeneratePodReadyCondition(&pod.Spec, pod.Status.Conditions, pod.Status.ContainerStatuses, pod.Status.Phase)
+	i, curCondition := podutil.GetPodConditionFromList(pod.Status.Conditions, v1.PodReady)
+	// Only reconcile if "Ready" condition is present and Status or Message is not expected
+	if i >= 0 && (curCondition.Status != podReadyCondition.Status || curCondition.Message != podReadyCondition.Message) {
+		return true
+	}
+	return false
+}
+
+
 
 
 
