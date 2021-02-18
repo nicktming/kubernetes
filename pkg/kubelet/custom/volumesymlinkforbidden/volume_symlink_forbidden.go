@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"k8s.io/klog"
 	"strings"
-	"k8s.io/kubernetes/pkg/kubelet-new/lifecycle"
+	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 )
 
 type volumeAdmitHandler struct {

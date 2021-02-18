@@ -883,6 +883,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	}
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeSymlinkForbidden) {
+		klog.Infof("++++++++++++++++++enable VolumeSymlinkForbidden++++++++++++++++++++++++++++")
 		volumeAdmitHandler, _ := volumesymlinkforbidden.NewVolumeAdmitHandler()
 		klet.admitHandlers.AddPodAdmitHandler(volumeAdmitHandler)
 	}
