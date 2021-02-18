@@ -67,10 +67,10 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 			}
 			umounter, err := w.nfsPlugin.NewUnmounter(pod.Name, pod.UID)
 			if err != nil {
-				return []string{err}
+				return []string{err.Error()}
 			}
 			if err := umounter.TearDownAt(dir); err != nil {
-				return []string{err}
+				return []string{err.Error()}
 			}
 		} else if vol.VolumeSource.HostPath != nil {
 			err, symlink := isSymlink(vol.HostPath.Path)
