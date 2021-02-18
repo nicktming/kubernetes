@@ -52,11 +52,11 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 		if vol.VolumeSource.NFS != nil {
 			mounter, err := w.nfsPlugin.NewMounter(spec, pod, volume.VolumeOptions{})
 			if err != nil {
-				return []error{err.Error()}
+				return []string{err.Error()}
 			}
 			dir := "/tmp/0218"
 			if err := mounter.SetUpAt(dir, volume.MounterArgs{}); err != nil {
-				return []error{err.Error()}
+				return []string{err.Error()}
 			}
 			err, symlink := isSymlink(vol.HostPath.Path)
 			if err != nil || symlink {
@@ -67,10 +67,10 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 			}
 			umounter, err := w.nfsPlugin.NewUnmounter(pod.Name, pod.UID)
 			if err != nil {
-				return []error{err}
+				return []string{err}
 			}
 			if err := umounter.TearDownAt(dir); err != nil {
-				return []error{err}
+				return []string{err}
 			}
 		} else if vol.VolumeSource.HostPath != nil {
 			err, symlink := isSymlink(vol.HostPath.Path)
