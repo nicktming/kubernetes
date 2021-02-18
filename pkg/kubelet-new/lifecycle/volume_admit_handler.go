@@ -28,7 +28,7 @@ func (w *volumeAdmitHandler) Admit(attrs *PodAdmitAttributes) PodAdmitResult {
 			err, symlink := volumeSymlink(vol.HostPath.Path)
 			if err != nil || symlink {
 				if err != nil {
-					err = fmt.Sprintf("%v is a symlink, it is not allowed.", vol.HostPath.Path)
+					err = fmt.Errorf("%v is a symlink, it is not allowed.", vol.HostPath.Path)
 				}
 				errList = append(errList, err.Error())
 			}
