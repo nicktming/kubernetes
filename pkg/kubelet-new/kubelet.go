@@ -702,6 +702,7 @@ func (kl *Kubelet) HandlePodAdditions(pods []*v1.Pod) {
 
 			// Check if we can admit the pod; if not, reject it.
 			if ok, reason, message := kl.canAdmitPod(nil, pod); !ok {
+				klog.Infof("+++++++++++++++++++++kueblet rejectPod %v/%v ++++++++++++++++++++++++++", pod.Namespace, pod.Name)
 				kl.rejectPod(pod, reason, message)
 				continue
 			}
@@ -725,9 +726,12 @@ func (kl *Kubelet) canAdmitPod(pods []*v1.Pod, pod *v1.Pod) (bool, string, strin
 	attrs := &lifecycle.PodAdmitAttributes{Pod: pod, OtherPods: pods}
 	for _, podAdmitHandler := range kl.admitHandlers {
 		if result := podAdmitHandler.Admit(attrs); !result.Admit {
+			klog.Infof("+++++++++++++++++++++canAdmitPod return false++++++++++++++++++++++++++")
 			return false, result.Reason, result.Message
 		}
 	}
+
+	klog.Infof("+++++++++++++++++++++canAdmitPod return true++++++++++++++++++++++++++")
 
 	return true, "", ""
 }
