@@ -801,7 +801,6 @@ func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mir
 
 func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
-
 	pod := o.pod
 	podStatus := o.podStatus
 	klog.Infof("++++++++++++++++++kubelet syncPod pod(%v/%v)\n", pod.Namespace, pod.Name)
