@@ -119,6 +119,7 @@ import (
 	utilexec "k8s.io/utils/exec"
 	"k8s.io/utils/integer"
 	//"encoding/json"
+	"k8s.io/kubernetes/pkg/kubelet/custom/volumesymlinkforbidden"
 )
 
 const (
@@ -879,6 +880,11 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.NodeLease) {
 		klet.nodeLeaseController = nodelease.NewController(klet.clock, klet.heartbeatClient, string(klet.nodeName), kubeCfg.NodeLeaseDurationSeconds, kubeCfg.NodeStatusUpdateFrequency.Duration, klet.onRepeatedHeartbeatFailure)
+	}
+
+	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeSymlinkForbidden) {
+		volumeAdmitHandler, _ := volumesymlinkforbidden.NewVolumeAdmitHandler()
+		klet.admitHandlers.AddPodAdmitHandler(volumeAdmitHandler)
 	}
 
 	klet.softAdmitHandlers.AddPodAdmitHandler(lifecycle.NewProcMountAdmitHandler(klet.containerRuntime))
