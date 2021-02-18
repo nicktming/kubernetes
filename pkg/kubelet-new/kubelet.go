@@ -40,6 +40,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/util/queue"
 	"k8s.io/kubernetes/pkg/kubelet-new/prober"
 	"k8s.io/kubernetes/pkg/kubelet-new/cm"
+	"k8s.io/kubernetes/pkg/kubelet-new/lifecycle"
 )
 
 const (
@@ -186,6 +187,10 @@ type Kubelet struct {
 
 	// oneTimeInitializer is used to initialize modules that are dependent on the runtime to be up.
 	oneTimeInitializer sync.Once
+
+	// TODO: think about moving this to be centralized in PodWorkers in follow-on.
+	// the list of handlers to call during pod admission.
+	admitHandlers lifecycle.PodAdmitHandlers
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -616,6 +621,12 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	}
 	klet.containerGC = containerGC
 
+	{
+		volumeAdmitHandler, _ := lifecycle.NewRuntimeAdmitHandler()
+		klet.admitHandlers.AddPodAdmitHandler(volumeAdmitHandler)
+	}
+
+
 	klet.workQueue = queue.NewBasicWorkQueue(klet.clock)
 	klet.podWorkers = newPodWorkers(klet.syncPod, kubeDeps.Recorder, klet.workQueue, 5 * time.Second, backOffPeriod, klet.podCache)
 	// Generating the status funcs should be the last thing we do,
@@ -680,9 +691,55 @@ func (kl *Kubelet) HandlePodAdditions(pods []*v1.Pod) {
 	for _, pod := range pods {
 		// TODO podManager
 		kl.podManager.AddPod(pod)
-		go kl.dispatchWork(pod, kubetypes.SyncPodCreate, nil, start)
+
+		if !kl.podIsTerminated(pod) {
+			// Only go through the admission process if the pod is not
+			// terminated.
+
+			// We failed pods that we rejected, so activePods include all admitted
+			// pods that are alive.
+			//activePods := kl.filterOutTerminatedPods(existingPods)
+
+			// Check if we can admit the pod; if not, reject it.
+			if ok, reason, message := kl.canAdmitPod(nil, pod); !ok {
+				kl.rejectPod(pod, reason, message)
+				continue
+			}
+		}
+
+		kl.dispatchWork(pod, kubetypes.SyncPodCreate, nil, start)
 		kl.probeManager.AddPod(pod)
 	}
+}
+
+// canAdmitPod determines if a pod can be admitted, and gives a reason if it
+// cannot. "pod" is new pod, while "pods" are all admitted pods
+// The function returns a boolean value indicating whether the pod
+// can be admitted, a brief single-word reason and a message explaining why
+// the pod cannot be admitted.
+func (kl *Kubelet) canAdmitPod(pods []*v1.Pod, pod *v1.Pod) (bool, string, string) {
+	// the kubelet will invoke each pod admit handler in sequence
+	// if any handler rejects, the pod is rejected.
+	// TODO: move out of disk check into a pod admitter
+	// TODO: out of resource eviction should have a pod admitter call-out
+	attrs := &lifecycle.PodAdmitAttributes{Pod: pod, OtherPods: pods}
+	for _, podAdmitHandler := range kl.admitHandlers {
+		if result := podAdmitHandler.Admit(attrs); !result.Admit {
+			return false, result.Reason, result.Message
+		}
+	}
+
+	return true, "", ""
+}
+
+// rejectPod records an event about the pod with the given reason and message,
+// and updates the pod to the failed phase in the status manage.
+func (kl *Kubelet) rejectPod(pod *v1.Pod, reason, message string) {
+	kl.recorder.Eventf(pod, v1.EventTypeWarning, reason, message)
+	kl.statusManager.SetPodStatus(pod, v1.PodStatus{
+		Phase:   v1.PodFailed,
+		Reason:  reason,
+		Message: "Pod " + message})
 }
 
 func (kl *Kubelet) HandlePodSyncs(pods []*v1.Pod) {
