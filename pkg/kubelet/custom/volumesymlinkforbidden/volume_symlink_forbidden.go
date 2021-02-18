@@ -43,20 +43,20 @@ func (w *volumeAdmitHandler) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycl
 	}
 }
 
-func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []error {
+func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 	errList := make([]string, 0)
 	for _, vol := range pod.Spec.Volumes {
-		spec := volume.Spec{
+		spec := &volume.Spec{
 			Volume: &vol,
 		}
 		if vol.VolumeSource.NFS != nil {
-			mounter, err := w.nfsPlugin.NewMounter(spec, pod, nil)
+			mounter, err := w.nfsPlugin.NewMounter(spec, pod, volume.VolumeOptions{})
 			if err != nil {
-				return []error{err}
+				return []error{err.Error()}
 			}
 			dir := "/tmp/0218"
 			if err := mounter.SetUpAt(dir, volume.MounterArgs{}); err != nil {
-				return []error{err}
+				return []error{err.Error()}
 			}
 			err, symlink := isSymlink(vol.HostPath.Path)
 			if err != nil || symlink {
