@@ -83,7 +83,7 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 			err, symlink := isSymlink(dir)
 			if err != nil || symlink {
 				if err == nil {
-					err = fmt.Errorf("%v is a symlink which is not allowed.", vol.HostPath.Path)
+					err = fmt.Errorf("[nfs] %v is a symlink which is not allowed.", source)
 				}
 				errList = append(errList, err.Error())
 			}
