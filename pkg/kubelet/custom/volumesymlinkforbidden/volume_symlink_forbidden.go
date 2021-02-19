@@ -9,6 +9,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/api/core/v1"
+	"io/ioutil"
 )
 
 type volumeAdmitHandler struct {
@@ -69,9 +70,12 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 	for _, vol := range pod.Spec.Volumes {
 		if vol.VolumeSource.NFS != nil {
 			source := fmt.Sprintf("%s:%s", vol.VolumeSource.NFS.Server, vol.VolumeSource.NFS.Path)
-			dir := "/tmp/0218"
+			dir, err := ioutil.TempDir("/tmp", "nfs")
+			if err != nil {
+				return []string{err.Error()}
+			}
 			mountOptions := []string{}
-			err := w.mounter.Mount(source, dir, "nfs", mountOptions)
+			err = w.mounter.Mount(source, dir, "nfs", mountOptions)
 			if err != nil {
 				w.cleanupNfs(dir)
 				return []string{err.Error()}
