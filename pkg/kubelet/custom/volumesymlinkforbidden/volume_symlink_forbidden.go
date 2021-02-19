@@ -74,7 +74,7 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 			err := w.mounter.Mount(source, dir, "nfs", mountOptions)
 			if err != nil {
 				w.cleanupNfs(dir)
-				return err
+				return []string{err.Error()}
 			}
 			err, symlink := isSymlink(dir)
 			if err != nil || symlink {
