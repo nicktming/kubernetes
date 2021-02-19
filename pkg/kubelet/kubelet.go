@@ -118,6 +118,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/subpath"
 	utilexec "k8s.io/utils/exec"
 	"k8s.io/utils/integer"
+	"k8s.io/kubernetes/pkg/kubelet/custom/volumesymlinkforbidden"
 )
 
 const (
@@ -873,6 +874,12 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	}
 
 	klet.softAdmitHandlers.AddPodAdmitHandler(lifecycle.NewProcMountAdmitHandler(klet.containerRuntime))
+
+	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeSymlinkForbidden) {
+		klog.Infof("++++++++++++++++++enable VolumeSymlinkForbidden++++++++++++++++++++++++++++")
+		volumeAdmitHandler, _ := volumesymlinkforbidden.NewVolumeAdmitHandler(klet.mounter)
+		klet.admitHandlers.AddPodAdmitHandler(volumeAdmitHandler)
+	}
 
 	// Finally, put the most recent version of the config on the Kubelet, so
 	// people can see how it was configured.
