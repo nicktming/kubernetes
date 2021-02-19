@@ -9,25 +9,20 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/api/core/v1"
-	"k8s.io/kubernetes/pkg/volume"
-	"k8s.io/kubernetes/pkg/volume/nfs"
 )
 
 type volumeAdmitHandler struct {
 	result lifecycle.PodAdmitResult
 	mounter mount.Interface
-	nfsPlugin volume.VolumePlugin
 }
 
 var _ lifecycle.PodAdmitHandler = &volumeAdmitHandler{}
 
 // NewRuntimeAdmitHandler returns a sysctlRuntimeAdmitHandler which checks whether
 // the given runtime support sysctls.
-func NewVolumeAdmitHandler() (*volumeAdmitHandler, error) {
-	plugins := nfs.ProbeVolumePlugins(volume.VolumeConfig{})
-
+func NewVolumeAdmitHandler(mounter mount.Interface) (*volumeAdmitHandler, error) {
 	return &volumeAdmitHandler{
-		nfsPlugin:  plugins[0],
+		mounter: 		mounter,
 	}, nil
 }
 
@@ -43,35 +38,52 @@ func (w *volumeAdmitHandler) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycl
 	}
 }
 
+func (w *volumeAdmitHandler) cleanupNfs(dir string) error {
+	notMnt, mntErr := mount.IsNotMountPoint(w.mounter, dir)
+	if mntErr != nil {
+		klog.Errorf("IsNotMountPoint check failed: %v", mntErr)
+		return mntErr
+	}
+	if !notMnt {
+		if mntErr = w.mounter.Unmount(dir); mntErr != nil {
+			klog.Errorf("Failed to unmount: %v", mntErr)
+			return mntErr
+		}
+		notMnt, mntErr := mount.IsNotMountPoint(w.mounter, dir)
+		if mntErr != nil {
+			klog.Errorf("IsNotMountPoint check failed: %v", mntErr)
+			return mntErr
+		}
+		if !notMnt {
+			// This is very odd, we don't expect it.  We'll try again next sync loop.
+			klog.Errorf("%s is still mounted, despite call to unmount().  Will try again next sync loop.", dir)
+			return mntErr
+		}
+	}
+	os.Remove(dir)
+	return nil
+}
+
 func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 	errList := make([]string, 0)
 	for _, vol := range pod.Spec.Volumes {
-		spec := &volume.Spec{
-			Volume: &vol,
-		}
 		if vol.VolumeSource.NFS != nil {
-			mounter, err := w.nfsPlugin.NewMounter(spec, pod, volume.VolumeOptions{})
-			if err != nil {
-				return []string{err.Error()}
-			}
+			source := fmt.Sprintf("%s:%s", vol.VolumeSource.NFS.Server, vol.VolumeSource.NFS.Path)
 			dir := "/tmp/0218"
-			if err := mounter.SetUpAt(dir, volume.MounterArgs{}); err != nil {
-				return []string{err.Error()}
+			mountOptions := []string{}
+			err := w.mounter.Mount(source, dir, "nfs", mountOptions)
+			if err != nil {
+				w.cleanupNfs(dir)
+				return err
 			}
-			err, symlink := isSymlink(vol.HostPath.Path)
+			err, symlink := isSymlink(dir)
 			if err != nil || symlink {
 				if err == nil {
 					err = fmt.Errorf("%v is a symlink which is not allowed.", vol.HostPath.Path)
 				}
 				errList = append(errList, err.Error())
 			}
-			umounter, err := w.nfsPlugin.NewUnmounter(pod.Name, pod.UID)
-			if err != nil {
-				return []string{err.Error()}
-			}
-			if err := umounter.TearDownAt(dir); err != nil {
-				return []string{err.Error()}
-			}
+			w.cleanupNfs(dir)
 		} else if vol.VolumeSource.HostPath != nil {
 			err, symlink := isSymlink(vol.HostPath.Path)
 			if err != nil || symlink {
