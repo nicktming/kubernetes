@@ -10,7 +10,7 @@ import (
 	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/api/core/v1"
 	"io/ioutil"
-	"k8s.io/utils/exec"
+	"os/exec"
 )
 
 type volumeAdmitHandler struct {
@@ -70,37 +70,46 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 	errList := make([]string, 0)
 	for _, vol := range pod.Spec.Volumes {
 		if vol.VolumeSource.NFS != nil {
-			exeutor := exec.New()
-			cmd := exeutor.Command(fmt.Sprintf("showmount -e %v | grep -i '%v' | awk '{print $1}'", vol.VolumeSource.NFS.Server, vol.VolumeSource.NFS.Path))
-			serverpath, err := cmd.CombinedOutput()
+			cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("showmount -e %s | awk '{print $1}'", "49.232.118.181"))
+			serverpaths, err := cmd.CombinedOutput()
 			if err != nil {
 				return []string{err.Error()}
 			}
-			if !strings.Contains(vol.VolumeSource.NFS.Path, string(serverpath)) {
-				return []string{fmt.Sprintf("%v is not a subpath of %v at nfs server %v", vol.VolumeSource.NFS.Path, serverpath, vol.VolumeSource.NFS.Server)}
-			}
+			split := strings.Split(string(serverpaths), "\n")
+			
+			found := false 
+			
+			for _, serverpath := range split {
+				if serverpath != "" && strings.Contains(vol.VolumeSource.NFS.Path, serverpath) {
+					found = true 
+					source := fmt.Sprintf("%s:%s", vol.VolumeSource.NFS.Server, serverpath)
 
-			source := fmt.Sprintf("%s:%s", vol.VolumeSource.NFS.Server, string(serverpath))
-
-			dir, err := ioutil.TempDir("/tmp", "nfs")
-			if err != nil {
-				return []string{err.Error()}
-			}
-			mountOptions := []string{}
-			err = w.mounter.Mount(source, dir, "nfs", mountOptions)
-			if err != nil {
-				w.cleanupNfs(dir)
-				return []string{err.Error()}
-			}
-			checkdir := strings.Replace(vol.VolumeSource.NFS.Path, string(serverpath), dir, 1)
-			err, symlink := isSymlink(checkdir)
-			if err != nil || symlink {
-				if err == nil {
-					err = fmt.Errorf("[nfs] %v is a symlink which is not allowed.", source)
+					dir, err := ioutil.TempDir("/tmp", "nfs")
+					if err != nil {
+						return []string{err.Error()}
+					}
+					mountOptions := []string{}
+					err = w.mounter.Mount(source, dir, "nfs", mountOptions)
+					if err != nil {
+						w.cleanupNfs(dir)
+						return []string{err.Error()}
+					}
+					checkdir := strings.Replace(vol.VolumeSource.NFS.Path, serverpath, dir, 1)
+					err, symlink := isSymlink(checkdir)
+					if err != nil || symlink {
+						if err == nil {
+							err = fmt.Errorf("[nfs] %v:%v is a symlink which is not allowed.", vol.VolumeSource.NFS.Server, vol.VolumeSource.NFS.Path)
+						}
+						errList = append(errList, err.Error())
+					}
+					w.cleanupNfs(dir)
 				}
-				errList = append(errList, err.Error())
+				
 			}
-			w.cleanupNfs(dir)
+			if !found {
+				return []string{fmt.Sprintf("not found match path for %v at nfs server %v", vol.VolumeSource.NFS.Path, vol.VolumeSource.NFS.Server)}
+			}
+			
 		} else if vol.VolumeSource.HostPath != nil {
 			err, symlink := isSymlink(vol.HostPath.Path)
 			if err != nil || symlink {
