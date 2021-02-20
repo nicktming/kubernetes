@@ -3,6 +3,7 @@ package cm
 import (
 	"k8s.io/client-go/tools/record"
 	"github.com/opencontainers/runc/libcontainer/cgroups"
+	"github.com/opencontainers/runc/libcontainer/cgroups/fs"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/util/procfs"
 	"k8s.io/api/core/v1"
@@ -14,6 +15,9 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-new/status"
 	internalapi "k8s.io/cri-api/pkg/apis"
 	"k8s.io/kubernetes/pkg/kubelet-new/config"
+	"sync"
+	"k8s.io/kubernetes/pkg/kubelet-new/qos"
+	"k8s.io/kubernetes/pkg/util/oom"
 )
 
 const (
@@ -22,6 +26,9 @@ const (
 )
 
 type containerManagerImpl struct {
+
+	sync.RWMutex
+
 	// Holds all the mounted cgroup subsystems
 	subsystems *CgroupSubsystems
 
@@ -32,6 +39,15 @@ type containerManagerImpl struct {
 	// Absolute cgroupfs path to a cgroup that Kubelet needs to place all pods under.
 	// This path include a top level container for enforcing Node Allocatable.
 	cgroupRoot CgroupName
+
+	// Interface for cgroup management
+	cgroupManager CgroupManager
+
+	// Event recorder interface.
+	recorder record.EventRecorder
+
+	// Tasks that are run periodically
+	periodicTasks []func()
 }
 
 // TODO(vmarmol): Add limits to the system containers.
@@ -195,7 +211,103 @@ func (cm *containerManagerImpl) setupNode(activePods ActivePodsFunc) error {
 	// TODO validateSystemRequirements
 	// TODO ProtectKernelDefaults
 
+
+	// Enforce Node Allocatable (if required)
+	if err := cm.enforceNodeAllocatableCgroups(); err != nil {
+		return err
+	}
+
+	if cm.ContainerRuntime == "docker" {
+		// With the docker-CRI integration, dockershim will manage the cgroups
+		// and oom score for the docker processes.
+		// In the future, NodeSpec should mandate the cgroup that the
+		// runtime processes need to be in. For now, we still check the
+		// cgroup for docker periodically, so that kubelet can recognize
+		// the cgroup for docker and serve stats for the runtime.
+		// TODO(#27097): Fix this after NodeSpec is clearly defined.
+
+		cm.periodicTasks = append(cm.periodicTasks, func() {
+			klog.Infof("[ContainerManager]: Adding periodic tasks for docker CRI integration")
+			cont, err := getContainerNameForProcess(dockerProcessName, dockerPidFile)
+			if err != nil {
+				klog.Error(err)
+				return
+			}
+			klog.Infof("[ContainerManager]: Discovered runtime cgroups name: %s", cont)
+			cm.Lock()
+			defer cm.Unlock()
+			cm.RuntimeCgroupsName = cont
+		})
+	}
+
+
+	cm.periodicTasks = append(cm.periodicTasks, func() {
+		if err := ensureProcessInContainerWithOOMScore(os.Getpid(), qos.KubeletOOMScoreAdj, nil); err != nil {
+			klog.Error(err)
+			return
+		}
+		cont, err := getContainer(os.Getpid())
+		if err != nil {
+			klog.Errorf("failed to find cgroups of kubelet - %v", err)
+			return
+		}
+		cm.Lock()
+		defer cm.Unlock()
+
+		cm.KubeletCgroupsName = cont
+	})
+
+
 	return nil
+}
+
+func isProcessRunningInHost(pid int) (bool, error) {
+	// Get init pid namespace.
+	initPidNs, err := os.Readlink("/proc/1/ns/pid")
+	if err != nil {
+		return false, fmt.Errorf("failed to find pid namespace of init process")
+	}
+	klog.V(10).Infof("init pid ns is %q", initPidNs)
+	processPidNs, err := os.Readlink(fmt.Sprintf("/proc/%d/ns/pid", pid))
+	if err != nil {
+		return false, fmt.Errorf("failed to find pid namespace of process %q", pid)
+	}
+	klog.V(10).Infof("Pid %d pid ns is %q", pid, processPidNs)
+	return initPidNs == processPidNs, nil
+}
+
+func ensureProcessInContainerWithOOMScore(pid int, oomScoreAdj int, manager *fs.Manager) error {
+	if runningInHost, err := isProcessRunningInHost(pid); err != nil {
+		// Err on the side of caution. Avoid moving the docker daemon unless we are able to identify its context.
+		return err
+	} else if !runningInHost {
+		// Process is running inside a container. Don't touch that.
+		klog.V(2).Infof("pid %d is not running in the host namespaces", pid)
+		return nil
+	}
+
+	var errs []error
+	if manager != nil {
+		cont, err := getContainer(pid)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to find container of PID %d: %v", pid, err))
+		}
+
+		if cont != manager.Cgroups.Name {
+			err = manager.Apply(pid)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("failed to move PID %d (in %q) to %q: %v", pid, cont, manager.Cgroups.Name, err))
+			}
+		}
+	}
+	// Also apply oom-score-adj to processes
+	oomAdjuster := oom.NewOOMAdjuster()
+	klog.V(5).Infof("attempting to apply oom_score_adj of %d to pid %d", oomScoreAdj, pid)
+	if err := oomAdjuster.ApplyOOMScoreAdj(pid, oomScoreAdj); err != nil {
+		klog.V(3).Infof("Failed to apply oom_score_adj %d for pid %d: %v", oomScoreAdj, pid, err)
+		errs = append(errs, fmt.Errorf("failed to apply oom score %d to PID %d: %v", oomScoreAdj, pid, err))
+	}
+	return utilerrors.NewAggregate(errs)
 }
 
 func (cm *containerManagerImpl) Start(node *v1.Node,
@@ -213,11 +325,6 @@ func (cm *containerManagerImpl) Start(node *v1.Node,
 
 	// Setup the node
 	if err := cm.setupNode(activePods); err != nil {
-		return err
-	}
-
-	// Enforce Node Allocatable (if required)
-	if err := cm.enforceNodeAllocatableCgroups(); err != nil {
 		return err
 	}
 

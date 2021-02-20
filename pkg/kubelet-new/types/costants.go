@@ -1,7 +1,11 @@
 package types
 
 const (
-	ResolvConfDefault = "/etc/resolv.conf"
+	ResolvConfDefault 		= "/etc/resolv.conf"
 
-	DockerContainerRuntime = "docker"
+	DockerContainerRuntime 		= "docker"
+
+	SystemReservedEnforcementKey  	= "system-reserved"
+
+	KubeReservedEnforcementKey	= "kube-reserved"
 )

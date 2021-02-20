@@ -12,6 +12,8 @@ import (
 
 const (
 	MinShares     = 2
+	SharesPerCPU  = 1024
+	MilliCPUToCPU = 1000
 )
 
 // NewCgroupName composes a new cgroup name.
@@ -118,7 +120,21 @@ func getCgroupProcs(dir string) ([]int, error) {
 	return out, nil
 }
 
-
+// MilliCPUToShares converts the milliCPU to CFS shares.
+func MilliCPUToShares(milliCPU int64) uint64 {
+	if milliCPU == 0 {
+		// Docker converts zero milliCPU to unset, which maps to kernel default
+		// for unset: 1024. Return 2 here to really match kernel default for
+		// zero milliCPU.
+		return MinShares
+	}
+	// Conceptually (milliCPU / milliCPUToCPU) * sharesPerCPU, but factored to improve rounding.
+	shares := (milliCPU * SharesPerCPU) / MilliCPUToCPU
+	if shares < MinShares {
+		return MinShares
+	}
+	return uint64(shares)
+}
 
 
 
