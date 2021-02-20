@@ -10,6 +10,7 @@ import (
 	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/api/core/v1"
 	"io/ioutil"
+	"k8s.io/utils/exec"
 )
 
 type volumeAdmitHandler struct {
@@ -69,7 +70,18 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 	errList := make([]string, 0)
 	for _, vol := range pod.Spec.Volumes {
 		if vol.VolumeSource.NFS != nil {
-			source := fmt.Sprintf("%s:%s", vol.VolumeSource.NFS.Server, vol.VolumeSource.NFS.Path)
+			exeutor := exec.New()
+			cmd := exeutor.Command(fmt.Sprintf("showmount -e %v | grep -i '%v' | awk '{print $1}'", vol.VolumeSource.NFS.Server, vol.VolumeSource.NFS.Path))
+			serverpath, err := cmd.CombinedOutput()
+			if err != nil {
+				return []string{err.Error()}
+			}
+			if strings.Contains(vol.VolumeSource.NFS.Path, serverpath) {
+				return []string{fmt.Sprintf("%v is not a subpath of %v at nfs server %v", vol.VolumeSource.NFS.Path, serverpath, vol.VolumeSource.NFS.Server)}
+			}
+
+			source := fmt.Sprintf("%s:%s", vol.VolumeSource.NFS.Server, serverpath)
+
 			dir, err := ioutil.TempDir("/tmp", "nfs")
 			if err != nil {
 				return []string{err.Error()}
@@ -80,7 +92,8 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 				w.cleanupNfs(dir)
 				return []string{err.Error()}
 			}
-			err, symlink := isSymlink(dir)
+			checkdir := strings.Replace(vol.VolumeSource.NFS.Path, serverpath, dir, 1)
+			err, symlink := isSymlink(checkdir)
 			if err != nil || symlink {
 				if err == nil {
 					err = fmt.Errorf("[nfs] %v is a symlink which is not allowed.", source)
@@ -102,6 +115,7 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 }
 
 func isSymlink(path string) (error, bool) {
+	klog.Infof("check path isSymlink: %v", path)
 	fileInfo, err := os.Lstat(path)
 	if err != nil {
 		return err, false
