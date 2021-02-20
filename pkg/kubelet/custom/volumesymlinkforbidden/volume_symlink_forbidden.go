@@ -76,7 +76,7 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 			if err != nil {
 				return []string{err.Error()}
 			}
-			if !strings.Contains(vol.VolumeSource.NFS.Path, serverpath) {
+			if !strings.Contains(vol.VolumeSource.NFS.Path, string(serverpath)) {
 				return []string{fmt.Sprintf("%v is not a subpath of %v at nfs server %v", vol.VolumeSource.NFS.Path, serverpath, vol.VolumeSource.NFS.Server)}
 			}
 
