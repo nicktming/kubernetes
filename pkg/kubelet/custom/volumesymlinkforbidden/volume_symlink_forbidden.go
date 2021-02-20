@@ -76,11 +76,11 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 			if err != nil {
 				return []string{err.Error()}
 			}
-			if strings.Contains(vol.VolumeSource.NFS.Path, serverpath) {
+			if !strings.Contains(vol.VolumeSource.NFS.Path, serverpath) {
 				return []string{fmt.Sprintf("%v is not a subpath of %v at nfs server %v", vol.VolumeSource.NFS.Path, serverpath, vol.VolumeSource.NFS.Server)}
 			}
 
-			source := fmt.Sprintf("%s:%s", vol.VolumeSource.NFS.Server, serverpath)
+			source := fmt.Sprintf("%s:%s", vol.VolumeSource.NFS.Server, string(serverpath))
 
 			dir, err := ioutil.TempDir("/tmp", "nfs")
 			if err != nil {
@@ -92,7 +92,7 @@ func (w *volumeAdmitHandler) checkVolumeSymlink(pod *v1.Pod) []string {
 				w.cleanupNfs(dir)
 				return []string{err.Error()}
 			}
-			checkdir := strings.Replace(vol.VolumeSource.NFS.Path, serverpath, dir, 1)
+			checkdir := strings.Replace(vol.VolumeSource.NFS.Path, string(serverpath), dir, 1)
 			err, symlink := isSymlink(checkdir)
 			if err != nil || symlink {
 				if err == nil {
