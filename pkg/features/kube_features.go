@@ -720,6 +720,12 @@ const (
 	//
 	// Enables the usage of different protocols in the same Service with type=LoadBalancer
 	MixedProtocolLBService featuregate.Feature = "MixedProtocolLBService"
+
+	// owner: @mingtingzhang
+	// alpha: v1.20
+	//
+	// Enable volume symlink forbidden
+	VolumeSymlinkForbidden featuregate.Feature = "VolumeSymlinkForbidden"
 )
 
 func init() {
@@ -828,6 +834,10 @@ var defaultKubernetesFeatureGates = map[featuregate.Feature]featuregate.FeatureS
 	GracefulNodeShutdown:                           {Default: false, PreRelease: featuregate.Alpha},
 	ServiceLBNodePortControl:                       {Default: false, PreRelease: featuregate.Alpha},
 	MixedProtocolLBService:                         {Default: false, PreRelease: featuregate.Alpha},
+
+	// features that enable backwards compatibility but are scheduled to be removed
+	// ...
+	VolumeSymlinkForbidden:                            {Default: false, PreRelease: featuregate.Alpha},
 
 	// inherited features from generic apiserver, relisted here to get a conflict if it is changed
 	// unintentionally on either side:

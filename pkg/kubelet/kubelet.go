@@ -118,6 +118,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/hostutil"
 	"k8s.io/kubernetes/pkg/volume/util/subpath"
 	"k8s.io/kubernetes/pkg/volume/util/volumepathhandler"
+	"k8s.io/kubernetes/pkg/kubelet/custom/volumesymlinkforbidden"
 )
 
 const (
@@ -807,6 +808,12 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	// Generating the status funcs should be the last thing we do,
 	// since this relies on the rest of the Kubelet having been constructed.
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
+
+	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeSymlinkForbidden) {
+		klog.Infof("++++++++++++++++++enable VolumeSymlinkForbidden++++++++++++++++++++++++++++")
+		volumeAdmitHandler, _ := volumesymlinkforbidden.NewVolumeAdmitHandler(klet.mounter)
+		klet.admitHandlers.AddPodAdmitHandler(volumeAdmitHandler)
+	}
 
 	return klet, nil
 }
