@@ -118,6 +118,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/subpath"
 	utilexec "k8s.io/utils/exec"
 	"k8s.io/utils/integer"
+	"k8s.io/kubernetes/pkg/kubelet/custom/volume/symlinkforbidden"
 )
 
 const (
@@ -881,6 +882,16 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	// Generating the status funcs should be the last thing we do,
 	// since this relies on the rest of the Kubelet having been constructed.
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
+
+	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeSymlinkForbidden) {
+		klog.Infof("++++++++++++++++++enable VolumeSymlinkForbidden++++++++++++++++++++++++++++")
+		volumeSymlinkForbidden, err := symlinkforbidden.NewSymlinkForbidden(15 * time.Second, 2 * time.Second)
+		if err != nil {
+			return nil, err 
+		}
+		klet.admitHandlers.AddPodAdmitHandler(volumeSymlinkForbidden)
+		// klet.softAdmitHandlers.AddPodAdmitHandler(volumeSymlinkForbidden)
+	}
 
 	return klet, nil
 }
@@ -1756,6 +1767,16 @@ func (kl *Kubelet) deletePod(pod *v1.Pod) error {
 	return nil
 }
 
+// problem: for solving many rejected pods produced by controller such as deployment.
+// TODO: ask kubernetes community to check whether rejectPod needs to change v1.PodFailed to v1.PodPending.
+func (kl *Kubelet) rejectPodToPending(pod *v1.Pod, reason, message string) {
+	kl.recorder.Eventf(pod, v1.EventTypeWarning, reason, message)
+	kl.statusManager.SetPodStatus(pod, v1.PodStatus{
+		Phase:   v1.PodPending,
+		Reason:  reason,
+		Message: "Pod " + message})
+}
+
 // rejectPod records an event about the pod with the given reason and message,
 // and updates the pod to the failed phase in the status manage.
 func (kl *Kubelet) rejectPod(pod *v1.Pod, reason, message string) {
@@ -2054,6 +2075,10 @@ func (kl *Kubelet) HandlePodAdditions(pods []*v1.Pod) {
 
 			// Check if we can admit the pod; if not, reject it.
 			if ok, reason, message := kl.canAdmitPod(activePods, pod); !ok {
+				if reason == symlinkforbidden.SYMLINKFORBIDDENREASON {
+					kl.rejectPodToPending(pod, reason, message)
+					continue
+				}
 				kl.rejectPod(pod, reason, message)
 				continue
 			}

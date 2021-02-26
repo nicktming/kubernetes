@@ -479,6 +479,12 @@ const (
 	//
 	// Enable support for specifying an existing PVC as a DataSource
 	VolumePVCDataSource featuregate.Feature = "VolumePVCDataSource"
+
+	// owner: @mingtingzhang
+	// alpha: v1.15
+	//
+	// Enable support for volume symlink forbidden
+	VolumeSymlinkForbidden featuregate.Feature = "VolumeSymlinkForbidden"
 )
 
 func init() {
@@ -582,4 +588,6 @@ var defaultKubernetesFeatureGates = map[featuregate.Feature]featuregate.FeatureS
 
 	// features that enable backwards compatibility but are scheduled to be removed
 	// ...
+
+	VolumeSymlinkForbidden:                            {Default: false, PreRelease: featuregate.Alpha},
 }
