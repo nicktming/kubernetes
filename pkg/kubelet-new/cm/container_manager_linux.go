@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"k8s.io/kubernetes/pkg/kubelet-new/status"
 	internalapi "k8s.io/cri-api/pkg/apis"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/kubernetes/pkg/kubelet-new/config"
 	"sync"
 	"k8s.io/kubernetes/pkg/kubelet-new/qos"
