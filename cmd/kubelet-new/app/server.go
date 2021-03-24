@@ -718,8 +718,10 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 
 		klog.Infof("server.go s.RuntimeCgroups: %v, s.SystemCgroups: %v, s.KubeletCgroups: %v, s.ContainerRuntime: %v, " +
 			"s.CgroupsPerQOS: %v, s.CgroupRoot: %v, s.CgroupDriver: %v, s.RootDirectory: %v, " +
-			"s.ProtectKernelDefaults: %v, s.EnforceNodeAllocatable: %v, s.KubeReservedCgroup: %v, s.SystemReservedCgroup: %v", s.RuntimeCgroups, s.SystemCgroups, s.KubeletCgroups, s.ContainerRuntime, s.CgroupsPerQOS,
-			s.CgroupRoot, s.CgroupDriver, s.RootDirectory, s.ProtectKernelDefaults, s.EnforceNodeAllocatable, s.KubeReservedCgroup, s.SystemReservedCgroup)
+			"s.ProtectKernelDefaults: %v, s.EnforceNodeAllocatable: %v, s.KubeReservedCgroup: %v, s.SystemReservedCgroup: %v" +
+			", EnforceCPULimits: %v, CPUCFSQuotaPeriod: %v", s.RuntimeCgroups, s.SystemCgroups, s.KubeletCgroups, s.ContainerRuntime, s.CgroupsPerQOS,
+			s.CgroupRoot, s.CgroupDriver, s.RootDirectory, s.ProtectKernelDefaults, s.EnforceNodeAllocatable, s.KubeReservedCgroup,
+			s.SystemReservedCgroup, s.CPUCFSQuota, s.CPUCFSQuotaPeriod.Duration)
 
 		kubeDeps.ContainerManager, err = cm.NewContainerManager(
 			//kubeDeps.Mounter,
@@ -746,8 +748,8 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 				//ExperimentalCPUManagerPolicy:          s.CPUManagerPolicy,
 				//ExperimentalCPUManagerReconcilePeriod: s.CPUManagerReconcilePeriod.Duration,
 				//ExperimentalPodPidsLimit:              s.PodPidsLimit,
-				//EnforceCPULimits:                      s.CPUCFSQuota,
-				//CPUCFSQuotaPeriod:                     s.CPUCFSQuotaPeriod.Duration,
+				EnforceCPULimits:                      s.CPUCFSQuota,
+				CPUCFSQuotaPeriod:                     s.CPUCFSQuotaPeriod.Duration,
 			},
 			s.FailSwapOn,
 			devicePluginEnabled,

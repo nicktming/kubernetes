@@ -9,6 +9,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-new/status"
 	internalapi "k8s.io/cri-api/pkg/apis"
 	"k8s.io/kubernetes/pkg/kubelet-new/config"
+	"time"
 )
 
 type ActivePodsFunc func() []*v1.Pod
@@ -33,6 +34,9 @@ type NodeConfig struct {
 	ProtectKernelDefaults bool
 	NodeAllocatableConfig
 	QOSReserved                           map[v1.ResourceName]int64
+
+	EnforceCPULimits                      bool
+	CPUCFSQuotaPeriod                     time.Duration
 
 }
 
