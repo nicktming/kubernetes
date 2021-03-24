@@ -2,7 +2,6 @@ package cm
 
 import (
 	libcontainercgroups "github.com/opencontainers/runc/libcontainer/cgroups"
-	"strings"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,24 +14,6 @@ const (
 	SharesPerCPU  = 1024
 	MilliCPUToCPU = 1000
 )
-
-// NewCgroupName composes a new cgroup name.
-// Use RootCgroupName as base to start at the root.
-// This function does some basic check for invalid characters at the name.
-func NewCgroupName(base CgroupName, components ...string) CgroupName {
-	for _, component := range components {
-		// Forbit using "_" in internal names. When remapping internal
-		// names to systemd cgroup driver, we want to remap "-" => "_",
-		// so we forbid "_" so that we can always reverse the mapping.
-		if strings.Contains(component, "/") || strings.Contains(component, "_") {
-			panic(fmt.Errorf("invalid character in component [%q] of CgroupName", component))
-		}
-	}
-	// copy data from the base cgroup to eliminate cases where CgroupNames share underlying slices.  See #68416
-	baseCopy := make([]string, len(base))
-	copy(baseCopy, base)
-	return CgroupName(append(baseCopy, components...))
-}
 
 // NodeAllocatableRoot returns the literal cgroup path for the node allocatable cgroup
 func NodeAllocatableRoot(cgroupRoot, cgroupDriver string) string {
