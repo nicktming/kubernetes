@@ -118,6 +118,8 @@ func NewContainerManager(nodeConfig NodeConfig, failSwapOn bool, devicePluginEna
 		NodeConfig:		nodeConfig,
 		cgroupRoot: 		cgroupRoot,
 		qosContainerManager: 	qosContainerManager,
+		// Interface for cgroup management
+		cgroupManager:		cgroupManager,
 	}
 
 	return cm, nil
