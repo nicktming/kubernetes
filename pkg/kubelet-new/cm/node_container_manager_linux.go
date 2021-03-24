@@ -14,6 +14,23 @@ const (
 )
 
 
+//createNodeAllocatableCgroups creates Node Allocatable Cgroup when CgroupsPerQOS flag is specified as true
+func (cm *containerManagerImpl) createNodeAllocatableCgroups() error {
+	cgroupConfig := &CgroupConfig{
+		// /kubepods
+		Name: cm.cgroupRoot,
+		// The default limits for cpu shares can be very low which can lead to CPU starvation for pods.
+		ResourceParameters: getCgroupConfig(cm.internalCapacity),
+	}
+	if cm.cgroupManager.Exists(cgroupConfig.Name) {
+		return nil
+	}
+	if err := cm.cgroupManager.Create(cgroupConfig); err != nil {
+		klog.Errorf("Failed to create %q cgroup", cm.cgroupRoot)
+		return err
+	}
+	return nil
+}
 
 // enforceNodeAllocatableCgroups enforce Node Allocatable Cgroup settings.
 func (cm *containerManagerImpl) enforceNodeAllocatableCgroups() error {
@@ -45,6 +62,32 @@ func (cm *containerManagerImpl) enforceNodeAllocatableCgroups() error {
 
 
 	return nil
+}
+
+// getNodeAllocatableAbsolute returns the absolute value of Node Allocatable which is primarily useful for enforcement.
+// Note that not all resources that are available on the node are included in the returned list of resources.
+// Returns a ResourceList.
+func (cm *containerManagerImpl) getNodeAllocatableAbsolute() v1.ResourceList {
+	return cm.getNodeAllocatableAbsoluteImpl(cm.capacity)
+}
+
+func (cm *containerManagerImpl) getNodeAllocatableAbsoluteImpl(capacity v1.ResourceList) v1.ResourceList {
+	result := make(v1.ResourceList)
+	for k, v := range capacity {
+		value := *(v.Copy())
+		if cm.NodeConfig.SystemReserved != nil {
+			value.Sub(cm.NodeConfig.SystemReserved[k])
+		}
+		if cm.NodeConfig.KubeReserved != nil {
+			value.Sub(cm.NodeConfig.KubeReserved[k])
+		}
+		if value.Sign() < 0 {
+			// Negative Allocatable resources don't make sense.
+			value.Set(0)
+		}
+		result[k] = value
+	}
+	return result
 }
 
 func getCgroupConfig(rl v1.ResourceList) *ResourceConfig {

@@ -68,3 +68,11 @@ type CgroupManager interface {
 	GetResourceStats(name CgroupName) (*ResourceStats, error)
 }
 
+// QOSContainersInfo stores the names of containers per qos
+type QOSContainersInfo struct {
+	Guaranteed CgroupName
+	BestEffort CgroupName
+	Burstable  CgroupName
+}
+
+

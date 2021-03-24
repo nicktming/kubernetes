@@ -251,7 +251,9 @@ func recordFirstSeenTime(pod *v1.Pod) {
 }
 
 func checkAndUpdatePod(existing, ref *v1.Pod) (needUpdate, needReconcile, needGracefulDelete bool) {
+	// 如果pod spec, labels, DeletionTimestamp, DeletionGracePeriodSeconds, Annotations 发生变化
 	if !podsDifferSemantically(existing, ref) {
+		// 如果只是status发生变化
 		if !reflect.DeepEqual(existing.Status, ref.Status) {
 			existing.Status = ref.Status
 			needReconcile = true

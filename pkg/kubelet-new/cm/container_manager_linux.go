@@ -49,6 +49,17 @@ type containerManagerImpl struct {
 
 	// Tasks that are run periodically
 	periodicTasks []func()
+
+	// Capacity of this node.
+	// from cadvisor
+	capacity v1.ResourceList
+
+	// Capacity of this node, including internal resources.
+	// internal resource pids
+	internalCapacity v1.ResourceList
+
+	// Interface for QoS cgroup management
+	qosContainerManager QOSContainerManager
 }
 
 // TODO(vmarmol): Add limits to the system containers.
@@ -97,10 +108,16 @@ func NewContainerManager(nodeConfig NodeConfig, failSwapOn bool, devicePluginEna
 	klog.Infof("Creating Container Manager object based on Node Config: %v\n cgroupRoot: %v",
 		string(pretty_nodeconfig), cgroupRoot)
 
+	qosContainerManager, err := NewQOSContainerManager(subsystems, cgroupRoot, nodeConfig, cgroupManager)
+	if err != nil {
+		return nil, err
+	}
+
 	cm := &containerManagerImpl{
 		subsystems: 		subsystems,
 		NodeConfig:		nodeConfig,
 		cgroupRoot: 		cgroupRoot,
+		qosContainerManager: 	qosContainerManager,
 	}
 
 	return cm, nil
@@ -211,6 +228,17 @@ func getContainerNameForProcess(name, pidFile string) (string, error) {
 func (cm *containerManagerImpl) setupNode(activePods ActivePodsFunc) error {
 	// TODO validateSystemRequirements
 	// TODO ProtectKernelDefaults
+
+	// Setup top level qos containers only if CgroupsPerQOS flag is specified as true
+	if cm.NodeConfig.CgroupsPerQOS {
+		if err := cm.createNodeAllocatableCgroups(); err != nil {
+			return err
+		}
+		err := cm.qosContainerManager.Start(cm.getNodeAllocatableAbsolute, activePods)
+		if err != nil {
+			return fmt.Errorf("failed to initialize top level QOS containers: %v", err)
+		}
+	}
 
 
 	// Enforce Node Allocatable (if required)

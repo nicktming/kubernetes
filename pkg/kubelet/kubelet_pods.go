@@ -898,6 +898,7 @@ func (kl *Kubelet) IsPodDeleted(uid types.UID) bool {
 // PodResourcesAreReclaimed returns true if all required node-level resources that a pod was consuming have
 // been reclaimed by the kubelet.  Reclaiming resources is a prerequisite to deleting a pod from the API server.
 func (kl *Kubelet) PodResourcesAreReclaimed(pod *v1.Pod, status v1.PodStatus) bool {
+	// 根据pod.containerStatus是否存在running的pods
 	if !notRunning(status.ContainerStatuses) {
 		// We shouldnt delete pods that still have running containers
 		klog.V(3).Infof("Pod %q is terminated, but some containers are still running", format.Pod(pod))
@@ -909,6 +910,7 @@ func (kl *Kubelet) PodResourcesAreReclaimed(pod *v1.Pod, status v1.PodStatus) bo
 		klog.V(3).Infof("Pod %q is terminated, Error getting runtimeStatus from the podCache: %s", format.Pod(pod), err)
 		return false
 	}
+	// 判断是否存在container status
 	if len(runtimeStatus.ContainerStatuses) > 0 {
 		var statusStr string
 		for _, status := range runtimeStatus.ContainerStatuses {
@@ -917,11 +919,13 @@ func (kl *Kubelet) PodResourcesAreReclaimed(pod *v1.Pod, status v1.PodStatus) bo
 		klog.V(3).Infof("Pod %q is terminated, but some containers have not been cleaned up: %s", format.Pod(pod), statusStr)
 		return false
 	}
+	// 判断是否存在mounted volumes
 	if kl.podVolumesExist(pod.UID) && !kl.keepTerminatedPodVolumes {
 		// We shouldnt delete pods whose volumes have not been cleaned up if we are not keeping terminated pod volumes
 		klog.V(3).Infof("Pod %q is terminated, but some volumes have not been cleaned up", format.Pod(pod))
 		return false
 	}
+	// 判断该pod的cgroup是否清除 待研究
 	if kl.kubeletConfiguration.CgroupsPerQOS {
 		pcm := kl.containerManager.NewPodContainerManager()
 		if pcm.Exists(pod) {
@@ -931,6 +935,9 @@ func (kl *Kubelet) PodResourcesAreReclaimed(pod *v1.Pod, status v1.PodStatus) bo
 	}
 	return true
 }
+
+
+
 
 // podResourcesAreReclaimed simply calls PodResourcesAreReclaimed with the most up-to-date status.
 func (kl *Kubelet) podResourcesAreReclaimed(pod *v1.Pod) bool {
