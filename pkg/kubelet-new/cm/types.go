@@ -3,12 +3,18 @@ package cm
 
 // ResourceConfig holds information about all the supported cgroup resource parameters.
 type ResourceConfig struct {
-	// Memory limit (in bytes)
+	// Memory limit (in bytes).
 	Memory *int64
 	// CPU shares (relative weight vs. other containers).
 	CpuShares *uint64
-	// CPU hardcap limit(in usecs). Allowed cpu time in a given period.
-	//CpuQuota *int64
+	// CPU hardcap limit (in usecs). Allowed cpu time in a given period.
+	CpuQuota *int64
+	// CPU quota period.
+	CpuPeriod *uint64
+	// HugePageLimit map from page size (in bytes) to limit (in bytes)
+	HugePageLimit map[int64]int64
+	// Maximum number of pids
+	PidsLimit *int64
 }
 
 type CgroupConfig struct {

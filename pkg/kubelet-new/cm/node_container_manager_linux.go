@@ -3,7 +3,6 @@ package cm
 import (
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
 	"k8s.io/kubernetes/pkg/kubelet/events"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog"
 	"k8s.io/api/core/v1"
 	"fmt"
