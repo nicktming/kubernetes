@@ -140,6 +140,7 @@ func (m *qosContainerManagerImpl) setCPUCgroupConfig(configs map[v1.PodQOSClass]
 		}
 		req, _ := resource.PodRequestsAndLimits(pod)
 		if request, found := req[v1.ResourceCPU]; found {
+			klog.Infof("========>request: %v, milliValue: %v", request, request.MilliValue())
 			burstablePodCPURequest += request.MilliValue()
 		}
 	}
