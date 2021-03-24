@@ -158,6 +158,8 @@ func (m *qosContainerManagerImpl) UpdateCgroups() error {
 	m.Lock()
 	defer m.Unlock()
 
+	klog.Infof("=======qosContainerManagerImpl UpdateCgroups==========")
+
 	qosConfigs := map[v1.PodQOSClass]*CgroupConfig{
 		v1.PodQOSBurstable: {
 			Name:               m.qosContainersInfo.Burstable,

@@ -40,8 +40,8 @@ func (cm *containerManagerImpl) enforceNodeAllocatableCgroups() error {
 	// Using ObjectReference for events as the node maybe not cached; refer to #42701 for detail.
 	nodeRef := &v1.ObjectReference{
 		Kind:      "Node",
-		Name:      cm.nodeInfo.Name,
-		UID:       types.UID(cm.nodeInfo.Name),
+		//Name:      cm.nodeInfo.Name,
+		//UID:       types.UID(cm.nodeInfo.Name),
 		Namespace: "",
 	}
 
