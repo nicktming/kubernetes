@@ -31,6 +31,17 @@ func (kl *Kubelet) defaultNodeStatusFuncs() []func(*v1.Node) error {
 	// TODO kl.cloud and kl.appArmorValidator
 
 	var setters []func(n *v1.Node) error
+
+	setters = append(setters,
+		//nodestatus.NodeAddress(kl.nodeIP, kl.nodeIPValidator, kl.hostname, kl.hostnameOverridden, kl.externalCloudProvider, kl.cloud, nodeAddressesFunc),
+		nodestatus.MachineInfo(string(kl.nodeName), kl.maxPods, kl.podsPerCore, kl.GetCachedMachineInfo, kl.containerManager.GetCapacity,
+			nil, kl.containerManager.GetNodeAllocatableReservation, kl.recordEvent),
+		//nodestatus.VersionInfo(kl.cadvisor.VersionInfo, kl.containerRuntime.Type, kl.containerRuntime.Version),
+		//nodestatus.DaemonEndpoints(kl.daemonEndpoints),
+		//nodestatus.Images(kl.nodeStatusMaxImages, kl.imageManager.GetImageList),
+		//nodestatus.GoRuntime(),
+	)
+
 	setters = append(setters,
 		//nodestatus.MemoryPressureCondition(kl.clock.Now, kl.evictionManager.IsUnderMemoryPressure, kl.recordNodeStatusEvent),
 		//nodestatus.DiskPressureCondition(kl.clock.Now, kl.evictionManager.IsUnderDiskPressure, kl.recordNodeStatusEvent),

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"k8s.io/klog"
 	"io/ioutil"
+	cadvisorapiv1 "github.com/google/cadvisor/info/v1"
 )
 
 func (kl *Kubelet) getRootDir() string {
@@ -105,6 +106,10 @@ func (kl *Kubelet) getPodVolumePathListFromDisk(podUID types.UID) ([]string, err
 	return volumes, nil
 }
 
+// GetCachedMachineInfo assumes that the machine info can't change without a reboot
+func (kl *Kubelet) GetCachedMachineInfo() (*cadvisorapiv1.MachineInfo, error) {
+	return kl.machineInfo, nil
+}
 
 
 

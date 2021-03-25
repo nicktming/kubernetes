@@ -43,6 +43,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-new/lifecycle"
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
 	"k8s.io/kubernetes/pkg/util/mount"
+	cadvisorapi "github.com/google/cadvisor/info/v1"
 )
 
 const (
@@ -195,6 +196,18 @@ type Kubelet struct {
 	// TODO: think about moving this to be centralized in PodWorkers in follow-on.
 	// the list of handlers to call during pod admission.
 	admitHandlers lifecycle.PodAdmitHandlers
+
+	// Cached MachineInfo returned by cadvisor.
+	machineInfo *cadvisorapi.MachineInfo
+
+	// cAdvisor used for container information.
+	cadvisor cadvisor.Interface
+
+	// Maximum Number of Pods which can be run by this Kubelet
+	maxPods int
+
+	// the number of allowed pods per core
+	podsPerCore int
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -540,6 +553,9 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		recorder:                                	kubeDeps.Recorder,
 		nodeRef: 					nodeRef,
 		containerManager:                        	kubeDeps.ContainerManager,
+		cadvisor:                                	kubeDeps.CAdvisorInterface,
+		maxPods:                                 	int(kubeCfg.MaxPods),
+		podsPerCore:                             	int(kubeCfg.PodsPerCore),
 	}
 
 	pluginSettings := dockershim.NetworkPluginSettings{
@@ -639,6 +655,13 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	// Generating the status funcs should be the last thing we do,
 	// since this relies on the rest of the Kubelet having been constructed.
 	klet.setNodeStatusFuncs = klet.defaultNodeStatusFuncs()
+
+
+	machineInfo, err := klet.cadvisor.MachineInfo()
+	if err != nil {
+		return nil, err
+	}
+	klet.machineInfo = machineInfo
 
 	return klet, nil
 }

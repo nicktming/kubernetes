@@ -40,3 +40,5 @@ config="$config --kubeconfig=$homepath/ssl_keys/node/kubelet_kubeconfig"
 // 21. 为什么要设置swap为false
 // 22. pod containers terminationMessagePath: /dev/termination-log
        // terminationMessagePolicy: File 字段什么意思?
+
+// 23. podsPerCore 参数的意思
