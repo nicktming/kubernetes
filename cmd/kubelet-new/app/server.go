@@ -89,7 +89,7 @@ import (
 	"k8s.io/kubernetes/pkg/version"
 	"k8s.io/kubernetes/pkg/version/verflag"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet-new/types"
-	//"k8s.io/kubernetes/pkg/kubelet-tming/cadvisor"
+	"k8s.io/kubernetes/pkg/kubelet-tming/cadvisor"
 	"k8s.io/apimachinery/pkg/util/sets"
 	//"k8s.io/kubernetes/pkg/kubelet/eviction"
 	//
@@ -101,7 +101,7 @@ import (
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	//kubecontainer "k8s.io/kubernetes/pkg/kubelet-tming/container"
 	//
-	//"k8s.io/kubernetes/pkg/util/mount"
+	"k8s.io/kubernetes/pkg/util/mount"
 	//nsutil "k8s.io/kubernetes/pkg/volume/util/nsenter"
 	//"k8s.io/kubernetes/pkg/volume/util/subpath"
 	//"k8s.io/utils/exec"
@@ -379,7 +379,7 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 	//	return nil, err
 	//}
 	//
-	//mounter := mount.New(s.ExperimentalMounterPath)
+	mounter := mount.New(s.ExperimentalMounterPath)
 	//subpather := subpath.New(mounter)
 	//var pluginRunner = exec.New()
 
@@ -412,14 +412,14 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 
 	return &kubelet.Dependencies{
 		//Auth:                nil, // default does not enforce auth[nz]
-		//CAdvisorInterface:   nil, // cadvisor.New launches background processes (bg http.ListenAndServe, and some bg cleaners), not set here
+		CAdvisorInterface:   nil, // cadvisor.New launches background processes (bg http.ListenAndServe, and some bg cleaners), not set here
 		//Cloud:               nil, // cloud provider might start background processes
 		//ContainerManager:    nil,
 		DockerClientConfig:  dockerClientConfig,
 		KubeClient:          nil,
 		//HeartbeatClient:     nil,
 		//EventClient:         nil,
-		//Mounter:             mounter,
+		Mounter:             mounter,
 		//Subpather:           subpather,
 		//OOMAdjuster:         oom.NewOOMAdjuster(),
 		OSInterface:         kubecontainer.RealOS{},
@@ -666,13 +666,13 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 	//
 	//klog.Infof("init cadvisor interface RootDirectory: %s, cgroupRoots: %v", s.RootDirectory, cgroupRoots)
 
-	//if kubeDeps.CAdvisorInterface == nil {
-	//	imageFsInfoProvider := cadvisor.NewImageFsInfoProvider(s.ContainerRuntime, s.RemoteRuntimeEndpoint)
-	//	kubeDeps.CAdvisorInterface, err = cadvisor.New(imageFsInfoProvider, s.RootDirectory, cgroupRoots, cadvisor.UsingLegacyCadvisorStats(s.ContainerRuntime, s.RemoteRuntimeEndpoint))
-	//	if err != nil {
-	//		return err
-	//	}
-	//}
+	if kubeDeps.CAdvisorInterface == nil {
+		imageFsInfoProvider := cadvisor.NewImageFsInfoProvider(s.ContainerRuntime, s.RemoteRuntimeEndpoint)
+		kubeDeps.CAdvisorInterface, err = cadvisor.New(imageFsInfoProvider, s.RootDirectory, cgroupRoots, cadvisor.UsingLegacyCadvisorStats(s.ContainerRuntime, s.RemoteRuntimeEndpoint))
+		if err != nil {
+			return err
+		}
+	}
 
 	// Setup event recorder if required.
 	makeEventRecorder(kubeDeps, nodeName)
@@ -724,8 +724,8 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 			s.SystemReservedCgroup, s.CPUCFSQuota, s.CPUCFSQuotaPeriod.Duration)
 
 		kubeDeps.ContainerManager, err = cm.NewContainerManager(
-			//kubeDeps.Mounter,
-			//kubeDeps.CAdvisorInterface,
+			kubeDeps.Mounter,
+			kubeDeps.CAdvisorInterface,
 			cm.NodeConfig{
 				RuntimeCgroupsName:    s.RuntimeCgroups,
 				SystemCgroupsName:     s.SystemCgroups,
@@ -745,9 +745,9 @@ func run(s *options.KubeletServer, kubeDeps *kubelet.Dependencies, stopCh <-chan
 					//HardEvictionThresholds:   hardEvictionThresholds,
 				},
 				QOSReserved:                           *experimentalQOSReserved,
-				//ExperimentalCPUManagerPolicy:          s.CPUManagerPolicy,
-				//ExperimentalCPUManagerReconcilePeriod: s.CPUManagerReconcilePeriod.Duration,
-				//ExperimentalPodPidsLimit:              s.PodPidsLimit,
+				ExperimentalCPUManagerPolicy:          s.CPUManagerPolicy,
+				ExperimentalCPUManagerReconcilePeriod: s.CPUManagerReconcilePeriod.Duration,
+				ExperimentalPodPidsLimit:              s.PodPidsLimit,
 				EnforceCPULimits:                      s.CPUCFSQuota,
 				CPUCFSQuotaPeriod:                     s.CPUCFSQuotaPeriod.Duration,
 			},

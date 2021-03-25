@@ -1,11 +1,16 @@
 package types
 
 const (
-	ResolvConfDefault 		= "/etc/resolv.conf"
+	// system default DNS resolver configuration
+	ResolvConfDefault = "/etc/resolv.conf"
 
-	DockerContainerRuntime 		= "docker"
+	// different container runtimes
+	DockerContainerRuntime = "docker"
+	RemoteContainerRuntime = "remote"
 
-	SystemReservedEnforcementKey  	= "system-reserved"
-
-	KubeReservedEnforcementKey	= "kube-reserved"
+	// User visible keys for managing node allocatable enforcement on the node.
+	NodeAllocatableEnforcementKey = "pods"
+	SystemReservedEnforcementKey  = "system-reserved"
+	KubeReservedEnforcementKey    = "kube-reserved"
+	NodeAllocatableNoneKey        = "none"
 )

@@ -41,6 +41,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-new/prober"
 	"k8s.io/kubernetes/pkg/kubelet-new/cm"
 	"k8s.io/kubernetes/pkg/kubelet-new/lifecycle"
+	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
 )
 
 const (
@@ -86,6 +87,8 @@ type Dependencies struct {
 	DockerClientConfig      *dockershim.ClientConfig
 
 	ContainerManager 	cm.ContainerManager
+	CAdvisorInterface       cadvisor.Interface
+	Mounter                 mount.Interface
 }
 
 

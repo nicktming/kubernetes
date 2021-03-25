@@ -1,15 +1,40 @@
+/*
+Copyright 2015 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package cm
 
 import (
-	"k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
-	"strings"
-	"strconv"
-	"fmt"
-	"k8s.io/kubernetes/pkg/kubelet-new/status"
-	internalapi "k8s.io/cri-api/pkg/apis"
-	"k8s.io/kubernetes/pkg/kubelet-new/config"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/sets"
+	// TODO: Migrate kubelet to either use its own internal objects or client library.
+	v1 "k8s.io/api/core/v1"
+	internalapi "k8s.io/cri-api/pkg/apis"
+	//podresourcesapi "k8s.io/kubernetes/pkg/kubelet/apis/podresources/v1alpha1"
+	"k8s.io/kubernetes/pkg/kubelet-new/config"
+	//kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
+	evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
+	//"k8s.io/kubernetes/pkg/kubelet/lifecycle"
+	//"k8s.io/kubernetes/pkg/kubelet/pluginmanager/cache"
+	"k8s.io/kubernetes/pkg/kubelet/status"
+	//schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
+
+	"fmt"
+	"strconv"
+	"strings"
 )
 
 type ActivePodsFunc func() []*v1.Pod
@@ -21,13 +46,68 @@ type ContainerManager interface {
 	// - Creates the system container where all non-containerized processes run.
 	Start(*v1.Node, ActivePodsFunc, config.SourcesReady, status.PodStatusProvider, internalapi.RuntimeService) error
 
+	// SystemCgroupsLimit returns resources allocated to system cgroups in the machine.
+	// These cgroups include the system and Kubernetes services.
+	SystemCgroupsLimit() v1.ResourceList
+
+	// GetNodeConfig returns a NodeConfig that is being used by the container manager.
+	GetNodeConfig() NodeConfig
+
+	// Status returns internal Status.
+	Status() Status
+
 	// NewPodContainerManager is a factory method which returns a podContainerManager object
 	// Returns a noop implementation if qos cgroup hierarchy is not enabled
 	NewPodContainerManager() PodContainerManager
 
+	// GetMountedSubsystems returns the mounted cgroup subsystems on the node
+	//GetMountedSubsystems() *CgroupSubsystems
+
+	// GetQOSContainersInfo returns the names of top level QoS containers
+	GetQOSContainersInfo() QOSContainersInfo
+
+	// GetNodeAllocatableReservation returns the amount of compute resources that have to be reserved from scheduling.
+	GetNodeAllocatableReservation() v1.ResourceList
+
+	// GetCapacity returns the amount of compute resources tracked by container manager available on the node.
+	GetCapacity() v1.ResourceList
+
+	// GetDevicePluginResourceCapacity returns the node capacity (amount of total device plugin resources),
+	// node allocatable (amount of total healthy resources reported by device plugin),
+	// and inactive device plugin resources previously registered on the node.
+	//GetDevicePluginResourceCapacity() (v1.ResourceList, v1.ResourceList, []string)
+
 	// UpdateQOSCgroups performs housekeeping updates to ensure that the top
 	// level QoS containers have their desired state in a thread-safe way
 	UpdateQOSCgroups() error
+
+	// GetResources returns RunContainerOptions with devices, mounts, and env fields populated for
+	// extended resources required by container.
+	//GetResources(pod *v1.Pod, container *v1.Container) (*kubecontainer.RunContainerOptions, error)
+
+	// UpdatePluginResources calls Allocate of device plugin handler for potential
+	// requests for device plugin resources, and returns an error if fails.
+	// Otherwise, it updates allocatableResource in nodeInfo if necessary,
+	// to make sure it is at least equal to the pod's requested capacity for
+	// any registered device plugin resource
+	//UpdatePluginResources(*schedulernodeinfo.NodeInfo, *lifecycle.PodAdmitAttributes) error
+
+	//InternalContainerLifecycle() InternalContainerLifecycle
+
+	// GetPodCgroupRoot returns the cgroup which contains all pods.
+	GetPodCgroupRoot() string
+
+	// GetPluginRegistrationHandler returns a plugin registration handler
+	// The pluginwatcher's Handlers allow to have a single module for handling
+	// registration.
+	//GetPluginRegistrationHandler() cache.PluginHandler
+
+	// GetDevices returns information about the devices assigned to pods and containers
+	//GetDevices(podUID, containerName string) []*podresourcesapi.ContainerDevices
+
+	// ShouldResetExtendedResourceCapacity returns whether or not the extended resources should be zeroed,
+	// due to node recreation.
+	//ShouldResetExtendedResourceCapacity() bool
 }
 
 type NodeConfig struct {
@@ -42,10 +122,11 @@ type NodeConfig struct {
 	ProtectKernelDefaults bool
 	NodeAllocatableConfig
 	QOSReserved                           map[v1.ResourceName]int64
-
+	ExperimentalCPUManagerPolicy          string
+	ExperimentalCPUManagerReconcilePeriod time.Duration
+	ExperimentalPodPidsLimit              int64
 	EnforceCPULimits                      bool
 	CPUCFSQuotaPeriod                     time.Duration
-
 }
 
 type NodeAllocatableConfig struct {
@@ -54,7 +135,7 @@ type NodeAllocatableConfig struct {
 	EnforceNodeAllocatable   sets.String
 	KubeReserved             v1.ResourceList
 	SystemReserved           v1.ResourceList
-	//HardEvictionThresholds   []evictionapi.Threshold
+	HardEvictionThresholds   []evictionapi.Threshold
 }
 
 type Status struct {
