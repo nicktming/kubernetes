@@ -172,6 +172,14 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Contai
 		// TODO cleanup Action
 		return nil, nil, fmt.Errorf("create container log directory for container %s failed: %v", container.Name, err)
 	}
+
+	// TODO user uid
+	uid, username, err := m.getImageUser(container.Image)
+	if err != nil {
+		//return nil, cleanupAction, err
+		return nil, nil, err
+	}
+
 	containerLogsPath := buildContainerLogsPath(container.Name, restartCount)
 	command := []string{"sleep"}
 	args := []string{"100000"}
@@ -194,6 +202,13 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Contai
 		StdinOnce:   container.StdinOnce,
 		Tty:         container.TTY,
 	}
+
+	// set platform specific configurations.
+	if err := m.applyPlatformSpecificContainerConfig(config, container, pod, uid, username); err != nil {
+		//return nil, cleanupAction, err
+		return nil, nil, err
+	}
+
 	// TODO config
 	return config, nil, nil
 }

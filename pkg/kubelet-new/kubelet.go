@@ -598,6 +598,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		runtimeService,
 		imageService,
 		klet,
+		kubeCfg.CPUCFSQuota,
+		kubeCfg.CPUCFSQuotaPeriod,
 	)
 	if err != nil {
 		return nil, err

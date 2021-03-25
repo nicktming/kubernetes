@@ -55,6 +55,11 @@ type kubeGenericRuntimeManager struct {
 	osInterface kubecontainer.OSInterface
 	recorder            record.EventRecorder
 
+	// If true, enforce container cpu limits with CFS quota support
+	cpuCFSQuota bool
+
+	// CPUCFSQuotaPeriod sets the CPU CFS quota period value, cpu.cfs_period_us, defaults to 100ms
+	cpuCFSQuotaPeriod metav1.Duration
 
 	// Container GC manager
 	containerGC *containerGC
@@ -72,13 +77,18 @@ func NewKubeGenericRuntimeManager(
 	osInterface 	kubecontainer.OSInterface,
 	runtimeService 	internalapi.RuntimeService,
 	imageService 	internalapi.ImageManagerService,
-	podStateProvider podStateProvider) (KubeGenericRuntime, error) {
+	podStateProvider podStateProvider,
+	cpuCFSQuota bool,
+	cpuCFSQuotaPeriod metav1.Duration,) (KubeGenericRuntime, error) {
 
+	klog.Infof("===========>NewKubeGenericRuntimeManager cpuCFSQuota:%v, cpuCFSQuotaPeriod:%v", cpuCFSQuota, cpuCFSQuotaPeriod)
 	kubeRuntimeManager := &kubeGenericRuntimeManager{
 		recorder: 		recorder,
 		runtimeService:      	runtimeService,
 		imageService:        	imageService,
 		osInterface: 		osInterface,
+		cpuCFSQuota: 		cpuCFSQuota,
+		cpuCFSQuotaPeriod: 	cpuCFSQuotaPeriod,
 
 	}
 
