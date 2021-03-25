@@ -22,6 +22,10 @@ import (
 	dockerremote "k8s.io/kubernetes/pkg/kubelet/dockershim/remote"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
+	corelisters "k8s.io/client-go/listers/core/v1"
 	"fmt"
 	"os"
 	"path"
@@ -208,6 +212,9 @@ type Kubelet struct {
 
 	// the number of allowed pods per core
 	podsPerCore int
+
+	// nodeInfo knows how to get information about the node for this kubelet.
+	nodeInfo predicates.NodeInfo
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -317,7 +324,13 @@ func (kl *Kubelet) updateRuntimeUp() {
 func (kl *Kubelet) initializeRuntimeDependentModules() {
 	// containerManager must start after cAdvisor because it needs filesystem capacity information
 	// TODO node source ready
-	if err := kl.containerManager.Start(nil, kl.GetActivePods, true, kl.statusManager, kl.runtimeService); err != nil {
+	// Start container manager.
+	node, err := kl.getNodeAnyWay()
+	if err != nil {
+		// Fail kubelet and rely on the babysitter to retry starting kubelet.
+		klog.Fatalf("Kubelet failed to get node info: %v", err)
+	}
+	if err := kl.containerManager.Start(node, kl.GetActivePods, true, kl.statusManager, kl.runtimeService); err != nil {
 		// Fail kubelet and rely on the babysitter to retry starting kubelet.
 		klog.Fatalf("Failed to start ContainerManager %v", err)
 	}
@@ -556,6 +569,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		cadvisor:                                	kubeDeps.CAdvisorInterface,
 		maxPods:                                 	int(kubeCfg.MaxPods),
 		podsPerCore:                             	int(kubeCfg.PodsPerCore),
+
 	}
 
 	pluginSettings := dockershim.NetworkPluginSettings{
@@ -605,6 +619,16 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	default:
 		return nil, fmt.Errorf("unsupported CRI runtime: %q", containerRuntime)
 	}
+
+	nodeIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	if kubeDeps.KubeClient != nil {
+		fieldSelector := fields.Set{api.ObjectNameField: string(nodeName)}.AsSelector()
+		nodeLW := cache.NewListWatchFromClient(kubeDeps.KubeClient.CoreV1().RESTClient(), "nodes", metav1.NamespaceAll, fieldSelector)
+		r := cache.NewReflector(nodeLW, &v1.Node{}, nodeIndexer, 0)
+		go r.Run(wait.NeverStop)
+	}
+	nodeInfo := &predicates.CachedNodeInfo{NodeLister: corelisters.NewNodeLister(nodeIndexer)}
+	klet.nodeInfo = nodeInfo
 
 	runtimeService, imageService, err := getRuntimeAndImageServices(remoteRuntimeEndpoint, remoteImageEndpoint, kubeCfg.RuntimeRequestTimeout)
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	"k8s.io/klog"
 	"io/ioutil"
 	cadvisorapiv1 "github.com/google/cadvisor/info/v1"
+	"k8s.io/api/core/v1"
 )
 
 func (kl *Kubelet) getRootDir() string {
@@ -112,7 +113,19 @@ func (kl *Kubelet) GetCachedMachineInfo() (*cadvisorapiv1.MachineInfo, error) {
 }
 
 
-
+// getNodeAnyWay() must return a *v1.Node which is required by RunGeneralPredicates().
+// The *v1.Node is obtained as follows:
+// Return kubelet's nodeInfo for this node, except on error or if in standalone mode,
+// in which case return a manufactured nodeInfo representing a node with no pods,
+// zero capacity, and the default labels.
+func (kl *Kubelet) getNodeAnyWay() (*v1.Node, error) {
+	if kl.kubeClient != nil {
+		if n, err := kl.nodeInfo.GetNodeInfo(string(kl.nodeName)); err == nil {
+			return n, nil
+		}
+	}
+	return kl.initialNode()
+}
 
 
 
