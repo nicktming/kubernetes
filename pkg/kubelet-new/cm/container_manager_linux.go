@@ -19,6 +19,7 @@ import (
 	"sync"
 	"k8s.io/kubernetes/pkg/kubelet-new/qos"
 	"k8s.io/kubernetes/pkg/util/oom"
+	"time"
 )
 
 const (
@@ -124,6 +125,31 @@ func NewContainerManager(nodeConfig NodeConfig, failSwapOn bool, devicePluginEna
 
 	return cm, nil
 }
+
+func (cm *containerManagerImpl) GetQOSContainersInfo() QOSContainersInfo {
+	return cm.qosContainerManager.GetQOSContainersInfo()
+}
+
+
+// NewPodContainerManager is a factory method returns a PodContainerManager object
+// If qosCgroups are enabled then it returns the general pod container manager
+// otherwise it returns a no-op manager which essentially does nothing
+func (cm *containerManagerImpl) NewPodContainerManager() PodContainerManager {
+	if cm.NodeConfig.CgroupsPerQOS {
+		return &podContainerManagerImpl{
+			qosContainersInfo: cm.GetQOSContainersInfo(),
+			subsystems:        cm.subsystems,
+			cgroupManager:     cm.cgroupManager,
+			//podPidsLimit:      cm.ExperimentalPodPidsLimit,
+			enforceCPULimits:  cm.EnforceCPULimits,
+			cpuCFSQuotaPeriod: uint64(cm.CPUCFSQuotaPeriod / time.Microsecond),
+		}
+	}
+	return &podContainerManagerNoop{
+		cgroupRoot: cm.cgroupRoot,
+	}
+}
+
 
 // getContainer returns the cgroup associated with the specified pid.
 // It enforces a unified hierarchy for memory and cpu cgroups.
