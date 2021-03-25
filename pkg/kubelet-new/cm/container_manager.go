@@ -20,6 +20,14 @@ type ContainerManager interface {
 	// - Ensures that the Docker daemon is in a container.
 	// - Creates the system container where all non-containerized processes run.
 	Start(*v1.Node, ActivePodsFunc, config.SourcesReady, status.PodStatusProvider, internalapi.RuntimeService) error
+
+	// NewPodContainerManager is a factory method which returns a podContainerManager object
+	// Returns a noop implementation if qos cgroup hierarchy is not enabled
+	NewPodContainerManager() PodContainerManager
+
+	// UpdateQOSCgroups performs housekeeping updates to ensure that the top
+	// level QoS containers have their desired state in a thread-safe way
+	UpdateQOSCgroups() error
 }
 
 type NodeConfig struct {

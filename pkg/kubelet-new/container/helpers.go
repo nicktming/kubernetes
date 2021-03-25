@@ -8,6 +8,23 @@ import (
 	"hash/fnv"
 )
 
+
+// RuntimeHelper wraps kubelet to make container runtime
+// able to get necessary informations like the RunContainerOptions, DNS settings, Host IP.
+type RuntimeHelper interface {
+	//GenerateRunContainerOptions(pod *v1.Pod, container *v1.Container, podIP string) (contOpts *RunContainerOptions, cleanupAction func(), err error)
+	//GetPodDNS(pod *v1.Pod) (dnsConfig *runtimeapi.DNSConfig, err error)
+	// GetPodCgroupParent returns the CgroupName identifier, and its literal cgroupfs form on the host
+	// of a pod.
+	GetPodCgroupParent(pod *v1.Pod) string
+	//GetPodDir(podUID types.UID) string
+	//GeneratePodHostNameAndDomain(pod *v1.Pod) (hostname string, hostDomain string, err error)
+	//// GetExtraSupplementalGroupsForPod returns a list of the extra
+	//// supplemental groups for the Pod. These extra supplemental groups come
+	//// from annotations on persistent volumes that the pod depends on.
+	//GetExtraSupplementalGroupsForPod(pod *v1.Pod) []int64
+}
+
 // Pod must not be nil.
 func IsHostNetworkPod(pod *v1.Pod) bool {
 	return pod.Spec.HostNetwork

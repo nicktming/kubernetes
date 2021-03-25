@@ -1,5 +1,9 @@
 package cm
 
+import (
+	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+)
 
 // ResourceConfig holds information about all the supported cgroup resource parameters.
 type ResourceConfig struct {
@@ -81,4 +85,31 @@ type QOSContainersInfo struct {
 	Burstable  CgroupName
 }
 
+// PodContainerManager stores and manages pod level containers
+// The Pod workers interact with the PodContainerManager to create and destroy
+// containers for the pod.
+type PodContainerManager interface {
+	// GetPodContainerName returns the CgroupName identifier, and its literal cgroupfs form on the host.
+	GetPodContainerName(*v1.Pod) (CgroupName, string)
+
+	// EnsureExists takes a pod as argument and makes sure that
+	// pod cgroup exists if qos cgroup hierarchy flag is enabled.
+	// If the pod cgroup doesn't already exist this method creates it.
+	EnsureExists(*v1.Pod) error
+
+	// Exists returns true if the pod cgroup exists.
+	Exists(*v1.Pod) bool
+
+	// Destroy takes a pod Cgroup name as argument and destroys the pod's container.
+	Destroy(name CgroupName) error
+
+	// ReduceCPULimits reduces the CPU CFS values to the minimum amount of shares.
+	ReduceCPULimits(name CgroupName) error
+
+	// GetAllPodsFromCgroups enumerates the set of pod uids to their associated cgroup based on state of cgroupfs system.
+	GetAllPodsFromCgroups() (map[types.UID]CgroupName, error)
+
+	// IsPodCgroup returns true if the literal cgroupfs name corresponds to a pod
+	IsPodCgroup(cgroupfs string) (bool, types.UID)
+}
 

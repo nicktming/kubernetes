@@ -6,7 +6,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet-new/container"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/kubernetes/pkg/features"
 	"fmt"
+	"k8s.io/api/core/v1"
 )
 
 type podsByID []*kubecontainer.Pod
@@ -134,3 +137,39 @@ func (m *kubeGenericRuntimeManager) getImageUser(image string) (*int64, string, 
 	return new(int64), "", nil
 }
 
+func ipcNamespaceForPod(pod *v1.Pod) runtimeapi.NamespaceMode {
+	if pod != nil && pod.Spec.HostIPC {
+		return runtimeapi.NamespaceMode_NODE
+	}
+	return runtimeapi.NamespaceMode_POD
+}
+
+func networkNamespaceForPod(pod *v1.Pod) runtimeapi.NamespaceMode {
+	if pod != nil && pod.Spec.HostNetwork {
+		return runtimeapi.NamespaceMode_NODE
+	}
+	return runtimeapi.NamespaceMode_POD
+}
+
+func pidNamespaceForPod(pod *v1.Pod) runtimeapi.NamespaceMode {
+	if pod != nil {
+		if pod.Spec.HostPID {
+			return runtimeapi.NamespaceMode_NODE
+		}
+		if utilfeature.DefaultFeatureGate.Enabled(features.PodShareProcessNamespace) && pod.Spec.ShareProcessNamespace != nil && *pod.Spec.ShareProcessNamespace {
+			return runtimeapi.NamespaceMode_POD
+		}
+	}
+	// Note that PID does not default to the zero value for v1.Pod
+	return runtimeapi.NamespaceMode_CONTAINER
+}
+
+// namespacesForPod returns the runtimeapi.NamespaceOption for a given pod.
+// An empty or nil pod can be used to get the namespace defaults for v1.Pod.
+func namespacesForPod(pod *v1.Pod) *runtimeapi.NamespaceOption {
+	return &runtimeapi.NamespaceOption{
+		Ipc:     ipcNamespaceForPod(pod),
+		Network: networkNamespaceForPod(pod),
+		Pid:     pidNamespaceForPod(pod),
+	}
+}

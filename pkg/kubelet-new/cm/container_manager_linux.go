@@ -362,6 +362,10 @@ func (cm *containerManagerImpl) Start(node *v1.Node,
 	return nil
 }
 
+func (cm *containerManagerImpl) UpdateQOSCgroups() error {
+	return cm.qosContainerManager.UpdateCgroups()
+}
+
 
 
 

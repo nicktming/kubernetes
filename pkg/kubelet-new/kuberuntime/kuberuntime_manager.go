@@ -63,6 +63,9 @@ type kubeGenericRuntimeManager struct {
 
 	// Container GC manager
 	containerGC *containerGC
+
+	// RuntimeHelper that wraps kubelet to generate runtime container options.
+	runtimeHelper kubecontainer.RuntimeHelper
 }
 
 // KubeGenericRuntime is a interface contains interfaces for container runtime and command.
@@ -79,7 +82,8 @@ func NewKubeGenericRuntimeManager(
 	imageService 	internalapi.ImageManagerService,
 	podStateProvider podStateProvider,
 	cpuCFSQuota bool,
-	cpuCFSQuotaPeriod metav1.Duration,) (KubeGenericRuntime, error) {
+	cpuCFSQuotaPeriod metav1.Duration,
+	runtimeHelper kubecontainer.RuntimeHelper) (KubeGenericRuntime, error) {
 
 	klog.Infof("===========>NewKubeGenericRuntimeManager cpuCFSQuota:%v, cpuCFSQuotaPeriod:%v", cpuCFSQuota, cpuCFSQuotaPeriod)
 	kubeRuntimeManager := &kubeGenericRuntimeManager{
@@ -89,6 +93,7 @@ func NewKubeGenericRuntimeManager(
 		osInterface: 		osInterface,
 		cpuCFSQuota: 		cpuCFSQuota,
 		cpuCFSQuotaPeriod: 	cpuCFSQuotaPeriod,
+		runtimeHelper: 		runtimeHelper,
 
 	}
 
