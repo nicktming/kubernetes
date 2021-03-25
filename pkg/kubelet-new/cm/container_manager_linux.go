@@ -555,10 +555,10 @@ func (cm *containerManagerImpl) Status() Status {
 }
 
 func (cm *containerManagerImpl) Start(node *v1.Node,
-activePods ActivePodsFunc,
-sourcesReady config.SourcesReady,
-podStatusProvider status.PodStatusProvider,
-runtimeService internalapi.RuntimeService) error {
+	activePods ActivePodsFunc,
+	sourcesReady config.SourcesReady,
+	podStatusProvider status.PodStatusProvider,
+	runtimeService internalapi.RuntimeService) error {
 
 	// Initialize CPU manager
 	//if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CPUManager) {
