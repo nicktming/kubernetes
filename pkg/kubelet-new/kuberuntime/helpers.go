@@ -115,20 +115,20 @@ func (m *kubeGenericRuntimeManager) toKubeContainer(c *runtimeapi.Container) (*k
 // getImageUser gets uid or user name that will run the command(s) from image. The function
 // guarantees that only one of them is set.
 func (m *kubeGenericRuntimeManager) getImageUser(image string) (*int64, string, error) {
-	imageStatus, err := m.imageService.ImageStatus(&runtimeapi.ImageSpec{Image: image})
-	if err != nil {
-		return nil, "", err
-	}
-
-	if imageStatus != nil {
-		if imageStatus.Uid != nil {
-			return &imageStatus.GetUid().Value, "", nil
-		}
-
-		if imageStatus.Username != "" {
-			return nil, imageStatus.Username, nil
-		}
-	}
+	//imageStatus, err := m.imageService.ImageStatus(&runtimeapi.ImageSpec{Image: image})
+	//if err != nil {
+	//	return nil, "", err
+	//}
+	//
+	//if imageStatus != nil {
+	//	if imageStatus.Uid != nil {
+	//		return &imageStatus.GetUid().Value, "", nil
+	//	}
+	//
+	//	if imageStatus.Username != "" {
+	//		return nil, imageStatus.Username, nil
+	//	}
+	//}
 
 	// If non of them is set, treat it as root.
 	return new(int64), "", nil

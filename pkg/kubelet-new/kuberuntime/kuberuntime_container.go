@@ -174,6 +174,7 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Contai
 	}
 
 	// TODO user uid
+	//uid, username, err := m.getImageUser(container.Image)
 	uid, username, err := m.getImageUser(container.Image)
 	if err != nil {
 		//return nil, cleanupAction, err
