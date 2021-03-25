@@ -42,6 +42,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet-new/cm"
 	"k8s.io/kubernetes/pkg/kubelet-new/lifecycle"
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
+	"k8s.io/kubernetes/pkg/util/mount"
 )
 
 const (
