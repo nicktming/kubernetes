@@ -14,6 +14,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/types"
 	"sync"
 	"fmt"
+	"encoding/json"
 )
 
 // DesiredStateOfWorld defines a set of thread-safe operations for the kubelet
@@ -196,6 +197,8 @@ func (dsw *desiredStateOfWorld) AddPodToVolume(
 		volumeSpec:          volumeSpec,
 		outerVolumeSpecName: outerVolumeSpecName,
 	}
+	pretty_volumestomount, _ := json.MarshalIndent(dsw.volumesToMount, "", "\t")
+	fmt.Printf("======>pretty volume mount: %s\n", string(pretty_volumestomount))
 	return volumeName, nil
 }
 
