@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/kubelet-new/status"
+	"k8s.io/kubernetes/pkg/kubelet-new/cm"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 func getPhase(spec *v1.PodSpec, info []v1.ContainerStatus) v1.PodPhase {
@@ -168,7 +170,16 @@ func (kl *Kubelet) PodResourcesAreReclaimed(pod *v1.Pod, status v1.PodStatus) bo
 		klog.Infof("Pod %q is terminated, but some volumes have not been cleaned up", format.Pod(pod))
 		return false
 	}
-	// TODO cgroup qos
+
+	// 判断该pod的cgroup是否清除 待研究
+	if kl.kubeletConfiguration.CgroupsPerQOS {
+		pcm := kl.containerManager.NewPodContainerManager()
+		if pcm.Exists(pod) {
+			klog.V(3).Infof("Pod %q is terminated, but pod cgroup sandbox has not been cleaned up", format.Pod(pod))
+			return false
+		}
+	}
+
 	return true
 }
 
@@ -181,21 +192,86 @@ func notRunning(statuses []v1.ContainerStatus) bool {
 	return true
 }
 
-func (kl *Kubelet) getMountedVolumePathListFromDisk(podUID types.UID) ([]string, error) {
-	mountedVolumes := []string{}
-	volumePaths, err := kl.getPodVolumePathListFromDisk(podUID)
-	if err != nil {
-		return mountedVolumes, err
-	}
-	//for _, volumePath := range volumePaths {
-	//	isNotMount, err :=
-	//}
-	return volumePaths, nil
-}
-
 
 func (kl *Kubelet) HandlePodCleanups() error {
+	var (
+		cgroupPods map[types.UID]cm.CgroupName
+		err        error
+	)
+
+	if kl.cgroupsPerQOS {
+		pcm := kl.containerManager.NewPodContainerManager()
+		cgroupPods, err = pcm.GetAllPodsFromCgroups()
+		if err != nil {
+			return fmt.Errorf("failed to get list of pods that still exist on cgroup mounts: %v", err)
+		}
+	}
+
+	allPods, _ := kl.podManager.GetPodsAndMirrorPods()
+	// Pod phase progresses monotonically. Once a pod has reached a final state,
+	// it should never leave regardless of the restart policy. The statuses
+	// of such pods should not be changed, and there is no need to sync them.
+	// TODO: the logic here does not handle two cases:
+	//   1. If the containers were removed immediately after they died, kubelet
+	//      may fail to generate correct statuses, let alone filtering correctly.
+	//   2. If kubelet restarted before writing the terminated status for a pod
+	//      to the apiserver, it could still restart the terminated pod (even
+	//      though the pod was not considered terminated by the apiserver).
+	// These two conditions could be alleviated by checkpointing kubelet.
+	activePods := kl.filterOutTerminatedPods(allPods)
+
+	// Remove any cgroups in the hierarchy for pods that are no longer running.
+	if kl.cgroupsPerQOS {
+		kl.cleanupOrphanedPodCgroups(cgroupPods, activePods)
+	}
+
 	return nil
+}
+
+// 1. 从cgroup找到所有的cgroupPods, 从podmanager过滤出所有的activepods
+// 2. 遍历cgroupPods, 发现不在activepods中,
+// 2.1 如果pod存在mounted volume, 把该pod的cgroup调整到最小
+// 2.2 如果pod不存在mounted volume, 则把该cgroup下所有的pid全部kill并且从cgroup的目录路径中删除
+
+// cleanupOrphanedPodCgroups removes cgroups that should no longer exist.
+// it reconciles the cached state of cgroupPods with the specified list of runningPods
+func (kl *Kubelet) cleanupOrphanedPodCgroups(cgroupPods map[types.UID]cm.CgroupName, activePods []*v1.Pod) {
+	// Add all running pods to the set that we want to preserve
+	podSet := sets.NewString()
+	for _, pod := range activePods {
+		podSet.Insert(string(pod.UID))
+	}
+	pcm := kl.containerManager.NewPodContainerManager()
+	// Iterate over all the found pods to verify if they should be running
+	for uid, val := range cgroupPods {
+		// if the pod is in the running set, its not a candidate for cleanup
+		if podSet.Has(string(uid)) {
+			continue
+		}
+
+		// 如果该pod仍然存在mounted volumes, 不删除该pod的cgroup, 而是把该cgroup的内容调整到最小, cpushare为2, 其余为默认值
+
+		// If volumes have not been unmounted/detached, do not delete the cgroup
+		// so any memory backed volumes don't have their charges propagated to the
+		// parent croup.  If the volumes still exist, reduce the cpu shares for any
+		// process in the cgroup to the minimum value while we wait.  if the kubelet
+		// is configured to keep terminated volumes, we will delete the cgroup and not block.
+		//  && !kl.keepTerminatedPodVolumes
+		if podVolumesExist := kl.podVolumesExist(uid); podVolumesExist {
+			klog.V(3).Infof("Orphaned pod %q found, but volumes not yet removed.  Reducing cpu to minimum", uid)
+			if err := pcm.ReduceCPULimits(val); err != nil {
+				klog.Warningf("Failed to reduce cpu time for pod %q pending volume cleanup due to %v", uid, err)
+			}
+			continue
+		}
+		klog.V(3).Infof("Orphaned pod %q found, removing pod cgroups", uid)
+		// Destroy all cgroups of pod that should not be running,
+		// by first killing all the attached processes to these cgroups.
+		// We ignore errors thrown by the method, as the housekeeping loop would
+		// again try to delete these unwanted pod cgroups
+		go pcm.Destroy(val)
+	}
+
 }
 
 // IsPodTerminated returns true if the pod with the provided UID is in a terminated state ("Failed" or "Succeeded")

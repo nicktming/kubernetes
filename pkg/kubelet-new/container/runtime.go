@@ -133,6 +133,26 @@ type ContainerCommandRunner interface {
 	RunInContainer(id ContainerID, cmd []string, timeout time.Duration) ([]byte, error)
 }
 
+// Build the pod full name from pod name and namespace.
+func BuildPodFullName(name, namespace string) string {
+	return name + "_" + namespace
+}
+
+// Parse the pod full name.
+func ParsePodFullName(podFullName string) (string, string, error) {
+	parts := strings.Split(podFullName, "_")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("failed to parse the pod full name %q", podFullName)
+	}
+	return parts[0], parts[1], nil
+}
+
+// GetPodFullName returns a name that uniquely identifies a pod.
+func GetPodFullName(pod *v1.Pod) string {
+	// Use underscore as the delimiter because it is not allowed in pod name
+	// (DNS subdomain format), while allowed in the container name format.
+	return pod.Name + "_" + pod.Namespace
+}
 
 func BuildContainerID(typ, ID string) ContainerID {
 	return ContainerID{Type: typ, ID: ID}

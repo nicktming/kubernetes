@@ -103,8 +103,8 @@ import (
 	//
 	"k8s.io/kubernetes/pkg/util/mount"
 	//nsutil "k8s.io/kubernetes/pkg/volume/util/nsenter"
-	//"k8s.io/kubernetes/pkg/volume/util/subpath"
-	//"k8s.io/utils/exec"
+	"k8s.io/kubernetes/pkg/volume/util/subpath"
+	"k8s.io/utils/exec"
 	//"k8s.io/utils/nsenter"
 
 	//"k8s.io/kubernetes/pkg/kubelet/dockershim"
@@ -380,8 +380,8 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 	//}
 	//
 	mounter := mount.New(s.ExperimentalMounterPath)
-	//subpather := subpath.New(mounter)
-	//var pluginRunner = exec.New()
+	subpather := subpath.New(mounter)
+	var pluginRunner = exec.New()
 
 	klog.Infof("===>s.Containerized: %v, s.VolumePluginDir: %v, s.ExperimentalMounterPath: %v", s.Containerized, s.VolumePluginDir, s.ExperimentalMounterPath)
 
@@ -423,8 +423,8 @@ func UnsecuredDependencies(s *options.KubeletServer) (*kubelet.Dependencies, err
 		//Subpather:           subpather,
 		//OOMAdjuster:         oom.NewOOMAdjuster(),
 		OSInterface:         kubecontainer.RealOS{},
-		//VolumePlugins:       ProbeVolumePlugins(),
-		//DynamicPluginProber: GetDynamicPluginProber(s.VolumePluginDir, pluginRunner),
+		VolumePlugins:       ProbeVolumePlugins(),
+		DynamicPluginProber: GetDynamicPluginProber(s.VolumePluginDir, pluginRunner),
 		//TLSOptions:          tlsOptions,
 	}, nil
 }

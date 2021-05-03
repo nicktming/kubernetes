@@ -48,6 +48,10 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
 	"k8s.io/kubernetes/pkg/util/mount"
 	cadvisorapi "github.com/google/cadvisor/info/v1"
+	"k8s.io/kubernetes/pkg/kubelet-new/volumemanager"
+	"k8s.io/kubernetes/pkg/volume/util/subpath"
+	"k8s.io/kubernetes/pkg/volume"
+	"k8s.io/kubernetes/pkg/kubelet-new/token"
 )
 
 const (
@@ -95,6 +99,10 @@ type Dependencies struct {
 	ContainerManager 	cm.ContainerManager
 	CAdvisorInterface       cadvisor.Interface
 	Mounter                 mount.Interface
+
+	Subpather               subpath.Interface
+	VolumePlugins           []volume.VolumePlugin
+	DynamicPluginProber     volume.DynamicPluginProber
 }
 
 
@@ -115,6 +123,7 @@ type SyncHandler interface {
 
 
 type Kubelet struct {
+	kubeletConfiguration kubeletconfiginternal.KubeletConfiguration
 	kubeClient      clientset.Interface
 	heartbeatClient      clientset.Interface
 	nodeName        types.NodeName
@@ -215,6 +224,25 @@ type Kubelet struct {
 
 	// nodeInfo knows how to get information about the node for this kubelet.
 	nodeInfo predicates.NodeInfo
+
+	// Whether or not we should have the QOS cgroup hierarchy for resource management
+	cgroupsPerQOS bool
+
+
+	// VolumeManager runs a set of asynchronous loops that figure out which
+	// volumes need to be attached/mounted/unmounted/detached based on the pods
+	// scheduled on this node and makes it so.
+	volumeManager volumemanager.VolumeManager
+
+
+	// Volume plugins.
+	volumePluginMgr *volume.VolumePluginMgr
+
+	// Mounter to use for volumes.
+	mounter mount.Interface
+
+	// subpather to execute subpath actions
+	subpather subpath.Interface
 }
 
 func getRuntimeAndImageServices(remoteRuntimeEndpoint string, remoteImageEndpoint string, runtimeRequestTimeout metav1.Duration) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
@@ -287,7 +315,7 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 
 	//
 	//// Start volume manager
-	//go kl.volumeManager.Run(kl.sourcesReady, wait.NeverStop)
+	go kl.volumeManager.Run(kl.sourcesReady, wait.NeverStop)
 	//
 	if kl.kubeClient != nil {
 
@@ -419,7 +447,10 @@ func (kl *Kubelet) syncLoopIteration(configCh <-chan kubetypes.PodUpdate,
 
 	case <-housekeepingCh:
 		// TODO sources ready
-
+		klog.V(4).Infof("SyncLoop (housekeeping)")
+		if err := handler.HandlePodCleanups(); err != nil {
+			klog.Errorf("Failed cleaning pods: %v", err)
+		}
 
 	}
 	return true
@@ -569,8 +600,39 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		cadvisor:                                	kubeDeps.CAdvisorInterface,
 		maxPods:                                 	int(kubeCfg.MaxPods),
 		podsPerCore:                             	int(kubeCfg.PodsPerCore),
+		cgroupsPerQOS:                           	kubeCfg.CgroupsPerQOS,
+		mounter:                                 	kubeDeps.Mounter,
+		subpather:                               	kubeDeps.Subpather,
 
 	}
+
+	tokenManager := token.NewManager(kubeDeps.KubeClient)
+
+	// NewInitializedVolumePluginMgr intializes some storageErrors on the Kubelet runtimeState (in csi_plugin.go init)
+	// which affects node ready status. This function must be called before Kubelet is initialized so that the Node
+	// ReadyState is accurate with the storage state.
+	//klet.volumePluginMgr, err =
+	//	NewInitializedVolumePluginMgr(klet, secretManager, configMapManager, tokenManager, kubeDeps.VolumePlugins, kubeDeps.DynamicPluginProber)
+	klet.volumePluginMgr, err =
+		NewInitializedVolumePluginMgr(klet, tokenManager, kubeDeps.VolumePlugins, kubeDeps.DynamicPluginProber)
+	if err != nil {
+		return nil, err
+	}
+
+	// setup volumeManager
+	klet.volumeManager = volumemanager.NewVolumeManager(
+		kubeCfg.EnableControllerAttachDetach,
+		nodeName,
+		klet.podManager,
+		klet.statusManager,
+		klet.kubeClient,
+		klet.volumePluginMgr,
+		klet.containerRuntime,
+		kubeDeps.Mounter,
+		klet.getPodsDir(),
+		//kubeDeps.Recorder,
+		experimentalCheckNodeCapabilitiesBeforeMount,
+		keepTerminatedPodVolumes)
 
 	pluginSettings := dockershim.NetworkPluginSettings{
 		HairpinMode:        kubeletconfiginternal.HairpinMode(kubeCfg.HairpinMode),
@@ -686,6 +748,10 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		return nil, err
 	}
 	klet.machineInfo = machineInfo
+
+	// Finally, put the most recent version of the config on the Kubelet, so
+	// people can see how it was configured.
+	klet.kubeletConfiguration = *kubeCfg
 
 	return klet, nil
 }
